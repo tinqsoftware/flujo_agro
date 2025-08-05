@@ -1,0 +1,41 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Documento extends Model
+{
+    use HasFactory;
+
+    protected $table = 'documentos';
+
+    protected $fillable = [
+        'nombre',
+        'descripcion',
+        'id_user_create',
+        'id_etapa',
+        'estado'
+    ];
+
+    protected $casts = [
+        'estado' => 'boolean'
+    ];
+
+    // Relaciones
+    public function userCreate()
+    {
+        return $this->belongsTo(User::class, 'id_user_create');
+    }
+
+    public function etapa()
+    {
+        return $this->belongsTo(Etapa::class, 'id_etapa');
+    }
+
+    public function detalles()
+    {
+        return $this->hasMany(DetalleDocumento::class, 'id_documento');
+    }
+}

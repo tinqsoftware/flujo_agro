@@ -1,73 +1,138 @@
-@extends('layouts.app')
+@extends('layouts.modern')
+
+@section('title', 'Iniciar Sesión - AGROEMSE')
 
 @section('content')
-<div class="container">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">{{ __('Login') }}</div>
+<div class="login-container d-flex align-items-center justify-content-center">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-5 col-md-7">
+                <div class="login-card">
+                    <div class="login-header">
+                        <div class="mb-3">
+                            <i class="fas fa-leaf fa-3x"></i>
+                        </div>
+                        <h2 class="mb-2">AGROEMSE</h2>
+                        <p class="mb-0">Sistema de Gestión Empresarial</p>
+                    </div>
+                    
+                    <div class="login-body">
+                        @if (session('error'))
+                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                <i class="fas fa-exclamation-circle me-2"></i>
+                                {{ session('error') }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        @endif
 
-                <div class="card-body">
-                    <form method="POST" action="{{ route('login') }}">
-                        @csrf
-
-                        <div class="row mb-3">
-                            <label for="email" class="col-md-4 col-form-label text-md-end">{{ __('Email Address') }}</label>
-
-                            <div class="col-md-6">
-                                <input id="email" type="email" class="form-control @error('email') is-invalid @enderror" name="email" value="{{ old('email') }}" required autocomplete="email" autofocus>
-
+                        @if (session('success'))
+                            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                <i class="fas fa-check-circle me-2"></i>
+                                {{ session('success') }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        @endif
+                        
+                        <form method="POST" action="{{ route('login') }}">
+                            @csrf
+                            
+                            <div class="mb-4">
+                                <label for="email" class="form-label">
+                                    <i class="fas fa-envelope me-2"></i>Correo Electrónico
+                                </label>
+                                <input id="email" type="email" 
+                                       class="form-control @error('email') is-invalid @enderror" 
+                                       name="email" 
+                                       value="{{ old('email') }}" 
+                                       required autocomplete="email" autofocus
+                                       placeholder="Ingresa tu correo electrónico">
                                 @error('email')
-                                    <span class="invalid-feedback" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
+                                    <div class="invalid-feedback">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                        {{ $message }}
+                                    </div>
                                 @enderror
                             </div>
-                        </div>
 
-                        <div class="row mb-3">
-                            <label for="password" class="col-md-4 col-form-label text-md-end">{{ __('Password') }}</label>
-
-                            <div class="col-md-6">
-                                <input id="password" type="password" class="form-control @error('password') is-invalid @enderror" name="password" required autocomplete="current-password">
-
+                            <div class="mb-4">
+                                <label for="password" class="form-label">
+                                    <i class="fas fa-lock me-2"></i>Contraseña
+                                </label>
+                                <div class="position-relative">
+                                    <input id="password" type="password" 
+                                           class="form-control @error('password') is-invalid @enderror" 
+                                           name="password" 
+                                           required autocomplete="current-password"
+                                           placeholder="Ingresa tu contraseña">
+                                    <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y me-2" 
+                                            onclick="togglePassword()" style="border: none; background: none;">
+                                        <i class="fas fa-eye" id="toggleIcon"></i>
+                                    </button>
+                                </div>
                                 @error('password')
-                                    <span class="invalid-feedback" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
+                                    <div class="invalid-feedback">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                        {{ $message }}
+                                    </div>
                                 @enderror
                             </div>
-                        </div>
 
-                        <div class="row mb-3">
-                            <div class="col-md-6 offset-md-4">
+                            <div class="mb-4">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="remember" id="remember" {{ old('remember') ? 'checked' : '' }}>
-
+                                    <input class="form-check-input" type="checkbox" name="remember" id="remember" 
+                                           {{ old('remember') ? 'checked' : '' }}>
                                     <label class="form-check-label" for="remember">
-                                        {{ __('Remember Me') }}
+                                        Recordar mi sesión
                                     </label>
                                 </div>
                             </div>
-                        </div>
 
-                        <div class="row mb-0">
-                            <div class="col-md-8 offset-md-4">
-                                <button type="submit" class="btn btn-primary">
-                                    {{ __('Login') }}
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-sign-in-alt me-2"></i>
+                                    Iniciar Sesión
                                 </button>
-
-                                @if (Route::has('password.request'))
-                                    <a class="btn btn-link" href="{{ route('password.request') }}">
-                                        {{ __('Forgot Your Password?') }}
-                                    </a>
-                                @endif
                             </div>
+
+                            @if (Route::has('password.request'))
+                                <div class="text-center mt-4">
+                                    <a class="text-decoration-none" href="{{ route('password.request') }}">
+                                        <i class="fas fa-question-circle me-1"></i>
+                                        ¿Olvidaste tu contraseña?
+                                    </a>
+                                </div>
+                            @endif
+                        </form>
+                        
+                        <div class="text-center mt-4 pt-4 border-top">
+                            <small class="text-muted">
+                                <i class="fas fa-shield-alt me-1"></i>
+                                Sistema seguro y confiable
+                            </small>
                         </div>
-                    </form>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+@push('scripts')
+<script>
+function togglePassword() {
+    const passwordField = document.getElementById('password');
+    const toggleIcon = document.getElementById('toggleIcon');
+    
+    if (passwordField.type === 'password') {
+        passwordField.type = 'text';
+        toggleIcon.classList.remove('fa-eye');
+        toggleIcon.classList.add('fa-eye-slash');
+    } else {
+        passwordField.type = 'password';
+        toggleIcon.classList.remove('fa-eye-slash');
+        toggleIcon.classList.add('fa-eye');
+    }
+}
+</script>
+@endpush
 @endsection
