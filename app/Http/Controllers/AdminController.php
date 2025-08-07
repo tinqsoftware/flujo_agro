@@ -93,7 +93,7 @@ class AdminController extends Controller
             $empresas = Empresa::where('id', $user->id_emp)->get();
         }
         
-        return view('admin.usuarios.create', compact('roles', 'empresas'));
+        return view('superadmin.usuarios.create', compact('roles', 'empresas'));
     }
 
     public function storeUsuario(Request $request)
@@ -159,7 +159,7 @@ class AdminController extends Controller
             $empresas = Empresa::where('id', $user->id_emp)->get();
         }
         
-        return view('admin.usuarios.edit', compact('usuario', 'roles', 'empresas'));
+        return view('superadmin.usuarios.edit', compact('usuario', 'roles', 'empresas'));
     }
 
     public function updateUsuario(Request $request, User $usuario)
