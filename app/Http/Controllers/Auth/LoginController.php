@@ -46,20 +46,6 @@ class LoginController extends Controller
     protected function redirectTo()
     {
         $user = Auth::user();
-        
-        if ($user && $user->rol) {
-            switch (strtoupper($user->rol->nombre)) {
-                case 'SUPERADMIN':
-                    return '/superadmin/dashboard';
-                case 'ADMINISTRADOR':
-                    return '/admin/dashboard';
-                case 'ADMINISTRATIVO':
-                    return '/user/dashboard';
-                default:
-                    return '/dashboard';
-            }
-        }
-        
         return '/dashboard';
     }
 }

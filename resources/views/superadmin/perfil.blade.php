@@ -4,41 +4,6 @@
 @section('page-title', 'Mi Perfil')
 @section('page-subtitle', 'Gestión de información personal')
 
-@section('sidebar-menu')
-    <!-- Navegación común para todos -->
-    <a href="{{ route('superadmin.dashboard') }}" class="nav-link">
-        <i class="fas fa-tachometer-alt"></i>
-        Panel de Control
-    </a>
-    
-    @if(Auth::user()->rol->nombre === 'SUPERADMIN')
-        <!-- Solo SuperAdmin ve gestión de empresas -->
-        <a href="{{ route('superadmin.empresas') }}" class="nav-link">
-            <i class="fas fa-building"></i>
-            Empresas
-        </a>
-        
-        <!-- Solo SuperAdmin ve gestión de roles -->
-        <a href="{{ route('superadmin.roles') }}" class="nav-link">
-            <i class="fas fa-users-cog"></i>
-            Roles del Sistema
-        </a>
-    @endif
-    
-    @if(in_array(Auth::user()->rol->nombre, ['SUPERADMIN', 'ADMINISTRADOR']))
-        <!-- SuperAdmin y Administrador ven gestión de usuarios -->
-        <a href="{{ route('superadmin.usuarios') }}" class="nav-link">
-            <i class="fas fa-users"></i>
-            Usuarios
-        </a>
-    @endif
-    
-    <!-- Perfil para todos -->
-    <a href="{{ route('superadmin.perfil') }}" class="nav-link active">
-        <i class="fas fa-user-circle"></i>
-        Mi Perfil
-    </a>
-@endsection
 
 @section('content-area')
 <div class="row">
@@ -72,7 +37,7 @@
                     </div>
                 @endif
 
-                <form action="{{ route('superadmin.perfil.update') }}" method="POST">
+                <form action="{{ route('perfil.update') }}" method="POST">
                     @csrf
                     @method('PUT')
                     
@@ -191,7 +156,7 @@
                     </div>
                     
                     <div class="d-flex justify-content-between">
-                        <a href="{{ route('superadmin.dashboard') }}" class="btn btn-secondary">
+                        <a href="{{ route('dashboard') }}" class="btn btn-secondary">
                             <i class="fas fa-arrow-left me-2"></i>Volver al Dashboard
                         </a>
                         
@@ -236,8 +201,22 @@
                         </div>
                     </div>
                 </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <button type="button" class="btn btn-danger"
+                            onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
+                            <i class="fas fa-sign-out-alt me-2"></i> Cerrar sesión
+                        </button>
+
+                        <form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
+                            @csrf
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
+
+
     </div>
 </div>
 @endsection

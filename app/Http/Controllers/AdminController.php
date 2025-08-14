@@ -90,8 +90,10 @@ class AdminController extends Controller
         if ($user->rol->nombre === 'SUPERADMIN') {
             $empresas = Empresa::where('estado', true)->get();
         } else {
+            $roles = Rol::where('id', '!=', 1)->where('estado', true)->get();  // ocultar rol id 1
             $empresas = Empresa::where('id', $user->id_emp)->get();
         }
+       
         
         return view('superadmin.usuarios.create', compact('roles', 'empresas'));
     }
@@ -139,7 +141,7 @@ class AdminController extends Controller
 
         User::create($userData);
 
-        return redirect()->route('superadmin.usuarios')->with('success', 'Usuario creado exitosamente');
+        return redirect()->route('usuarios')->with('success', 'Usuario creado exitosamente');
     }
 
     public function editUsuario(User $usuario)
@@ -152,10 +154,11 @@ class AdminController extends Controller
         }
 
         $roles = Rol::where('estado', true)->get();
-        
+
         if ($user->rol->nombre === 'SUPERADMIN') {
             $empresas = Empresa::where('estado', true)->get();
         } else {
+            $roles = Rol::where('id', '!=', 1)->where('estado', true)->get();  // ocultar rol id 1
             $empresas = Empresa::where('id', $user->id_emp)->get();
         }
         
@@ -211,7 +214,7 @@ class AdminController extends Controller
 
         $usuario->update($userData);
 
-        return redirect()->route('superadmin.usuarios')->with('success', 'Usuario actualizado exitosamente');
+        return redirect()->route('usuarios')->with('success', 'Usuario actualizado exitosamente');
     }
 
     public function destroyUsuario(User $usuario)
@@ -225,12 +228,12 @@ class AdminController extends Controller
 
         // No permitir eliminar al usuario logueado
         if ($usuario->id === $user->id) {
-            return redirect()->route('superadmin.usuarios')->with('error', 'No puedes eliminar tu propio usuario');
+            return redirect()->route('usuarios')->with('error', 'No puedes eliminar tu propio usuario');
         }
 
         $usuario->delete();
         
-        return redirect()->route('superadmin.usuarios')->with('success', 'Usuario eliminado exitosamente');
+        return redirect()->route('usuarios')->with('success', 'Usuario eliminado exitosamente');
     }
 
     public function toggleUsuarioEstado(Request $request, User $usuario)

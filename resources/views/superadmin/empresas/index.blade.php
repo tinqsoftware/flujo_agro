@@ -4,27 +4,9 @@
 @section('page-title', 'Gestión de Empresas')
 @section('page-subtitle', 'Administra todas las empresas registradas en el sistema')
 
-@section('sidebar-menu')
-    <a href="{{ route('superadmin.dashboard') }}" class="nav-link">
-        <i class="fas fa-tachometer-alt"></i>
-        Dashboard Global
-    </a>
-    <a href="{{ route('superadmin.empresas') }}" class="nav-link active">
-        <i class="fas fa-building"></i>
-        Gestión de Empresas
-    </a>
-    <a href="{{ route('superadmin.roles') }}" class="nav-link">
-        <i class="fas fa-users-cog"></i>
-        Configuración Global
-    </a>
-    <a href="{{ route('superadmin.usuarios') }}" class="nav-link">
-        <i class="fas fa-users"></i>
-        Usuarios del Sistema
-    </a>
-@endsection
 
 @section('header-actions')
-    <a href="{{ route('superadmin.empresas.create') }}" class="btn btn-light">
+    <a href="{{ route('empresas.create') }}" class="btn btn-light">
         <i class="fas fa-plus me-2"></i>Nueva Empresa
     </a>
 @endsection
@@ -38,7 +20,7 @@
                 Lista de Empresas
             </h5>
             <div class="d-flex gap-2">
-                <form method="GET" action="{{ route('superadmin.empresas') }}" class="d-flex">
+                <form method="GET" action="{{ route('empresas') }}" class="d-flex">
                     <input type="text" name="search" class="form-control form-control-sm me-2" 
                            placeholder="Buscar empresa..." value="{{ request('search') }}">
                     <button type="submit" class="btn btn-outline-primary btn-sm">
@@ -139,7 +121,7 @@
                                         </a>
                                     </li>
                                     <li>
-                                        <a class="dropdown-item" href="{{ route('superadmin.empresas.edit', $empresa) }}">
+                                        <a class="dropdown-item" href="{{ route('empresas.edit', $empresa) }}">
                                             <i class="fas fa-edit me-2"></i>Editar
                                         </a>
                                     </li>
@@ -160,7 +142,7 @@
                             <i class="fas fa-building fa-3x text-muted mb-3"></i>
                             <h5 class="text-muted">No hay empresas registradas</h5>
                             <p class="text-muted">Comienza creando tu primera empresa</p>
-                            <a href="{{ route('superadmin.empresas.create') }}" class="btn btn-primary">
+                            <a href="{{ route('empresas.create') }}" class="btn btn-primary">
                                 <i class="fas fa-plus me-2"></i>Crear Primera Empresa
                             </a>
                         </td>
@@ -223,14 +205,14 @@
 <script>
 function confirmarEliminacion(empresaId, nombreEmpresa) {
     document.getElementById('nombreEmpresa').textContent = nombreEmpresa;
-    document.getElementById('formEliminar').action = `/superadmin/empresas/${empresaId}`;
+    document.getElementById('formEliminar').action = `/empresas/${empresaId}`;
     
     const modal = new bootstrap.Modal(document.getElementById('confirmarEliminacionModal'));
     modal.show();
 }
 
 function toggleEstado(empresaId, estado) {
-    fetch(`/superadmin/empresas/${empresaId}/toggle-estado`, {
+    fetch(`/empresas/${empresaId}/toggle-estado`, {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',

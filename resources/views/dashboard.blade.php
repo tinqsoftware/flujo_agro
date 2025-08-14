@@ -4,51 +4,15 @@
 @section('page-title', 'Panel de Control')
 @section('page-subtitle', 'Sistema de Gestión AGROEMSE')
 
-@section('sidebar-menu')
-    <!-- Navegación común para todos -->
-    <a href="{{ route('superadmin.dashboard') }}" class="nav-link {{ request()->routeIs('superadmin.dashboard') ? 'active' : '' }}">
-        <i class="fas fa-tachometer-alt"></i>
-        Panel de Control
-    </a>
-    
-    @if(Auth::user()->rol->nombre === 'SUPERADMIN')
-        <!-- Solo SuperAdmin ve gestión de empresas -->
-        <a href="{{ route('superadmin.empresas') }}" class="nav-link {{ request()->routeIs('superadmin.empresas*') ? 'active' : '' }}">
-            <i class="fas fa-building"></i>
-            Empresas
-        </a>
-        
-        <!-- Solo SuperAdmin ve gestión de roles -->
-        <a href="{{ route('superadmin.roles') }}" class="nav-link {{ request()->routeIs('superadmin.roles*') ? 'active' : '' }}">
-            <i class="fas fa-users-cog"></i>
-            Roles del Sistema
-        </a>
-    @endif
-    
-    @if(in_array(Auth::user()->rol->nombre, ['SUPERADMIN', 'ADMINISTRADOR']))
-        <!-- SuperAdmin y Administrador ven gestión de usuarios -->
-        <a href="{{ route('superadmin.usuarios') }}" class="nav-link {{ request()->routeIs('superadmin.usuarios*') ? 'active' : '' }}">
-            <i class="fas fa-users"></i>
-            Usuarios
-        </a>
-    @endif
-    
-    <!-- Perfil para todos -->
-    <a href="{{ route('superadmin.perfil') }}" class="nav-link {{ request()->routeIs('superadmin.perfil*') ? 'active' : '' }}">
-        <i class="fas fa-user-circle"></i>
-        Mi Perfil
-    </a>
-@endsection
-
 @section('header-actions')
     @if(Auth::user()->rol->nombre === 'SUPERADMIN')
-        <a href="{{ route('superadmin.empresas.create') }}" class="btn btn-light me-2">
+        <a href="{{ route('empresas.create') }}" class="btn btn-light me-2">
             <i class="fas fa-plus me-2"></i>Nueva Empresa
         </a>
     @endif
     
     @if(in_array(Auth::user()->rol->nombre, ['SUPERADMIN', 'ADMINISTRADOR']))
-        <a href="{{ route('superadmin.usuarios.create') }}" class="btn btn-light">
+        <a href="{{ route('usuarios.create') }}" class="btn btn-light">
             <i class="fas fa-user-plus me-2"></i>Nuevo Usuario
         </a>
     @endif
@@ -120,7 +84,7 @@
                     <i class="fas fa-building me-2"></i>
                     Empresas Recientes
                 </h5>
-                <a href="{{ route('superadmin.empresas') }}" class="btn btn-outline-primary btn-sm">
+                <a href="{{ route('empresas') }}" class="btn btn-outline-primary btn-sm">
                     Ver todas
                 </a>
             </div>
@@ -188,7 +152,7 @@
                     <i class="fas fa-users me-2"></i>
                     Usuarios Recientes
                 </h5>
-                <a href="{{ route('superadmin.usuarios') }}" class="btn btn-outline-primary btn-sm">
+                <a href="{{ route('usuarios') }}" class="btn btn-outline-primary btn-sm">
                     Ver todos
                 </a>
             </div>
@@ -226,7 +190,7 @@
             <div class="card-header">
                 <h5 class="card-title mb-0">
                     <i class="fas fa-building me-2"></i>
-                    Mi Empresa
+                    Mis datos
                 </h5>
             </div>
             <div class="card-body">
@@ -302,7 +266,7 @@
                     </div>
                 </div>
                 <div class="mt-3">
-                    <a href="{{ route('superadmin.perfil') }}" class="btn btn-outline-primary btn-sm w-100">
+                    <a href="{{ route('perfil') }}" class="btn btn-outline-primary btn-sm w-100">
                         <i class="fas fa-edit me-2"></i>Editar Perfil
                     </a>
                 </div>

@@ -23,15 +23,17 @@ class SuperAdminController extends Controller
         
         // Estadísticas básicas sin datos sintéticos
         $empresasRegistradas = Empresa::count();
-        $usuariosActivos = User::where('estado', true)->count();
-        $usuariosTotal = User::count();
-        $rolesActivos = Rol::where('estado', true)->count();
+        
         
         // Datos específicos según el rol
         if ($rol === 'SUPERADMIN') {
             $empresas = Empresa::with(['userAdmin'])->orderBy('created_at', 'desc')->paginate(5);
             $usuariosRecientes = User::with(['rol', 'empresa'])->orderBy('created_at', 'desc')->limit(5)->get();
+            $usuariosActivos = User::where('estado', true)->count();
+            $usuariosTotal = User::count();
+            $rolesActivos = Rol::where('estado', true)->count();
         } elseif ($rol === 'ADMINISTRADOR') {
+            
             $empresas = collect();
             if ($user->empresa) {
                 $empresas = collect([$user->empresa]);
@@ -41,6 +43,12 @@ class SuperAdminController extends Controller
                                    ->orderBy('created_at', 'desc')
                                    ->limit(5)
                                    ->get();
+
+            $usuariosActivos = User::where('estado', true)->where('id_emp', $user->id_emp)->count();
+            $usuariosTotal = User::where('id_emp', $user->id_emp)->count();
+            $rolesActivos = Rol::where('estado', true)->count();
+            $rolesActivos = $rolesActivos-1;
+
         } else {
             // ADMINISTRATIVO
             $empresas = collect();
@@ -48,6 +56,12 @@ class SuperAdminController extends Controller
                 $empresas = collect([$user->empresa]);
             }
             $usuariosRecientes = collect();
+
+            $usuariosActivos = User::where('estado', true)->where('id_emp', $user->id_emp)->count();
+            $usuariosTotal = User::where('id_emp', $user->id_emp)->count();
+            $rolesActivos = Rol::where('estado', true)->count();
+            $rolesActivos = $rolesActivos-1;
+
         }
         
         return view('superadmin.dashboard', compact(
@@ -101,7 +115,7 @@ class SuperAdminController extends Controller
             'editable' => $request->has('editable')
         ]);
 
-        return redirect()->route('superadmin.empresas')->with('success', 'Empresa creada exitosamente');
+        return redirect()->route('empresas')->with('success', 'Empresa creada exitosamente');
     }
 
     public function editEmpresa(Empresa $empresa)
@@ -140,7 +154,7 @@ class SuperAdminController extends Controller
 
         $empresa->update($data);
 
-        return redirect()->route('superadmin.empresas')->with('success', 'Empresa actualizada exitosamente');
+        return redirect()->route('empresas')->with('success', 'Empresa actualizada exitosamente');
     }
 
     public function destroyEmpresa(Empresa $empresa)
@@ -151,7 +165,7 @@ class SuperAdminController extends Controller
         
         $empresa->delete();
         
-        return redirect()->route('superadmin.empresas')->with('success', 'Empresa eliminada exitosamente');
+        return redirect()->route('empresas')->with('success', 'Empresa eliminada exitosamente');
     }
 
     public function toggleEmpresaEstado(Empresa $empresa)
@@ -191,19 +205,35 @@ class SuperAdminController extends Controller
                   ->orWhere('email', 'LIKE', "%{$search}%");
             });
         }
+        $user = Auth::user();
+        if ($user->rol->nombre != 'SUPERADMIN') {
+            $usuarios = $query->where('id_emp', $user->id_emp)->orderBy('created_at', 'desc')->paginate(15)->appends($request->query());
+            
+            // Para los filtros
+            $empresas = Empresa::where('id',$user->id_emp)->where('estado', true)->orderBy('nombre')->get();
+            $roles = Rol::where('id', '!=', 1)->where('estado', true)->orderBy('nombre')->get();
+
+        }else{
+            $usuarios = $query->orderBy('created_at', 'desc')->paginate(15)->appends($request->query());
+            
+            // Para los filtros
+            $empresas = Empresa::where('estado', true)->orderBy('nombre')->get();
+            $roles = Rol::where('estado', true)->orderBy('nombre')->get();
+        }
         
-        $usuarios = $query->orderBy('created_at', 'desc')->paginate(15)->appends($request->query());
+
         
-        // Para los filtros
-        $empresas = Empresa::where('estado', true)->orderBy('nombre')->get();
-        $roles = Rol::where('estado', true)->orderBy('nombre')->get();
         
         return view('superadmin.usuarios.index', compact('usuarios', 'empresas', 'roles'));
     }
 
     public function roles()
     {
-        $roles = Rol::orderBy('created_at', 'desc')->paginate(10);
+        $roles = Rol::orderBy('id', 'asc')->paginate(10);
+        if(Auth::user()->rol->nombre != 'SUPERADMIN'){
+            $roles = Rol::where('id', '!=', 1)->where('estado', true)->paginate(10);  // ocultar rol id 1
+        }
+        
         return view('superadmin.roles.index', compact('roles'));
     }
 
@@ -225,7 +255,7 @@ class SuperAdminController extends Controller
             'estado' => true
         ]);
 
-        return redirect()->route('superadmin.roles')->with('success', 'Rol creado exitosamente');
+        return redirect()->route('roles')->with('success', 'Rol creado exitosamente');
     }
 
     public function editRol(Rol $rol)
@@ -246,19 +276,19 @@ class SuperAdminController extends Controller
             'estado' => $request->has('estado')
         ]);
 
-        return redirect()->route('superadmin.roles')->with('success', 'Rol actualizado exitosamente');
+        return redirect()->route('roles')->with('success', 'Rol actualizado exitosamente');
     }
 
     public function destroyRol(Rol $rol)
     {
         // Verificar que no hay usuarios con este rol
         if ($rol->users()->count() > 0) {
-            return redirect()->route('superadmin.roles')->with('error', 'No se puede eliminar el rol porque tiene usuarios asignados');
+            return redirect()->route('roles')->with('error', 'No se puede eliminar el rol porque tiene usuarios asignados');
         }
         
         $rol->delete();
         
-        return redirect()->route('superadmin.roles')->with('success', 'Rol eliminado exitosamente');
+        return redirect()->route('roles')->with('success', 'Rol eliminado exitosamente');
     }
 
     public function toggleRolEstado(Rol $rol)

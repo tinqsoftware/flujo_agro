@@ -6,14 +6,47 @@
     <div class="sidebar d-flex flex-column p-3" style="width: 250px;">
         <div class="text-center mb-4">
             <h4 class="mb-0">
-                <i class="fas fa-leaf me-2"></i>
-                AGROEMSE
+                <div class="logo">
+                    <img src="/access/logo.jpg"  style="width:80%" alt="Logo AGROEMSE">
+                </div>
             </h4>
+            <small class="opacity-75"><b>{{ Auth::user()->name }}</b></small><br/>
             <small class="opacity-75">{{ Auth::user()->rol->nombre }}</small>
         </div>
         
         <nav class="nav nav-pills flex-column">
-            @yield('sidebar-menu')
+           <!-- Navegación común para todos -->
+            <a href="{{ route('dashboard') }}" class="nav-link {{ request()->routeIs('superadmin.dashboard') ? 'active' : '' }}">
+                <i class="fas fa-tachometer-alt"></i>
+                Panel
+            </a>
+            
+            @if(Auth::user()->rol->nombre === 'SUPERADMIN')
+                <!-- Solo SuperAdmin ve gestión de empresas -->
+                <a href="{{ route('empresas') }}" class="nav-link {{ request()->routeIs('superadmin.empresas*') ? 'active' : '' }}">
+                    <i class="fas fa-building"></i>
+                    Empresas
+                </a>
+            @endif
+            
+            @if(in_array(Auth::user()->rol->nombre, ['SUPERADMIN', 'ADMINISTRADOR']))
+                <!-- Solo SuperAdmin ve gestión de roles -->
+                <a href="{{ route('roles') }}" class="nav-link {{ request()->routeIs('superadmin.roles*') ? 'active' : '' }}">
+                    <i class="fas fa-users-cog"></i>
+                    Roles
+                </a>
+                <!-- SuperAdmin y Administrador ven gestión de usuarios -->
+                <a href="{{ route('usuarios') }}" class="nav-link {{ request()->routeIs('superadmin.usuarios*') ? 'active' : '' }}">
+                    <i class="fas fa-users"></i>
+                    Usuarios
+                </a>
+            @endif
+            
+            <!-- Perfil para todos -->
+            <a href="{{ route('perfil') }}" class="nav-link {{ request()->routeIs('superadmin.perfil*') ? 'active' : '' }}">
+                <i class="fas fa-user-circle"></i>
+                Mi Perfil
+            </a>
         </nav>
         
         <div class="mt-auto">
@@ -31,7 +64,7 @@
                 <ul class="dropdown-menu dropdown-menu-dark">
                     @if(Auth::user()->rol->nombre === 'ADMINISTRATIVO' || Auth::user()->rol->nombre === 'ADMINISTRADOR' || Auth::user()->rol->nombre === 'SUPERADMIN')
                         <li>
-                            <a class="dropdown-item" href="{{ route('superadmin.perfil') }}">
+                            <a class="dropdown-item" href="{{ route('perfil') }}">
                                 <i class="fas fa-user-edit me-2"></i>Mi Perfil
                             </a>
                         </li>

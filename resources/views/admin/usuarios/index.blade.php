@@ -321,14 +321,14 @@ document.addEventListener('click', function(e) {
 
 function confirmarEliminacion(usuarioId, nombreUsuario) {
     document.getElementById('nombreUsuario').textContent = nombreUsuario;
-    document.getElementById('formEliminar').action = `/admin/usuarios/${usuarioId}`;
+    document.getElementById('formEliminar').action = `/usuarios/${usuarioId}`;
     
     const modal = new bootstrap.Modal(document.getElementById('confirmarEliminacionModal'));
     modal.show();
 }
 
 function toggleEstado(usuarioId, estado) {
-    fetch(`/admin/usuarios/${usuarioId}/toggle-estado`, {
+    fetch(`/usuarios/${usuarioId}/toggle-estado`, {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',

@@ -4,28 +4,10 @@
 @section('page-title', 'Editar Empresa')
 @section('page-subtitle', 'Modifica la información de ' . $empresa->nombre)
 
-@section('sidebar-menu')
-    <a href="{{ route('superadmin.dashboard') }}" class="nav-link">
-        <i class="fas fa-tachometer-alt"></i>
-        Dashboard Global
-    </a>
-    <a href="{{ route('superadmin.empresas') }}" class="nav-link active">
-        <i class="fas fa-building"></i>
-        Gestión de Empresas
-    </a>
-    <a href="{{ route('superadmin.roles') }}" class="nav-link">
-        <i class="fas fa-users-cog"></i>
-        Configuración Global
-    </a>
-    <a href="{{ route('superadmin.usuarios') }}" class="nav-link">
-        <i class="fas fa-users"></i>
-        Usuarios del Sistema
-    </a>
-@endsection
 
 @section('header-actions')
     <div class="d-flex gap-2">
-        <a href="{{ route('superadmin.empresas') }}" class="btn btn-light">
+        <a href="{{ route('empresas') }}" class="btn btn-light">
             <i class="fas fa-arrow-left me-2"></i>Volver
         </a>
         <button type="button" class="btn btn-outline-danger" onclick="confirmarEliminacion()">
@@ -45,7 +27,7 @@
                 </h5>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ route('superadmin.empresas.update', $empresa) }}" enctype="multipart/form-data">
+                <form method="POST" action="{{ route('empresas.update', $empresa) }}" enctype="multipart/form-data">
                     @csrf
                     @method('PUT')
                     
@@ -173,7 +155,7 @@
                     </div>
                     
                     <div class="d-flex gap-2 justify-content-end">
-                        <a href="{{ route('superadmin.empresas') }}" class="btn btn-secondary">
+                        <a href="{{ route('empresas') }}" class="btn btn-secondary">
                             <i class="fas fa-times me-2"></i>Cancelar
                         </a>
                         <button type="submit" class="btn btn-primary">
@@ -298,7 +280,7 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <i class="fas fa-times me-2"></i>Cancelar
                 </button>
-                <form method="POST" action="{{ route('superadmin.empresas.destroy', $empresa) }}" style="display: inline;">
+                <form method="POST" action="{{ route('empresas.destroy', $empresa) }}" style="display: inline;">
                     @csrf
                     @method('DELETE')
                     <button type="submit" class="btn btn-danger">

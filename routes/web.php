@@ -14,26 +14,10 @@ Auth::routes(['register' => false]);
 
 Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
 
-// Redirección después del login
-Route::get('/dashboard', function () {
-    $user = Auth::user();
-    if ($user && $user->rol) {
-        switch (strtoupper($user->rol->nombre)) {
-            case 'SUPERADMIN':
-                return redirect()->route('superadmin.dashboard');
-            case 'ADMINISTRADOR':
-                return redirect()->route('superadmin.dashboard');
-            case 'ADMINISTRATIVO':
-                return redirect()->route('superadmin.dashboard');
-            default:
-                return redirect('/home');
-        }
-    }
-    return redirect('/home');
-})->middleware('auth');
 
 // Rutas para todos los usuarios autenticados (Dashboard único)
-Route::prefix('superadmin')->name('superadmin.')->middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])->group(function () {
+Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
+    ->group(function () {
     Route::get('/dashboard', [SuperAdminController::class, 'dashboard'])->name('dashboard');
     
     // Gestión de Empresas (solo SUPERADMIN)
@@ -48,7 +32,7 @@ Route::prefix('superadmin')->name('superadmin.')->middleware(['auth', 'role:SUPE
     });
     
     // Gestión de Roles (solo SUPERADMIN)
-    Route::middleware('role:SUPERADMIN')->group(function () {
+    Route::middleware('role:SUPERADMIN,ADMINISTRADOR')->group(function () {
         Route::get('/roles', [SuperAdminController::class, 'roles'])->name('roles');
         Route::get('/roles/create', [SuperAdminController::class, 'createRol'])->name('roles.create');
         Route::post('/roles', [SuperAdminController::class, 'storeRol'])->name('roles.store');
@@ -56,10 +40,8 @@ Route::prefix('superadmin')->name('superadmin.')->middleware(['auth', 'role:SUPE
         Route::put('/roles/{rol}', [SuperAdminController::class, 'updateRol'])->name('roles.update');
         Route::delete('/roles/{rol}', [SuperAdminController::class, 'destroyRol'])->name('roles.destroy');
         Route::patch('/roles/{rol}/toggle-estado', [SuperAdminController::class, 'toggleRolEstado'])->name('roles.toggle-estado');
-    });
     
     // Gestión de Usuarios (SUPERADMIN y ADMINISTRADOR)
-    Route::middleware('role:SUPERADMIN,ADMINISTRADOR')->group(function () {
         Route::get('/usuarios', [SuperAdminController::class, 'usuarios'])->name('usuarios');
         Route::get('/usuarios/create', [AdminController::class, 'createUsuario'])->name('usuarios.create');
         Route::post('/usuarios', [AdminController::class, 'storeUsuario'])->name('usuarios.store');

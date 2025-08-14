@@ -4,16 +4,14 @@
 
 @section('content')
 <div class="login-container d-flex align-items-center justify-content-center">
-    <div class="container">
+    <div class="container p-5">
         <div class="row justify-content-center">
             <div class="col-lg-5 col-md-7">
                 <div class="login-card">
-                    <div class="login-header">
-                        <div class="mb-3">
-                            <i class="fas fa-leaf fa-3x"></i>
+                    <div class="login-header pb-3">
+                        <div class="logo">
+                            <img src="/access/logo.jpg"  style="width:80%" alt="Logo AGROEMSE">
                         </div>
-                        <h2 class="mb-2">AGROEMSE</h2>
-                        <p class="mb-0">Sistema de Gestión Empresarial</p>
                     </div>
                     
                     <div class="login-body">
@@ -94,14 +92,6 @@
                                 </button>
                             </div>
 
-                            @if (Route::has('password.request'))
-                                <div class="text-center mt-4">
-                                    <a class="text-decoration-none" href="{{ route('password.request') }}">
-                                        <i class="fas fa-question-circle me-1"></i>
-                                        ¿Olvidaste tu contraseña?
-                                    </a>
-                                </div>
-                            @endif
                         </form>
                         
                         <div class="text-center mt-4 pt-4 border-top">

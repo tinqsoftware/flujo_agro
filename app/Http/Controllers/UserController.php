@@ -69,6 +69,6 @@ class UserController extends Controller
 
         $user->update($userData);
 
-        return redirect()->route('superadmin.perfil')->with('success', 'Perfil actualizado exitosamente');
+        return redirect()->route('perfil')->with('success', 'Perfil actualizado exitosamente');
     }
 }

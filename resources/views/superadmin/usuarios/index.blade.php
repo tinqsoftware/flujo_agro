@@ -2,32 +2,17 @@
 
 @section('title', 'Gestión Global de Usuarios - AGROEMSE')
 @section('page-title', 'Usuarios del Sistema')
-@section('page-subtitle', 'Gestión completa de usuarios de todas las empresas')
-
-@section('sidebar-menu')
-    <a href="{{ route('superadmin.dashboard') }}" class="nav-link">
-        <i class="fas fa-tachometer-alt"></i>
-        Dashboard Global
-    </a>
-    <a href="{{ route('superadmin.empresas') }}" class="nav-link">
-        <i class="fas fa-building"></i>
-        Gestión de Empresas
-    </a>
-    <a href="{{ route('superadmin.roles') }}" class="nav-link">
-        <i class="fas fa-users-cog"></i>
-        Configuración Global
-    </a>
-    <a href="{{ route('superadmin.usuarios') }}" class="nav-link active">
-        <i class="fas fa-users"></i>
-        Usuarios del Sistema
-    </a>
-@endsection
+@section('page-subtitle', 'Gestión completa de usuarios')
 
 @section('header-actions')
-    <a href="{{ route('superadmin.usuarios.create') }}" class="btn btn-light">
-        <i class="fas fa-user-plus me-2"></i>Nuevo Usuario
-    </a>
+    
+    @if(in_array(Auth::user()->rol->nombre, ['SUPERADMIN', 'ADMINISTRADOR']))
+        <a href="{{ route('usuarios.create') }}" class="btn btn-light">
+            <i class="fas fa-user-plus me-2"></i>Nuevo Usuario
+        </a>
+    @endif
 @endsection
+
 
 @section('content-area')
 <div class="card">
@@ -35,18 +20,27 @@
         <div class="d-flex justify-content-between align-items-center">
             <h5 class="card-title mb-0">
                 <i class="fas fa-users me-2"></i>
-                Todos los Usuarios del Sistema
+                Todos los Usuarios
             </h5>
             <div class="d-flex gap-2">
-                <form method="GET" action="{{ route('superadmin.usuarios') }}" class="d-flex">
-                    <select name="empresa" class="form-select form-select-sm me-2" onchange="this.form.submit()">
-                        <option value="">Todas las empresas</option>
-                        @foreach($empresas as $empresa)
-                            <option value="{{ $empresa->id }}" {{ request('empresa') == $empresa->id ? 'selected' : '' }}>
-                                {{ $empresa->nombre }}
-                            </option>
-                        @endforeach
-                    </select>
+                <form method="GET" action="{{ route('usuarios') }}" class="d-flex">
+
+                    @if(auth()->user()->rol->nombre === 'SUPERADMIN')
+                        <!-- SUPERADMIN ve el select normal -->
+                        <select name="empresa" class="form-select form-select-sm me-2" onchange="this.form.submit()">
+                            <option value="">Todas las empresas</option>
+                            @foreach($empresas as $empresa)
+                                <option value="{{ $empresa->id }}" {{ request('empresa') == $empresa->id ? 'selected' : '' }}>
+                                    {{ $empresa->nombre }}
+                                </option>
+                            @endforeach
+                        </select>
+                    @else
+                        <!-- No SUPERADMIN: fuerza la empresa del usuario y no se muestra visualmente -->
+                        <input type="hidden" name="empresa" value="{{ Auth()->user()->id_emp }}">
+                    @endif
+
+                    
                     <select name="rol" class="form-select form-select-sm me-2" onchange="this.form.submit()">
                         <option value="">Todos los roles</option>
                         @foreach($roles as $rol)
@@ -76,7 +70,9 @@
                     <tr>
                         <th>Usuario</th>
                         <th>Rol</th>
-                        <th>Empresa</th>
+                        @if(auth()->user()->rol->nombre === 'SUPERADMIN')
+                            <th>Empresa</th>
+                        @endif
                         <th>Contacto</th>
                         <th>Estado</th>
                         <th>Último Acceso</th>
@@ -123,6 +119,7 @@
                                 <span class="text-warning">Sin rol</span>
                             @endif
                         </td>
+                        @if(auth()->user()->rol->nombre === 'SUPERADMIN')
                         <td>
                             @if($usuario->empresa)
                                 <div>
@@ -133,6 +130,7 @@
                                 <span class="text-warning">Sin empresa</span>
                             @endif
                         </td>
+                        @endif
                         <td>
                             <div>
                                 <div class="small">{{ $usuario->email }}</div>
@@ -159,7 +157,7 @@
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm">
-                                <a href="{{ route('superadmin.usuarios.edit', $usuario) }}" 
+                                <a href="{{ route('usuarios.edit', $usuario) }}" 
                                    class="btn btn-outline-primary" title="Editar">
                                     <i class="fas fa-edit"></i>
                                 </a>
@@ -251,14 +249,14 @@ document.addEventListener('click', function(e) {
 
 function confirmarEliminacion(usuarioId, nombreUsuario) {
     document.getElementById('nombreUsuario').textContent = nombreUsuario;
-    document.getElementById('formEliminar').action = `/admin/usuarios/${usuarioId}`;
+    document.getElementById('formEliminar').action = `/usuarios/${usuarioId}`;
     
     const modal = new bootstrap.Modal(document.getElementById('confirmarEliminacionModal'));
     modal.show();
 }
 
 function toggleEstado(usuarioId, estado) {
-    fetch(`/admin/usuarios/${usuarioId}/toggle-estado`, {
+    fetch(`/usuarios/${usuarioId}/toggle-estado`, {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',

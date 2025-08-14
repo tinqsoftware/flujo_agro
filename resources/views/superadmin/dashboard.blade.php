@@ -4,51 +4,16 @@
 @section('page-title', 'Panel de Control')
 @section('page-subtitle', 'Sistema de Gestión AGROEMSE')
 
-@section('sidebar-menu')
-    <!-- Navegación común para todos -->
-    <a href="{{ route('superadmin.dashboard') }}" class="nav-link {{ request()->routeIs('superadmin.dashboard') ? 'active' : '' }}">
-        <i class="fas fa-tachometer-alt"></i>
-        Panel de Control
-    </a>
-    
-    @if(Auth::user()->rol->nombre === 'SUPERADMIN')
-        <!-- Solo SuperAdmin ve gestión de empresas -->
-        <a href="{{ route('superadmin.empresas') }}" class="nav-link {{ request()->routeIs('superadmin.empresas*') ? 'active' : '' }}">
-            <i class="fas fa-building"></i>
-            Empresas
-        </a>
-        
-        <!-- Solo SuperAdmin ve gestión de roles -->
-        <a href="{{ route('superadmin.roles') }}" class="nav-link {{ request()->routeIs('superadmin.roles*') ? 'active' : '' }}">
-            <i class="fas fa-users-cog"></i>
-            Roles del Sistema
-        </a>
-    @endif
-    
-    @if(in_array(Auth::user()->rol->nombre, ['SUPERADMIN', 'ADMINISTRADOR']))
-        <!-- SuperAdmin y Administrador ven gestión de usuarios -->
-        <a href="{{ route('superadmin.usuarios') }}" class="nav-link {{ request()->routeIs('superadmin.usuarios*') ? 'active' : '' }}">
-            <i class="fas fa-users"></i>
-            Usuarios
-        </a>
-    @endif
-    
-    <!-- Perfil para todos -->
-    <a href="{{ route('superadmin.perfil') }}" class="nav-link {{ request()->routeIs('superadmin.perfil*') ? 'active' : '' }}">
-        <i class="fas fa-user-circle"></i>
-        Mi Perfil
-    </a>
-@endsection
 
 @section('header-actions')
     @if(Auth::user()->rol->nombre === 'SUPERADMIN')
-        <a href="{{ route('superadmin.empresas.create') }}" class="btn btn-light me-2">
+        <a href="{{ route('empresas.create') }}" class="btn btn-light me-2">
             <i class="fas fa-plus me-2"></i>Nueva Empresa
         </a>
     @endif
     
     @if(in_array(Auth::user()->rol->nombre, ['SUPERADMIN', 'ADMINISTRADOR']))
-        <a href="{{ route('superadmin.usuarios.create') }}" class="btn btn-light">
+        <a href="{{ route('usuarios.create') }}" class="btn btn-light">
             <i class="fas fa-user-plus me-2"></i>Nuevo Usuario
         </a>
     @endif
@@ -57,18 +22,20 @@
 @section('content-area')
 <!-- Estadísticas principales -->
 <div class="row mb-4">
-    <div class="col-lg-3 col-md-6 mb-3">
-        <div class="stats-card">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h3>{{ $empresasRegistradas }}</h3>
-                    <p>Empresas</p>
-                    <small class="text-muted">Total registradas</small>
+    @if(Auth::user()->rol->nombre === 'SUPERADMIN')
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="stats-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h3>{{ $empresasRegistradas }}</h3>
+                        <p>Empresas</p>
+                        <small class="text-muted">Total registradas</small>
+                    </div>
+                    <i class="fas fa-building text-primary"></i>
                 </div>
-                <i class="fas fa-building text-primary"></i>
             </div>
         </div>
-    </div>
+    @endif
     
     <div class="col-lg-3 col-md-6 mb-3">
         <div class="stats-card">
@@ -76,7 +43,6 @@
                 <div>
                     <h3>{{ $usuariosActivos }}</h3>
                     <p>Usuarios Activos</p>
-                    <small class="text-muted">De {{ $usuariosTotal }} total</small>
                 </div>
                 <i class="fas fa-users text-success"></i>
             </div>
@@ -89,7 +55,6 @@
                 <div>
                     <h3>{{ $rolesActivos }}</h3>
                     <p>Roles Activos</p>
-                    <small class="text-muted">En el sistema</small>
                 </div>
                 <i class="fas fa-users-cog text-info"></i>
             </div>
@@ -102,7 +67,6 @@
                 <div>
                     <h3>{{ Auth::user()->rol->nombre }}</h3>
                     <p>Tu Rol</p>
-                    <small class="text-muted">Nivel de acceso</small>
                 </div>
                 <i class="fas fa-id-badge text-warning"></i>
             </div>
@@ -120,7 +84,7 @@
                     <i class="fas fa-building me-2"></i>
                     Empresas Recientes
                 </h5>
-                <a href="{{ route('superadmin.empresas') }}" class="btn btn-outline-primary btn-sm">
+                <a href="{{ route('empresas') }}" class="btn btn-outline-primary btn-sm">
                     Ver todas
                 </a>
             </div>
@@ -179,45 +143,7 @@
     </div>
     @endif
     
-    @if(in_array($rol, ['SUPERADMIN', 'ADMINISTRADOR']) && $usuariosRecientes->count() > 0)
-    <!-- Lista de usuarios recientes -->
-    <div class="col-lg-4 mb-4">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-users me-2"></i>
-                    Usuarios Recientes
-                </h5>
-                <a href="{{ route('superadmin.usuarios') }}" class="btn btn-outline-primary btn-sm">
-                    Ver todos
-                </a>
-            </div>
-            <div class="card-body">
-                @forelse($usuariosRecientes as $usuario)
-                <div class="d-flex align-items-center mb-3">
-                    <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center me-2" 
-                         style="width: 32px; height: 32px;">
-                        <span class="text-white fw-semibold" style="font-size: 12px;">
-                            {{ strtoupper(substr($usuario->nombres, 0, 1) . substr($usuario->apellidos, 0, 1)) }}
-                        </span>
-                    </div>
-                    <div class="flex-grow-1">
-                        <div class="fw-semibold" style="font-size: 14px;">{{ $usuario->nombres }} {{ $usuario->apellidos }}</div>
-                        <small class="text-muted">{{ $usuario->rol->nombre ?? 'Sin rol' }}</small>
-                    </div>
-                    <span class="badge {{ $usuario->estado ? 'bg-success' : 'bg-danger' }} badge-sm">
-                        {{ $usuario->estado ? 'Activo' : 'Inactivo' }}
-                    </span>
-                </div>
-                @empty
-                <div class="text-center py-3">
-                    <small class="text-muted">No hay usuarios registrados</small>
-                </div>
-                @endforelse
-            </div>
-        </div>
-    </div>
-    @endif
+
     
     @if($rol === 'ADMINISTRATIVO' || ($rol === 'ADMINISTRADOR' && Auth::user()->empresa))
     <!-- Información de la empresa para Administrador y Administrativo -->
@@ -226,7 +152,7 @@
             <div class="card-header">
                 <h5 class="card-title mb-0">
                     <i class="fas fa-building me-2"></i>
-                    Mi Empresa
+                    Mis datos
                 </h5>
             </div>
             <div class="card-body">
@@ -248,7 +174,7 @@
                     </div>
                     <div class="row text-center">
                         <div class="col-6">
-                            <div class="fw-semibold">{{ Auth::user()->empresa->users->where('estado', true)->count() }}</div>
+                            <div class="fw-semibold">{{$usuariosActivos}}</div>
                             <small class="text-muted">Usuarios Activos</small>
                         </div>
                         <div class="col-6">
@@ -266,7 +192,7 @@
         </div>
     </div>
     @endif
-    
+
     <!-- Información del usuario actual -->
     <div class="col-lg-6 mb-4">
         <div class="card">
@@ -302,12 +228,54 @@
                     </div>
                 </div>
                 <div class="mt-3">
-                    <a href="{{ route('superadmin.perfil') }}" class="btn btn-outline-primary btn-sm w-100">
+                    <a href="{{ route('perfil') }}" class="btn btn-outline-primary btn-sm w-100">
                         <i class="fas fa-edit me-2"></i>Editar Perfil
                     </a>
                 </div>
             </div>
         </div>
     </div>
+
+    @if(in_array($rol, ['SUPERADMIN', 'ADMINISTRADOR']) && $usuariosRecientes->count() > 0)
+    <!-- Lista de usuarios recientes -->
+    <div class="col-lg-6 mb-6 pb-3">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-users me-2"></i>
+                    Usuarios Recientes
+                </h5>
+                <a href="{{ route('usuarios') }}" class="btn btn-outline-primary btn-sm">
+                    Ver todos
+                </a>
+            </div>
+            <div class="card-body">
+                @forelse($usuariosRecientes as $usuario)
+                <div class="d-flex align-items-center mb-3">
+                    <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center me-2" 
+                         style="width: 32px; height: 32px;">
+                        <span class="text-white fw-semibold" style="font-size: 12px;">
+                            {{ strtoupper(substr($usuario->nombres, 0, 1) . substr($usuario->apellidos, 0, 1)) }}
+                        </span>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold" style="font-size: 14px;">{{ $usuario->nombres }} {{ $usuario->apellidos }}</div>
+                        <small class="text-muted">{{ $usuario->rol->nombre ?? 'Sin rol' }}</small>
+                    </div>
+                    <span class="badge {{ $usuario->estado ? 'bg-success' : 'bg-danger' }} badge-sm">
+                        {{ $usuario->estado ? 'Activo' : 'Inactivo' }}
+                    </span>
+                </div>
+                @empty
+                <div class="text-center py-3">
+                    <small class="text-muted">No hay usuarios registrados</small>
+                </div>
+                @endforelse
+            </div>
+        </div>
+    </div>
+    @endif
+    
+
 </div>
 @endsection

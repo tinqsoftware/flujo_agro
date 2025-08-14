@@ -4,39 +4,8 @@
 @section('page-title', 'Crear Usuario')
 @section('page-subtitle', 'Agregar nuevo usuario al sistema')
 
-@section('sidebar-menu')
-    <a href="{{ route('superadmin.dashboard') }}" class="nav-link">
-        <i class="fas fa-tachometer-alt"></i>
-        Panel de Control
-    </a>
-    
-    @if(Auth::user()->rol->nombre === 'SUPERADMIN')
-        <a href="{{ route('superadmin.empresas') }}" class="nav-link">
-            <i class="fas fa-building"></i>
-            Empresas
-        </a>
-        
-        <a href="{{ route('superadmin.roles') }}" class="nav-link">
-            <i class="fas fa-users-cog"></i>
-            Roles del Sistema
-        </a>
-    @endif
-    
-    @if(in_array(Auth::user()->rol->nombre, ['SUPERADMIN', 'ADMINISTRADOR']))
-        <a href="{{ route('superadmin.usuarios') }}" class="nav-link active">
-            <i class="fas fa-users"></i>
-            Usuarios
-        </a>
-    @endif
-    
-    <a href="{{ route('superadmin.perfil') }}" class="nav-link">
-        <i class="fas fa-user-circle"></i>
-        Mi Perfil
-    </a>
-@endsection
-
 @section('header-actions')
-    <a href="{{ route('superadmin.usuarios') }}" class="btn btn-secondary">
+    <a href="{{ route('usuarios') }}" class="btn btn-secondary">
         <i class="fas fa-arrow-left me-2"></i>Volver a Usuarios
     </a>
 @endsection
@@ -65,7 +34,7 @@
                     </div>
                 @endif
 
-                <form action="{{ route('superadmin.usuarios.store') }}" method="POST">
+                <form action="{{ route('usuarios.store') }}" method="POST">
                     @csrf
                     
                     <div class="row">
@@ -211,7 +180,7 @@
                     </div>
                     
                     <div class="d-flex justify-content-between">
-                        <a href="{{ route('superadmin.usuarios') }}" class="btn btn-secondary">
+                        <a href="{{ route('usuarios') }}" class="btn btn-secondary">
                             <i class="fas fa-times me-2"></i>Cancelar
                         </a>
                         
