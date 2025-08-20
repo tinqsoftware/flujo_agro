@@ -48,6 +48,15 @@
                     <i class="fas fa-users"></i>
                     Usuarios
                 </a>
+                <a href="{{ route('tipo-flujo.index') }}" class="nav-link {{ request()->routeIs('tipo-flujo.*') ? 'active' : '' }}">
+                    <i class="fas fa-diagram-project"></i>
+                    Tipos de flujo
+                </a>
+                <li class="nav-item">
+                    <a class="nav-link {{ request()->is('flujos*') ? 'active' : '' }}" href="{{ route('flujos.index') }}">
+                        <i class="fas fa-project-diagram me-1"></i> Flujos
+                    </a>
+                </li>
             @endif
 
 
@@ -64,6 +73,8 @@
                 <i class="fas fa-truck"></i>
                 Proveedores
             </a>
+
+            
             
             <!-- Perfil para todos -->
             <a href="{{ route('perfil') }}" class="nav-link {{ request()->routeIs('superadmin.perfil*') ? 'active' : '' }}">

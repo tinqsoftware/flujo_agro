@@ -38,7 +38,7 @@ class Flujo extends Model
         return $this->belongsTo(Ficha::class, 'id_ficha');
     }
 
-    public function tipoFlujo()
+    public function tipo()
     {
         return $this->belongsTo(TipoFlujo::class, 'id_tipo_flujo');
     }

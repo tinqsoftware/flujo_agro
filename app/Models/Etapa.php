@@ -18,7 +18,8 @@ class Etapa extends Model
         'id_ficha',
         'id_flujo',
         'estado',
-        'paralelo'
+        'paralelo',
+        'nro'
     ];
 
     protected $casts = [

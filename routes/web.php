@@ -9,6 +9,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\ProveedorController;
+use App\Http\Controllers\TipoFlujoController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -81,6 +82,19 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         // AJAX para campos dinámicos de la ficha tipo Cliente
         Route::get('/proveedores/atributos-by-empresa', [ProveedorController::class, 'atributosByEmpresa'])
             ->name('proveedores.atributosByEmpresa');
+
+        // TIPOS DE FLUJO
+        Route::resource('tipo-flujo', TipoFlujoController::class)
+            ->only(['index','create','store','edit','update','destroy']);
+
+
+        // TIPOS DE FLUJO (ya lo tienes con CRUD). Aquí solo ajax para el combo por empresa
+        Route::get('/tipo-flujo/by-empresa', [\App\Http\Controllers\FlujoController::class, 'tiposByEmpresa'])
+            ->name('tipo_flujo.byEmpresa');
+
+        // FLUJOS
+        Route::resource('flujos', \App\Http\Controllers\FlujoController::class)
+            ->only(['index','create','store','edit','update','destroy']);
 
     
     // Gestión de Usuarios (SUPERADMIN y ADMINISTRADOR)
