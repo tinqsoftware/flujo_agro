@@ -166,7 +166,7 @@
 
             @if($c->ruta_logo)
               <div class="mb-2">
-                <img src="{{ url($c->ruta_logo) }}" alt="logo" class="img-fluid rounded" style="max-height:150px;">
+                <img src="{{ asset('storage/'.$c->ruta_logo) }}" alt="logo"  class="img-fluid rounded" style="max-height:150px;">
               </div>
             @endif
 
