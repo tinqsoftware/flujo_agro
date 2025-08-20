@@ -13,6 +13,7 @@ class DatosAtributosFicha extends Model
 
     protected $fillable = [
         'id_atributo',
+        'id_relacion',
         'dato',
         'json',
         'id_user_create'

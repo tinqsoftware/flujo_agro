@@ -3,8 +3,12 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\SuperAdminController;
+use App\Http\Controllers\FichaController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\ProductoController;
+use App\Http\Controllers\ProveedorController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -40,6 +44,44 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::put('/roles/{rol}', [SuperAdminController::class, 'updateRol'])->name('roles.update');
         Route::delete('/roles/{rol}', [SuperAdminController::class, 'destroyRol'])->name('roles.destroy');
         Route::patch('/roles/{rol}/toggle-estado', [SuperAdminController::class, 'toggleRolEstado'])->name('roles.toggle-estado');
+
+        //fichas
+        //Route::resource('fichas', FichaController::class)->only(['index','create','store','show']);
+        Route::resource('fichas', FichaController::class)->only(['index','create','store']);
+
+
+        //Route::post('/fichas', [FichaController::class, 'storeFicha'])->name('fichas.store');
+        Route::get('/fichas/{ficha}/edit', [FichaController::class, 'editFicha'])->name('fichas.edit');
+        Route::put('/fichas/{ficha}', [FichaController::class, 'updateFicha'])->name('fichas.update');
+        Route::delete('/fichas/{ficha}', [FichaController::class, 'destroyFicha'])->name('fichas.destroy');
+        Route::patch('/fichas/{ficha}/toggle-estado', [FichaController::class, 'toggleFichaEstado'])->name('fichas.toggle-estado');
+
+        // AJAX
+        Route::get('/fichas/flujos-by-empresa', [FichaController::class, 'flujosByEmpresa'])->name('fichas.flujosByEmpresa');
+        Route::get('/fichas/etapas-by-flujo', [FichaController::class, 'etapasByFlujo'])->name('fichas.etapasByFlujo');
+        Route::get('/fichas/check-tipo-disponible', [FichaController::class, 'checkTipoDisponible'])->name('fichas.checkTipoDisponible');
+
+
+        //CLIENTES
+        Route::resource('clientes', ClienteController::class)->only(['show','index','create','store','edit','update','destroy']);
+        // AJAX para campos dinámicos de la ficha tipo Cliente
+        Route::get('/clientes/atributos-by-empresa', [ClienteController::class, 'atributosByEmpresa'])
+            ->name('clientes.atributosByEmpresa');
+
+
+        //PRODUCTOS
+        Route::resource('productos', ProductoController::class)->parameters(['productos' => 'producto'])
+        ->only(['index','create','store','edit','update','destroy']);
+        // AJAX para campos dinámicos de la ficha tipo Cliente
+        Route::get('/productos/atributos-by-empresa', [ProductoController::class, 'atributosByEmpresa'])
+            ->name('productos.atributosByEmpresa');
+
+        //PROVEEDORES
+        Route::resource('proveedores', ProveedorController::class)->parameters(['proveedores' => 'proveedor'])->only(['index','create','store','edit','update','destroy']);
+        // AJAX para campos dinámicos de la ficha tipo Cliente
+        Route::get('/proveedores/atributos-by-empresa', [ProveedorController::class, 'atributosByEmpresa'])
+            ->name('proveedores.atributosByEmpresa');
+
     
     // Gestión de Usuarios (SUPERADMIN y ADMINISTRADOR)
         Route::get('/usuarios', [SuperAdminController::class, 'usuarios'])->name('usuarios');

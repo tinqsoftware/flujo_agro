@@ -28,6 +28,14 @@
                     Empresas
                 </a>
             @endif
+
+            @if(Auth::user()->rol->nombre === 'SUPERADMIN' || Auth::user()->empresa->editable == '1')
+                <!-- Solo SuperAdmin ve gestión de empresas -->
+                <a href="{{ route('fichas.index') }}" class="nav-link {{ request()->routeIs('superadmin.fichas*') ? 'active' : '' }}">
+                    <i class="fas fa-building"></i>
+                    Fichas
+                </a>
+            @endif
             
             @if(in_array(Auth::user()->rol->nombre, ['SUPERADMIN', 'ADMINISTRADOR']))
                 <!-- Solo SuperAdmin ve gestión de roles -->
@@ -41,6 +49,21 @@
                     Usuarios
                 </a>
             @endif
+
+
+            <!-- (todos los usuarios) -->
+            <a href="{{ route('clientes.index') }}" class="nav-link {{ request()->routeIs('clientes*') ? 'active' : '' }}">
+                <i class="fas fa-user-friends"></i>
+                Clientes
+            </a>
+            <a href="{{ route('productos.index') }}" class="nav-link {{ request()->routeIs('productos*') ? 'active' : '' }}">
+                <i class="fas fa-box"></i>
+                Productos
+            </a>
+            <a href="{{ route('proveedores.index') }}" class="nav-link {{ request()->routeIs('proveedores*') ? 'active' : '' }}">
+                <i class="fas fa-truck"></i>
+                Proveedores
+            </a>
             
             <!-- Perfil para todos -->
             <a href="{{ route('perfil') }}" class="nav-link {{ request()->routeIs('superadmin.perfil*') ? 'active' : '' }}">

@@ -15,6 +15,7 @@ class Producto extends Model
         'nombre',
         'descripcion',
         'fecha_inicio',
+        'ruta_foto',
         'id_user_create',
         'id_ficha',
         'id_emp',
