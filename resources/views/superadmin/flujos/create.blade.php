@@ -59,7 +59,7 @@
   </div>
 
   <div class="col-lg-8">
-    @include('superadmin.flujos.partials.builder', ['treeJson' => $treeJson])
+    @include('superadmin.flujos.partials.builder', ['treeJson' => $treeJson, 'isEditMode' => $isEditMode])
   </div>
 </div>
 </form>

@@ -2,13 +2,98 @@
 (function() {
   const builderInput = document.getElementById('builderInput');
   const stagesList   = document.getElementById('stagesList');
+  const builderRoot  = document.getElementById('builderRoot');
   if (!builderInput || !stagesList) return;
 
+  const isEditMode = builderRoot?.getAttribute('data-edit-mode') === 'true';
   const uid = (p) => p + '_' + Math.random().toString(36).slice(2,8);
 
   function clearSiblingsSelected(el, selector){
     el.parentElement.querySelectorAll(selector + '.is-selected')
       .forEach(n => n.classList.remove('is-selected'));
+  }
+
+  // Función para toggle de estado via AJAX
+  function toggleEstado(url, elemento, switchEl) {
+    fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // Actualizar el estado visual
+        const badge = elemento.querySelector('.badge');
+        if (badge && badge.textContent.includes('Activo') || badge.textContent.includes('Inactivo')) {
+          badge.className = data.estado ? 'badge bg-success badge-sm' : 'badge bg-secondary badge-sm';
+          badge.textContent = data.estado ? 'Activo' : 'Inactivo';
+        }
+        
+        // Actualizar la clase del elemento
+        if (data.estado) {
+          elemento.classList.remove('disabled-item');
+        } else {
+          elemento.classList.add('disabled-item');
+        }
+        
+        // Actualizar campos ocultos si es etapa
+        const estadoInput = elemento.querySelector('.stage-estado-input');
+        if (estadoInput) {
+          estadoInput.value = data.estado ? 1 : 0;
+        }
+        
+        rebuildJSON();
+      } else {
+        // Revertir el switch si hay error
+        switchEl.checked = !switchEl.checked;
+        
+        // Mostrar mensaje de error más específico
+        if (data.error) {
+          // Crear un toast o alerta más elegante
+          showErrorMessage(data.error);
+        } else {
+          alert('Error al cambiar el estado');
+        }
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      switchEl.checked = !switchEl.checked;
+      showErrorMessage('Error de conexión');
+    });
+  }
+
+  // Función para mostrar mensajes de error
+  function showErrorMessage(message) {
+    // Verificar si ya existe un alert activo
+    const existingAlert = document.querySelector('.alert-warning.temporary-alert');
+    if (existingAlert) {
+      existingAlert.remove();
+    }
+
+    // Crear el alert
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-warning alert-dismissible temporary-alert';
+    alertDiv.innerHTML = `
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      ${message}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    // Insertar en la parte superior del builderRoot
+    const builderRoot = document.getElementById('builderRoot');
+    builderRoot.insertBefore(alertDiv, builderRoot.firstChild);
+
+    // Auto-remover después de 5 segundos
+    setTimeout(() => {
+      if (alertDiv.parentNode) {
+        alertDiv.remove();
+      }
+    }, 5000);
   }
 
   function rebuildJSON() {
@@ -18,29 +103,36 @@
       const name      = st.querySelector('.stage-name')?.value || 'Etapa';
       const desc      = st.querySelector('.stage-desc')?.value || '';
       const paralelo  = Number(st.querySelector('.stage-paralelo-input')?.value || 0);
+      const estado    = Number(st.querySelector('.stage-estado-input')?.value || 1);
       const nro       = idx + 1;
 
       const tasks = [];
       st.querySelectorAll('.tasks-list .task-item').forEach((ti) => {
+        const taskEstado = isEditMode && ti.getAttribute('data-task-db-id') ? 
+          (ti.querySelector('.task-estado-switch')?.checked ? 1 : 0) : 1;
         tasks.push({
           id: ti.getAttribute('data-task-id') || uid('tsk'),
           name: ti.querySelector('.task-title')?.textContent?.trim() || 'Tarea',
-          description: ti.querySelector('.task-desc')?.textContent?.trim() || ''
+          description: ti.querySelector('.task-desc')?.textContent?.trim() || '',
+          estado: taskEstado
         });
       });
 
       const documents = [];
       st.querySelectorAll('.docs-list .doc-item').forEach((di) => {
+        const docEstado = isEditMode && di.getAttribute('data-doc-db-id') ? 
+          (di.querySelector('.doc-estado-switch')?.checked ? 1 : 0) : 1;
         documents.push({
           id: di.getAttribute('data-doc-id') || uid('doc'),
           name: di.querySelector('.doc-title')?.textContent?.trim() || 'Documento',
-          description: di.querySelector('.doc-desc')?.textContent?.trim() || ''
+          description: di.querySelector('.doc-desc')?.textContent?.trim() || '',
+          estado: docEstado
         });
       });
 
       st.querySelector('.stage-nro').textContent = nro;
 
-      out.stages.push({ id: stageId, name, description: desc, nro, paralelo, tasks, documents });
+      out.stages.push({ id: stageId, name, description: desc, nro, paralelo, estado, tasks, documents });
     });
 
     builderInput.value = JSON.stringify(out);
@@ -112,6 +204,7 @@
         <input type="hidden" class="stage-name" value="Nueva etapa">
         <input type="hidden" class="stage-desc" value="">
         <input type="hidden" class="stage-paralelo-input" value="0">
+        <input type="hidden" class="stage-estado-input" value="1">
       </div>`;
     stagesList.insertAdjacentHTML('beforeend', html);
     initStageSortables();
@@ -158,7 +251,7 @@
               <div class="task-title fw-semibold">Nueva tarea</div>
               <div class="small text-muted task-desc"></div>
             </div>
-            <div class="ms-2">
+            <div class="ms-2 d-flex align-items-center gap-1">
               <button type="button" class="btn btn-sm btn-light btnEditTask">✎</button>
               <button type="button" class="btn btn-sm btn-light btnDelTask">🗑</button>
             </div>
@@ -178,7 +271,7 @@
               <div class="doc-title fw-semibold">Nuevo documento</div>
               <div class="small text-muted doc-desc"></div>
             </div>
-            <div class="ms-2">
+            <div class="ms-2 d-flex align-items-center gap-1">
               <button type="button" class="btn btn-sm btn-light btnEditDoc">✎</button>
               <button type="button" class="btn btn-sm btn-light btnDelDoc">🗑</button>
             </div>
@@ -221,6 +314,29 @@
     }
     if (btn?.classList.contains('btnDelDoc') && doc) { doc.remove(); rebuildJSON(); }
   });
+
+  // Event listeners para switches de estado (solo en modo edición)
+  if (isEditMode) {
+    stagesList.addEventListener('change', function(e) {
+      if (e.target.classList.contains('stage-estado-switch')) {
+        const stageId = e.target.getAttribute('data-stage-id');
+        const stage = e.target.closest('.stage-item');
+        toggleEstado(`/flujos/etapas/${stageId}/toggle-estado`, stage, e.target);
+      }
+      
+      if (e.target.classList.contains('task-estado-switch')) {
+        const taskId = e.target.getAttribute('data-task-id');
+        const task = e.target.closest('.task-item');
+        toggleEstado(`/flujos/tareas/${taskId}/toggle-estado`, task, e.target);
+      }
+      
+      if (e.target.classList.contains('doc-estado-switch')) {
+        const docId = e.target.getAttribute('data-doc-id');
+        const doc = e.target.closest('.doc-item');
+        toggleEstado(`/flujos/documentos/${docId}/toggle-estado`, doc, e.target);
+      }
+    });
+  }
 
   // selección por contenedor
   stagesList.addEventListener('click', function(e){
@@ -273,4 +389,38 @@
 <style>
   .is-selected{ outline: 2px solid #0d6efd; border-color:#0d6efd !important; background: rgba(13,110,253,.05); }
   .drag-ghost{ opacity:.4; }
+  .disabled-item { 
+    opacity: 0.6; 
+    background-color: #f8f9fa !important;
+    border-color: #dee2e6 !important;
+  }
+  .disabled-item .fw-semibold {
+    color: #6c757d !important;
+  }
+  .badge-sm {
+    font-size: 0.75em;
+  }
+  .form-check-input:focus {
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  }
+  .temporary-alert { 
+    margin-bottom: 1rem; 
+    animation: slideDown 0.3s ease-out;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  /* Estilos para elementos con detalles */
+  .task-item.has-details, 
+  .doc-item.has-details {
+    border-left: 4px solid #17a2b8;
+    background: linear-gradient(90deg, rgba(23,162,184,0.05) 0%, transparent 100%);
+  }
+  
+  /* Tooltip para elementos bloqueados */
+  .badge[title] {
+    cursor: help;
+  }
 </style>

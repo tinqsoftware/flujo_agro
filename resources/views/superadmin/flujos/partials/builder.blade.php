@@ -8,21 +8,36 @@
     </div>
   </div>
 
-  <div class="card-body" id="builderRoot">
+  <div class="card-body" id="builderRoot" data-edit-mode="{{ isset($isEditMode) && $isEditMode ? 'true' : 'false' }}">
     <div id="stagesList" class="d-grid gap-3">
       @php $tree = json_decode($treeJson ?? '{"stages": []}', true) ?: ['stages'=>[]]; @endphp
       @foreach(($tree['stages'] ?? []) as $stage)
-        <div class="stage-item border rounded p-3" data-stage-id="{{ $stage['id'] ?? uniqid('stg_') }}">
+        <div class="stage-item border rounded p-3 {{ isset($stage['estado']) && !$stage['estado'] ? 'disabled-item' : '' }}" 
+             data-stage-id="{{ $stage['id'] ?? uniqid('stg_') }}" 
+             data-stage-db-id="{{ isset($stage['id']) && is_numeric($stage['id']) ? $stage['id'] : '' }}">
           <div class="d-flex align-items-center justify-content-between mb-2">
             <div class="d-flex align-items-center gap-2">
               <span class="stage-drag text-muted" style="cursor:grab"><i class="fas fa-grip-vertical"></i></span>
               <strong class="stage-title">{{ $stage['nro'] ?? 1 }}. {{ $stage['name'] ?? 'Etapa' }}</strong>
               <span class="badge bg-light text-dark ms-2">Nro: <span class="stage-nro">{{ $stage['nro'] ?? 1 }}</span></span>
               <span class="badge bg-light text-dark ms-1">Paralelo: <span class="stage-paralelo">{{ !empty($stage['paralelo']) ? 1 : 0 }}</span></span>
+              @if(isset($stage['estado']))
+                <span class="badge {{ $stage['estado'] ? 'bg-success' : 'bg-secondary' }} ms-1">
+                  {{ $stage['estado'] ? 'Activo' : 'Inactivo' }}
+                </span>
+              @endif
             </div>
             <div class="btn-group">
               <button type="button" class="btn btn-sm btn-outline-secondary btnEditStage">Editar</button>
-              <button type="button" class="btn btn-sm btn-outline-danger btnDelStage"><i class="fas fa-trash"></i></button>
+              @if(isset($isEditMode) && $isEditMode && isset($stage['id']) && is_numeric($stage['id']))
+                <div class="form-check form-switch ms-2">
+                  <input class="form-check-input stage-estado-switch" type="checkbox" 
+                         data-stage-id="{{ $stage['id'] }}"
+                         {{ isset($stage['estado']) && $stage['estado'] ? 'checked' : '' }}>
+                </div>
+              @else
+                <button type="button" class="btn btn-sm btn-outline-danger btnDelStage"><i class="fas fa-trash"></i></button>
+              @endif
             </div>
           </div>
 
@@ -34,16 +49,46 @@
               </div>
               <div class="tasks-list d-grid gap-2" data-stage-id="{{ $stage['id'] ?? '' }}">
                 @foreach(($stage['tasks'] ?? []) as $t)
-                  <div class="task-item list-group-item border rounded p-2" data-task-id="{{ $t['id'] ?? uniqid('tsk_') }}" tabindex="0">
+                  <div class="task-item list-group-item border rounded p-2 {{ isset($t['estado']) && !$t['estado'] ? 'disabled-item' : '' }} {{ isset($t['has_details']) && $t['has_details'] ? 'has-details' : '' }}" 
+                       data-task-id="{{ $t['id'] ?? uniqid('tsk_') }}"
+                       data-task-db-id="{{ isset($t['id']) && is_numeric($t['id']) ? $t['id'] : '' }}" 
+                       data-has-details="{{ isset($t['has_details']) && $t['has_details'] ? 'true' : 'false' }}"
+                       tabindex="0">
                     <div class="d-flex justify-content-between align-items-center">
                       <div class="task-drag text-muted" style="cursor:grab"><i class="fas fa-grip-vertical me-2"></i></div>
                       <div class="flex-grow-1">
                         <div class="task-title fw-semibold">{{ $t['name'] ?? 'Tarea' }}</div>
                         <div class="small text-muted task-desc">{{ $t['description'] ?? '' }}</div>
+                        @if(isset($t['estado']))
+                          <span class="badge {{ $t['estado'] ? 'bg-success' : 'bg-secondary' }} badge-sm">
+                            {{ $t['estado'] ? 'Activo' : 'Inactivo' }}
+                          </span>
+                        @endif
+                        @if(isset($t['has_details']) && $t['has_details'])
+                          <span class="badge bg-info badge-sm" title="Tiene registros asociados">
+                            <i class="fas fa-link"></i> En uso
+                          </span>
+                        @endif
                       </div>
-                      <div class="ms-2">
+                      <div class="ms-2 d-flex align-items-center gap-1">
                         <button type="button" class="btn btn-sm btn-light btnEditTask">✎</button>
-                        <button type="button" class="btn btn-sm btn-light btnDelTask">🗑</button>
+                        @if(isset($isEditMode) && $isEditMode && isset($t['id']) && is_numeric($t['id']))
+                          @if(isset($t['has_details']) && $t['has_details'])
+                            {{-- Si tiene detalles, solo mostrar indicador de que no se puede modificar --}}
+                            <span class="badge bg-warning text-dark ms-1" title="No se puede desactivar - tiene registros asociados">
+                              <i class="fas fa-lock"></i>
+                            </span>
+                          @else
+                            {{-- Si no tiene detalles, mostrar switch --}}
+                            <div class="form-check form-switch">
+                              <input class="form-check-input task-estado-switch" type="checkbox" 
+                                     data-task-id="{{ $t['id'] }}"
+                                     {{ isset($t['estado']) && $t['estado'] ? 'checked' : '' }}>
+                            </div>
+                          @endif
+                        @else
+                          <button type="button" class="btn btn-sm btn-light btnDelTask">🗑</button>
+                        @endif
                       </div>
                     </div>
                   </div>
@@ -57,16 +102,46 @@
               </div>
               <div class="docs-list d-grid gap-2" data-stage-id="{{ $stage['id'] ?? '' }}">
                 @foreach(($stage['documents'] ?? []) as $d)
-                  <div class="doc-item list-group-item border rounded p-2" data-doc-id="{{ $d['id'] ?? uniqid('doc_') }}" tabindex="0">
+                  <div class="doc-item list-group-item border rounded p-2 {{ isset($d['estado']) && !$d['estado'] ? 'disabled-item' : '' }} {{ isset($d['has_details']) && $d['has_details'] ? 'has-details' : '' }}" 
+                       data-doc-id="{{ $d['id'] ?? uniqid('doc_') }}"
+                       data-doc-db-id="{{ isset($d['id']) && is_numeric($d['id']) ? $d['id'] : '' }}" 
+                       data-has-details="{{ isset($d['has_details']) && $d['has_details'] ? 'true' : 'false' }}"
+                       tabindex="0">
                     <div class="d-flex justify-content-between align-items-center">
                       <div class="doc-drag text-muted" style="cursor:grab"><i class="fas fa-grip-vertical me-2"></i></div>
                       <div class="flex-grow-1">
                         <div class="doc-title fw-semibold">{{ $d['name'] ?? 'Documento' }}</div>
                         <div class="small text-muted doc-desc">{{ $d['description'] ?? '' }}</div>
+                        @if(isset($d['estado']))
+                          <span class="badge {{ $d['estado'] ? 'bg-success' : 'bg-secondary' }} badge-sm">
+                            {{ $d['estado'] ? 'Activo' : 'Inactivo' }}
+                          </span>
+                        @endif
+                        @if(isset($d['has_details']) && $d['has_details'])
+                          <span class="badge bg-info badge-sm" title="Tiene registros asociados">
+                            <i class="fas fa-link"></i> En uso
+                          </span>
+                        @endif
                       </div>
-                      <div class="ms-2">
+                      <div class="ms-2 d-flex align-items-center gap-1">
                         <button type="button" class="btn btn-sm btn-light btnEditDoc">✎</button>
-                        <button type="button" class="btn btn-sm btn-light btnDelDoc">🗑</button>
+                        @if(isset($isEditMode) && $isEditMode && isset($d['id']) && is_numeric($d['id']))
+                          @if(isset($d['has_details']) && $d['has_details'])
+                            {{-- Si tiene detalles, solo mostrar indicador de que no se puede modificar --}}
+                            <span class="badge bg-warning text-dark ms-1" title="No se puede desactivar - tiene registros asociados">
+                              <i class="fas fa-lock"></i>
+                            </span>
+                          @else
+                            {{-- Si no tiene detalles, mostrar switch --}}
+                            <div class="form-check form-switch">
+                              <input class="form-check-input doc-estado-switch" type="checkbox" 
+                                     data-doc-id="{{ $d['id'] }}"
+                                     {{ isset($d['estado']) && $d['estado'] ? 'checked' : '' }}>
+                            </div>
+                          @endif
+                        @else
+                          <button type="button" class="btn btn-sm btn-light btnDelDoc">🗑</button>
+                        @endif
                       </div>
                     </div>
                   </div>
@@ -78,6 +153,7 @@
           <input type="hidden" class="stage-name" value="{{ $stage['name'] ?? 'Etapa' }}">
           <input type="hidden" class="stage-desc" value="{{ $stage['description'] ?? '' }}">
           <input type="hidden" class="stage-paralelo-input" value="{{ !empty($stage['paralelo']) ? 1 : 0 }}">
+          <input type="hidden" class="stage-estado-input" value="{{ isset($stage['estado']) ? $stage['estado'] : 1 }}">
         </div>
       @endforeach
     </div>

@@ -95,6 +95,14 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         // FLUJOS
         Route::resource('flujos', \App\Http\Controllers\FlujoController::class)
             ->only(['index','create','store','edit','update','destroy']);
+        
+        // AJAX para cambiar estado de elementos en flujos
+        Route::patch('/flujos/etapas/{etapa}/toggle-estado', [\App\Http\Controllers\FlujoController::class, 'toggleEtapaEstado'])
+            ->name('flujos.etapas.toggle-estado');
+        Route::patch('/flujos/tareas/{tarea}/toggle-estado', [\App\Http\Controllers\FlujoController::class, 'toggleTareaEstado'])
+            ->name('flujos.tareas.toggle-estado');
+        Route::patch('/flujos/documentos/{documento}/toggle-estado', [\App\Http\Controllers\FlujoController::class, 'toggleDocumentoEstado'])
+            ->name('flujos.documentos.toggle-estado');
 
     
     // Gestión de Usuarios (SUPERADMIN y ADMINISTRADOR)

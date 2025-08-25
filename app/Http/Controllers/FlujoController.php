@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
-use DB;
+use Illuminate\Support\Facades\DB;
 use App\Models\Empresa;
 use App\Models\Ficha;
 use App\Models\Flujo;
@@ -73,8 +73,9 @@ class FlujoController extends Controller
             : TipoFlujo::where('id_emp',$user->id_emp)->orderBy('nombre')->get(['id','nombre','id_emp']);
 
         $treeJson = json_encode(['stages'=>[]]); // builder vacío
+        $isEditMode = false;
 
-        return view('superadmin.flujos.create', compact('empresas','tipos','isSuper','treeJson'));
+        return view('superadmin.flujos.create', compact('empresas','tipos','isSuper','treeJson','isEditMode'));
     }
 
     /** STORE: crea flujo + (opcional) etapas/tareas/docs del builder */
@@ -156,26 +157,50 @@ class FlujoController extends Controller
             ? TipoFlujo::orderBy('nombre')->get(['id','nombre','id_emp'])
             : TipoFlujo::where('id_emp',$user->id_emp)->orderBy('nombre')->get(['id','nombre','id_emp']);
 
-        // Tree desde BD
+        // Tree desde BD - incluir elementos desactivados en edición
         $stages = Etapa::where('id_flujo',$flujo->id)->orderBy('nro')->get();
         $tree = ['stages'=>[]];
         foreach ($stages as $st) {
+            // Obtener tareas con información de detalles
+            $tareas = Tarea::where('id_etapa',$st->id)->get()->map(function($tarea) {
+                return [
+                    'id' => $tarea->id,
+                    'name' => $tarea->nombre,
+                    'description' => $tarea->descripcion,
+                    'estado' => (int)$tarea->estado,
+                    'has_details' => $tarea->detalles()->exists()
+                ];
+            })->toArray();
+
+            // Obtener documentos con información de detalles
+            $documentos = Documento::where('id_etapa',$st->id)->get()->map(function($doc) {
+                return [
+                    'id' => $doc->id,
+                    'name' => $doc->nombre,
+                    'description' => $doc->descripcion,
+                    'estado' => (int)$doc->estado,
+                    'has_details' => $doc->detalles()->exists()
+                ];
+            })->toArray();
+
             $tree['stages'][] = [
                 'id'         => $st->id,
                 'name'       => $st->nombre,
                 'description'=> $st->descripcion,
                 'nro'        => (int)$st->nro,
                 'paralelo'   => (int)$st->paralelo,
-                'tasks'      => Tarea::where('id_etapa',$st->id)->get(['id','nombre as name','descripcion as description'])->toArray(),
-                'documents'  => Documento::where('id_etapa',$st->id)->get(['id','nombre as name','descripcion as description'])->toArray(),
+                'estado'     => (int)$st->estado,
+                'tasks'      => $tareas,
+                'documents'  => $documentos,
             ];
         }
         $treeJson = json_encode($tree);
+        $isEditMode = true;
 
-        return view('superadmin.flujos.edit', compact('flujo','empresas','tipos','isSuper','treeJson'));
+        return view('superadmin.flujos.edit', compact('flujo','empresas','tipos','isSuper','treeJson','isEditMode'));
     }
 
-    /** UPDATE: idem store pero limpiando/recreando árbol (simple y seguro) */
+    /** UPDATE: actualiza flujo y gestiona árbol manteniendo estados */
     public function update(Request $request, Flujo $flujo)
     {
         $user = Auth::user();
@@ -200,51 +225,216 @@ class FlujoController extends Controller
             $flujo->estado        = $request->boolean('estado');
             $flujo->save();
 
-            // reconstruye árbol
+            // Gestionar árbol de manera inteligente
             $builder = json_decode($request->input('builder',''), true);
 
-            // Limpio actual
-            $etapas = Etapa::where('id_flujo',$flujo->id)->get();
-            foreach ($etapas as $e) {
-                Tarea::where('id_etapa',$e->id)->delete();
-                Documento::where('id_etapa',$e->id)->delete();
-            }
-            Etapa::where('id_flujo',$flujo->id)->delete();
-
             if (is_array($builder) && !empty($builder['stages'])) {
-                foreach ($builder['stages'] as $st) {
-                    $et = new Etapa();
-                    $et->id_flujo  = $flujo->id;
-                    $et->nombre    = $st['name'] ?? 'Etapa';
-                    $et->descripcion = $st['description'] ?? null;
-                    $et->nro       = (int)($st['nro'] ?? 1);
-                    $et->paralelo  = !empty($st['paralelo']) ? 1 : 0;
-                    $et->id_user_create = $flujo->id_user_create;
-                    $et->estado    = 1;
-                    $et->save();
+                $existingEtapas = Etapa::where('id_flujo',$flujo->id)->get()->keyBy('id');
+                $processedEtapas = [];
 
-                    foreach (($st['tasks'] ?? []) as $t) {
-                        $ta = new Tarea();
-                        $ta->id_etapa      = $et->id;
-                        $ta->nombre        = $t['name'] ?? 'Tarea';
-                        $ta->descripcion   = $t['description'] ?? null;
-                        $ta->id_user_create= $flujo->id_user_create;
-                        $ta->estado        = 1;
-                        $ta->save();
+                foreach ($builder['stages'] as $stData) {
+                    $etapaId = isset($stData['id']) && is_numeric($stData['id']) ? $stData['id'] : null;
+                    
+                    if ($etapaId && isset($existingEtapas[$etapaId])) {
+                        // Actualizar etapa existente
+                        $etapa = $existingEtapas[$etapaId];
+                        $etapa->nombre       = $stData['name'] ?? 'Etapa';
+                        $etapa->descripcion  = $stData['description'] ?? null;
+                        $etapa->nro          = (int)($stData['nro'] ?? 1);
+                        $etapa->paralelo     = !empty($stData['paralelo']) ? 1 : 0;
+                        $etapa->estado       = isset($stData['estado']) ? (int)$stData['estado'] : 1;
+                        $etapa->save();
+                        $processedEtapas[] = $etapa->id;
+                    } else {
+                        // Crear nueva etapa
+                        $etapa = new Etapa();
+                        $etapa->id_flujo      = $flujo->id;
+                        $etapa->nombre        = $stData['name'] ?? 'Etapa';
+                        $etapa->descripcion   = $stData['description'] ?? null;
+                        $etapa->nro           = (int)($stData['nro'] ?? 1);
+                        $etapa->paralelo      = !empty($stData['paralelo']) ? 1 : 0;
+                        $etapa->estado        = 1;
+                        $etapa->id_user_create = $flujo->id_user_create;
+                        $etapa->save();
+                        $processedEtapas[] = $etapa->id;
                     }
-                    foreach (($st['documents'] ?? []) as $d) {
-                        $doc = new Documento();
-                        $doc->id_etapa      = $et->id;
-                        $doc->nombre        = $d['name'] ?? 'Documento';
-                        $doc->descripcion   = $d['description'] ?? null;
-                        $doc->id_user_create= $flujo->id_user_create;
-                        $doc->estado        = 1;
-                        $doc->save();
+
+                    // Gestionar tareas
+                    if (!empty($stData['tasks'])) {
+                        $existingTareas = Tarea::where('id_etapa', $etapa->id)->get()->keyBy('id');
+                        $processedTareas = [];
+
+                        foreach ($stData['tasks'] as $tData) {
+                            $tareaId = isset($tData['id']) && is_numeric($tData['id']) ? $tData['id'] : null;
+                            
+                            if ($tareaId && isset($existingTareas[$tareaId])) {
+                                // Actualizar tarea existente
+                                $tarea = $existingTareas[$tareaId];
+                                $tarea->nombre      = $tData['name'] ?? 'Tarea';
+                                $tarea->descripcion = $tData['description'] ?? null;
+                                $tarea->estado      = isset($tData['estado']) ? (int)$tData['estado'] : 1;
+                                $tarea->save();
+                                $processedTareas[] = $tarea->id;
+                            } else {
+                                // Crear nueva tarea
+                                $tarea = new Tarea();
+                                $tarea->id_etapa       = $etapa->id;
+                                $tarea->nombre         = $tData['name'] ?? 'Tarea';
+                                $tarea->descripcion    = $tData['description'] ?? null;
+                                $tarea->estado         = 1;
+                                $tarea->id_user_create = $flujo->id_user_create;
+                                $tarea->save();
+                                $processedTareas[] = $tarea->id;
+                            }
+                        }
+
+                        // Eliminar tareas no incluidas en el builder
+                        Tarea::where('id_etapa', $etapa->id)
+                              ->whereNotIn('id', $processedTareas)
+                              ->delete();
+                    } else {
+                        // Si no hay tareas en el builder, eliminar todas las existentes
+                        Tarea::where('id_etapa', $etapa->id)->delete();
+                    }
+
+                    // Gestionar documentos
+                    if (!empty($stData['documents'])) {
+                        $existingDocs = Documento::where('id_etapa', $etapa->id)->get()->keyBy('id');
+                        $processedDocs = [];
+
+                        foreach ($stData['documents'] as $dData) {
+                            $docId = isset($dData['id']) && is_numeric($dData['id']) ? $dData['id'] : null;
+                            
+                            if ($docId && isset($existingDocs[$docId])) {
+                                // Actualizar documento existente
+                                $doc = $existingDocs[$docId];
+                                $doc->nombre      = $dData['name'] ?? 'Documento';
+                                $doc->descripcion = $dData['description'] ?? null;
+                                $doc->estado      = isset($dData['estado']) ? (int)$dData['estado'] : 1;
+                                $doc->save();
+                                $processedDocs[] = $doc->id;
+                            } else {
+                                // Crear nuevo documento
+                                $doc = new Documento();
+                                $doc->id_etapa       = $etapa->id;
+                                $doc->nombre         = $dData['name'] ?? 'Documento';
+                                $doc->descripcion    = $dData['description'] ?? null;
+                                $doc->estado         = 1;
+                                $doc->id_user_create = $flujo->id_user_create;
+                                $doc->save();
+                                $processedDocs[] = $doc->id;
+                            }
+                        }
+
+                        // Eliminar documentos no incluidos en el builder
+                        Documento::where('id_etapa', $etapa->id)
+                                 ->whereNotIn('id', $processedDocs)
+                                 ->delete();
+                    } else {
+                        // Si no hay documentos en el builder, eliminar todos los existentes
+                        Documento::where('id_etapa', $etapa->id)->delete();
                     }
                 }
+
+                // Eliminar etapas no incluidas en el builder
+                $etapasToDelete = Etapa::where('id_flujo', $flujo->id)
+                                       ->whereNotIn('id', $processedEtapas)
+                                       ->get();
+                
+                foreach ($etapasToDelete as $etapa) {
+                    // Eliminar tareas y documentos de la etapa
+                    Tarea::where('id_etapa', $etapa->id)->delete();
+                    Documento::where('id_etapa', $etapa->id)->delete();
+                    $etapa->delete();
+                }
+            } else {
+                // Si no hay stages en el builder, eliminar todo
+                $etapas = Etapa::where('id_flujo',$flujo->id)->get();
+                foreach ($etapas as $e) {
+                    Tarea::where('id_etapa',$e->id)->delete();
+                    Documento::where('id_etapa',$e->id)->delete();
+                }
+                Etapa::where('id_flujo',$flujo->id)->delete();
             }
         });
 
         return redirect()->route('flujos.index')->with('success','Flujo actualizado correctamente.');
+    }
+
+    /** Toggle estado de etapa */
+    public function toggleEtapaEstado(Etapa $etapa)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+        
+        // Verificar permisos
+        if (!$isSuper && $etapa->flujo->id_emp != $user->id_emp) {
+            return response()->json(['error' => 'No autorizado'], 403);
+        }
+
+        $etapa->estado = !$etapa->estado;
+        $etapa->save();
+
+        return response()->json([
+            'success' => true,
+            'estado' => $etapa->estado,
+            'message' => 'Estado de etapa actualizado'
+        ]);
+    }
+
+    /** Toggle estado de tarea */
+    public function toggleTareaEstado(Tarea $tarea)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+        
+        // Verificar permisos
+        if (!$isSuper && $tarea->etapa->flujo->id_emp != $user->id_emp) {
+            return response()->json(['error' => 'No autorizado'], 403);
+        }
+
+        // Verificar si tiene detalles - no permitir desactivar si los tiene
+        if ($tarea->estado && $tarea->detalles()->exists()) {
+            return response()->json([
+                'error' => 'No se puede desactivar la tarea porque ya tiene registros asociados'
+            ], 422);
+        }
+
+        $tarea->estado = !$tarea->estado;
+        $tarea->save();
+
+        return response()->json([
+            'success' => true,
+            'estado' => $tarea->estado,
+            'message' => 'Estado de tarea actualizado'
+        ]);
+    }
+
+    /** Toggle estado de documento */
+    public function toggleDocumentoEstado(Documento $documento)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+        
+        // Verificar permisos
+        if (!$isSuper && $documento->etapa->flujo->id_emp != $user->id_emp) {
+            return response()->json(['error' => 'No autorizado'], 403);
+        }
+
+        // Verificar si tiene detalles - no permitir desactivar si los tiene
+        if ($documento->estado && $documento->detalles()->exists()) {
+            return response()->json([
+                'error' => 'No se puede desactivar el documento porque ya tiene registros asociados'
+            ], 422);
+        }
+
+        $documento->estado = !$documento->estado;
+        $documento->save();
+
+        return response()->json([
+            'success' => true,
+            'estado' => $documento->estado,
+            'message' => 'Estado de documento actualizado'
+        ]);
     }
 }
