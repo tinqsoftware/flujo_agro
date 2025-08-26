@@ -57,6 +57,11 @@
                         <i class="fas fa-project-diagram me-1"></i> Flujos
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ request()->is('ejecucion*') ? 'active' : '' }}" href="{{ route('ejecucion.index') }}">
+                        <i class="fas fa-project-diagram me-1"></i> Ejecucion
+                    </a>
+                </li>
             @endif
 
 

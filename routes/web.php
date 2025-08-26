@@ -10,6 +10,7 @@ use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\TipoFlujoController;
+use App\Http\Controllers\Ejecucion;
 
 Route::get('/', function () {
     return view('welcome');
@@ -103,6 +104,16 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
             ->name('flujos.tareas.toggle-estado');
         Route::patch('/flujos/documentos/{documento}/toggle-estado', [\App\Http\Controllers\FlujoController::class, 'toggleDocumentoEstado'])
             ->name('flujos.documentos.toggle-estado');
+
+        // EJECUCIÓN DE FLUJOS
+        Route::resource('ejecucion', Ejecucion::class)->only(['index', 'show']);
+        Route::get('ejecucion/{flujo}/ejecutar', [Ejecucion::class, 'ejecutar'])->name('ejecucion.ejecutar');
+        
+        // AJAX para ejecución
+        Route::post('ejecucion/{flujo}/iniciar', [Ejecucion::class, 'iniciarProceso'])->name('ejecucion.iniciar');
+        Route::post('ejecucion/tarea/actualizar', [Ejecucion::class, 'actualizarTarea'])->name('ejecucion.tarea.actualizar');
+        Route::post('ejecucion/documento/subir', [Ejecucion::class, 'subirDocumento'])->name('ejecucion.documento.subir');
+        Route::get('ejecucion/{flujo}/progreso', [Ejecucion::class, 'obtenerProgreso'])->name('ejecucion.progreso');
 
     
     // Gestión de Usuarios (SUPERADMIN y ADMINISTRADOR)
