@@ -243,24 +243,42 @@ class Ejecucion extends Controller
 
             Log::info('Datos validados', ['tarea_id' => $tareaId, 'completada' => $completada, 'user_id' => $user->id]);
 
-            // Buscar o crear el detalle de la tarea
-            $detalle = DetalleTarea::updateOrCreate(
-                ['id_tarea' => $tareaId],
-                [
+            // Verificar si ya existe un detalle para esta tarea
+            $detalle = DetalleTarea::where('id_tarea', $tareaId)->first();
+            
+            if ($detalle) {
+                // Actualizar el existente
+                $detalle->update([
                     'estado' => $completada,
                     'id_user_create' => $user->id
-                ]
-            );
-
-            Log::info('Detalle guardado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado]);
+                ]);
+                Log::info('Detalle actualizado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado]);
+            } else {
+                // Crear nuevo detalle
+                $detalle = DetalleTarea::create([
+                    'id_tarea' => $tareaId,
+                    'estado' => $completada,
+                    'id_user_create' => $user->id
+                ]);
+                Log::info('Detalle creado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado]);
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => $completada ? 'Tarea marcada como completada' : 'Tarea marcada como pendiente',
-                'completada' => $detalle->estado,
+                'completada' => (bool)$detalle->estado,
                 'detalle_id' => $detalle->id
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Error de validación en actualizar tarea: ' . $e->getMessage(), [
+                'request' => $request->all(),
+                'errors' => $e->errors()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error de validación: ' . implode(', ', collect($e->errors())->flatten()->toArray())
+            ], 422);
         } catch (\Exception $e) {
             Log::error('Error actualizando tarea: ' . $e->getMessage(), [
                 'request' => $request->all(),
