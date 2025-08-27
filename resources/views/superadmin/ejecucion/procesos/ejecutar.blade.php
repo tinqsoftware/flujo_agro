@@ -9,6 +9,85 @@
     </a>
 @endsection
 
+@push('styles')
+<style>
+.etapa-card {
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.etapa-card.activa {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.etapa-card.completada {
+    border-color: #28a745;
+    background-color: #f8fff9;
+}
+
+.estado-etapa i.text-warning {
+    color: #ffc107 !important;
+}
+
+.estado-etapa i.text-success {
+    color: #28a745 !important;
+}
+
+.estado-etapa i.text-primary {
+    color: #007bff !important;
+}
+
+.tarea-item {
+    transition: all 0.2s ease;
+}
+
+.tarea-item:hover {
+    background-color: #f8f9fa;
+    border-radius: 0.25rem;
+    padding: 0.25rem;
+}
+
+.documento-item {
+    transition: all 0.2s ease;
+}
+
+.documento-item:hover {
+    background-color: #f8f9fa;
+}
+
+.btn-group-vertical > .btn {
+    margin-bottom: 2px;
+}
+
+.btn-group-vertical > .btn:last-child {
+    margin-bottom: 0;
+}
+
+#pdf-viewer {
+    height: calc(100vh - 200px);
+    min-height: 500px;
+}
+
+.progress-ring {
+    transform: rotate(-90deg);
+}
+
+.progress-ring__circle {
+    stroke: #e9ecef;
+    stroke-width: 4;
+    fill: transparent;
+    stroke-dasharray: 283;
+    stroke-dashoffset: 283;
+    transition: stroke-dashoffset 0.5s ease-in-out;
+}
+
+.progress-ring__circle.active {
+    stroke: #007bff;
+}
+</style>
+@endpush
+
 @section('content-area')
 <!-- Header del flujo con progreso -->
 <div class="row mb-4">
@@ -251,95 +330,32 @@
 
 @endsection
 
-@section('styles')
-<style>
-.etapa-card {
-    border: 1px solid #e9ecef;
-    transition: all 0.3s ease;
-}
-
-.etapa-card.activa {
-    border-color: #007bff;
-    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-}
-
-.etapa-card.completada {
-    border-color: #28a745;
-    background-color: #f8fff9;
-}
-
-.estado-etapa i.text-warning {
-    color: #ffc107 !important;
-}
-
-.estado-etapa i.text-success {
-    color: #28a745 !important;
-}
-
-.estado-etapa i.text-primary {
-    color: #007bff !important;
-}
-
-.tarea-item {
-    transition: all 0.2s ease;
-}
-
-.tarea-item:hover {
-    background-color: #f8f9fa;
-    border-radius: 0.25rem;
-    padding: 0.25rem;
-}
-
-.documento-item {
-    transition: all 0.2s ease;
-}
-
-.documento-item:hover {
-    background-color: #f8f9fa;
-}
-
-.btn-group-vertical > .btn {
-    margin-bottom: 2px;
-}
-
-.btn-group-vertical > .btn:last-child {
-    margin-bottom: 0;
-}
-
-#pdf-viewer {
-    height: calc(100vh - 200px);
-    min-height: 500px;
-}
-
-.progress-ring {
-    transform: rotate(-90deg);
-}
-
-.progress-ring__circle {
-    stroke: #e9ecef;
-    stroke-width: 4;
-    fill: transparent;
-    stroke-dasharray: 283;
-    stroke-dashoffset: 283;
-    transition: stroke-dashoffset 0.5s ease-in-out;
-}
-
-.progress-ring__circle.active {
-    stroke: #007bff;
-}
-</style>
-@endsection
-
-@section('scripts')
+@push('scripts')
 <script>
+// Variables globales desde PHP
+const flujoId = {{ $flujo->id }};
+let procesoIniciado = {{ $flujo->proceso_iniciado ? 'true' : 'false' }};
+
 document.addEventListener('DOMContentLoaded', function() {
-    let procesoIniciado = {!! $flujo->proceso_iniciado ? 'true' : 'false' !!};
-    const flujoId = {{ $flujo->id }};
+    console.log('Flujo ID:', flujoId);
+    console.log('Proceso iniciado:', procesoIniciado);
     
     // Inicializar estado del flujo
     if (procesoIniciado) {
         actualizarProgreso();
+        
+        // Activar primera etapa si el proceso ya está iniciado
+        const primeraEtapa = document.querySelector('.etapa-card');
+        if (primeraEtapa) {
+            primeraEtapa.classList.add('activa');
+            const estadoIcon = primeraEtapa.querySelector('.estado-etapa i');
+            estadoIcon.classList.remove('text-secondary');
+            estadoIcon.classList.add('text-primary');
+        }
     }
+
+    // Inicializar progreso de las etapas al cargar la página
+    actualizarProgreso();
 
     // Iniciar ejecución
     document.getElementById('iniciar-ejecucion')?.addEventListener('click', function() {
@@ -349,7 +365,7 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Iniciando...';
             
-            fetch(`{{ route('ejecucion.iniciar', ':flujo') }}`.replace(':flujo', flujoId), {
+            fetch(`{{ route('ejecucion.iniciar', $flujo->id) }}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -358,6 +374,7 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Respuesta de iniciar proceso:', data);
                 if (data.success) {
                     procesoIniciado = true;
                     btn.innerHTML = '<i class="fas fa-clock me-2"></i>En Progreso';
@@ -426,6 +443,7 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Respuesta actualizar tarea:', data);
                 if (data.success) {
                     // Actualizar UI
                     if (data.completada) {
@@ -654,4 +672,4 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
-@endsection
+@endpush
