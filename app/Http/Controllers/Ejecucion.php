@@ -224,6 +224,10 @@ class Ejecucion extends Controller
         }
     }
 
+
+
+    
+
     /**
      * Actualizar el estado de una tarea
      */
