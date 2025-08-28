@@ -27,22 +27,15 @@
                                     $etapasCount = $flujo->etapas->count();
                                     $totalEtapas = $flujo->total_etapas ?? $etapasCount;
                                 @endphp
-                                <!-- Debug Info: ID: {{ $flujo->id }}, Estado: {{ $flujo->estado }}, Etapas: {{ $etapasCount }}, Total: {{ $totalEtapas }} -->
                                 @if($etapasCount > 0)
                                     <option value="{{ $flujo->id }}" data-nombre="{{ $flujo->nombre }}" data-etapas="{{ $totalEtapas }}">
                                         {{ $flujo->nombre }} ({{ $totalEtapas }} etapas)
                                     </option>
-                                @else
-                                    <!-- Flujo {{ $flujo->nombre }} NO agregado - Sin etapas -->
                                 @endif
                             @endforeach
                         </select>
                         <div class="row g-2">
-                            <div class="col-6">
-                                <button id="ver-detalle-btn" class="btn btn-outline-info w-100" disabled>
-                                    <i class="fas fa-eye me-2"></i>Ver Estado
-                                </button>
-                            </div>
+                            
                             <div class="col-6">
                                 <button id="ejecutar-btn" class="btn btn-success w-100" disabled>
                                     <i class="fas fa-play me-2"></i>Ejecutar
@@ -449,133 +442,63 @@
 
 @push('scripts')
 <script>
-console.log('Script iniciado');
-
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM Cargado - Iniciando configuración');
-    
     // Obtener elementos
     const flujoSelector = document.getElementById('flujo-selector');
     const ejecutarBtn = document.getElementById('ejecutar-btn');
     const verDetalleBtn = document.getElementById('ver-detalle-btn');
     const flujoCards = document.querySelectorAll('.flujo-card');
 
-    console.log('=== VERIFICACIÓN DE ELEMENTOS ===');
-    console.log('Selector encontrado:', flujoSelector);
-    console.log('Botón ejecutar encontrado:', ejecutarBtn);
-    console.log('Botón ver detalle encontrado:', verDetalleBtn);
-    console.log('Tarjetas encontradas:', flujoCards.length);
-
-    if (!flujoSelector) {
-        console.error('ERROR: No se encontró el selector de flujos');
+    // Verificar que todos los elementos existan
+    if (!flujoSelector || !ejecutarBtn || !verDetalleBtn) {
         return;
     }
-    if (!ejecutarBtn) {
-        console.error('ERROR: No se encontró el botón ejecutar');
-        return;
-    }
-    if (!verDetalleBtn) {
-        console.error('ERROR: No se encontró el botón ver detalle');
-        return;
-    }
-
-    // Verificar opciones del selector
-    console.log('=== OPCIONES DEL SELECTOR ===');
-    const options = flujoSelector.querySelectorAll('option');
-    console.log('Total de opciones:', options.length);
-    options.forEach((option, index) => {
-        console.log(`Opción ${index}: value="${option.value}", text="${option.textContent.trim()}"`);
-    });
 
     // Función para actualizar estado de botones
     function updateButtons() {
         const selectedValue = flujoSelector.value;
-        console.log('=== ACTUALIZANDO BOTONES ===');
-        console.log('Valor seleccionado:', selectedValue);
-        console.log('Tipo del valor:', typeof selectedValue);
-        console.log('¿Está vacío?:', selectedValue === '');
-        
         const shouldEnable = selectedValue !== '' && selectedValue !== null && selectedValue !== undefined;
-        console.log('¿Habilitar botones?:', shouldEnable);
         
-        // Actualizar botones
         ejecutarBtn.disabled = !shouldEnable;
         verDetalleBtn.disabled = !shouldEnable;
-        
-        console.log('Estado después de actualizar:');
-        console.log('- Ejecutar disabled:', ejecutarBtn.disabled);
-        console.log('- Ver detalle disabled:', verDetalleBtn.disabled);
-        
-        // Verificar propiedades de los botones
-        console.log('Propiedades de botones:');
-        console.log('- Ejecutar hasAttribute disabled:', ejecutarBtn.hasAttribute('disabled'));
-        console.log('- Ver detalle hasAttribute disabled:', verDetalleBtn.hasAttribute('disabled'));
     }
 
-    // Agregar evento al selector con múltiples listeners para debug
-    console.log('=== AGREGANDO EVENTOS ===');
-    
+    // Manejar cambio en el selector
     flujoSelector.addEventListener('change', function(e) {
-        console.log('🔥 EVENTO CHANGE DISPARADO');
-        console.log('Event target:', e.target);
-        console.log('Nuevo valor:', e.target.value);
         updateButtons();
-    });
-
-    // También agregar evento input como backup
-    flujoSelector.addEventListener('input', function(e) {
-        console.log('🔥 EVENTO INPUT DISPARADO');
-        console.log('Nuevo valor:', e.target.value);
-        updateButtons();
-    });
-
-    // Test manual de los botones
-    console.log('=== TEST MANUAL ===');
-    console.log('Estado inicial de botones:');
-    console.log('- Ejecutar disabled inicial:', ejecutarBtn.disabled);
-    console.log('- Ver detalle disabled inicial:', verDetalleBtn.disabled);
-    
-    // Forzar primera actualización
-    updateButtons();
-    
-    // Test para verificar si podemos cambiar el estado manualmente
-    setTimeout(() => {
-        console.log('=== TEST DESPUÉS DE 2 SEGUNDOS ===');
-        console.log('Valor actual del selector:', flujoSelector.value);
         
-        // Intentar habilitar manualmente para test
-        console.log('Habilitando botones manualmente para test...');
-        ejecutarBtn.disabled = false;
-        verDetalleBtn.disabled = false;
-        console.log('Después del test manual:');
-        console.log('- Ejecutar disabled:', ejecutarBtn.disabled);
-        console.log('- Ver detalle disabled:', verDetalleBtn.disabled);
+        // Actualizar clases de las tarjetas
+        const selectedId = e.target.value;
+        flujoCards.forEach(card => {
+            if (card.dataset.flujoId === selectedId) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        });
         
-        // Volver al estado correcto
-        setTimeout(() => {
-            updateButtons();
-        }, 1000);
-    }, 2000);
+        // Scroll hasta la tarjeta seleccionada
+        if (selectedId) {
+            const selectedCard = document.querySelector(`[data-flujo-id="${selectedId}"]`);
+            if (selectedCard) {
+                selectedCard.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center' 
+                });
+            }
+        }
+    });
 
     // Eventos para las tarjetas
-    flujoCards.forEach((card, index) => {
+    flujoCards.forEach((card) => {
         card.addEventListener('click', function() {
             const flujoId = this.dataset.flujoId;
-            console.log(`🎯 TARJETA ${index} CLICKEADA - ID: ${flujoId}`);
-            
             const option = flujoSelector.querySelector(`option[value="${flujoId}"]`);
-            console.log('Opción encontrada:', !!option);
             
             if (option) {
-                console.log('Cambiando valor del selector a:', flujoId);
                 flujoSelector.value = flujoId;
-                
-                // Disparar evento change manualmente
                 const changeEvent = new Event('change', { bubbles: true });
                 flujoSelector.dispatchEvent(changeEvent);
-                
-                console.log('Evento change disparado manualmente');
-                console.log('Valor después del cambio:', flujoSelector.value);
             }
         });
     });
@@ -584,7 +507,6 @@ document.addEventListener('DOMContentLoaded', function() {
     verDetalleBtn.addEventListener('click', function(e) {
         e.preventDefault();
         const selectedId = flujoSelector.value;
-        console.log('🔵 BOTÓN VER ESTADO CLICKEADO - ID:', selectedId);
         
         if (!selectedId) {
             alert('Por favor selecciona un flujo primero');
@@ -592,14 +514,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         const url = `/ejecucion/${selectedId}`;
-        console.log('Redirigiendo a:', url);
         window.location.href = url;
     });
 
     ejecutarBtn.addEventListener('click', function(e) {
         e.preventDefault();
         const selectedId = flujoSelector.value;
-        console.log('🟢 BOTÓN EJECUTAR CLICKEADO - ID:', selectedId);
         
         if (!selectedId) {
             alert('Por favor selecciona un flujo primero');
@@ -611,11 +531,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         const url = `/ejecucion/${selectedId}/ejecutar`;
-        console.log('Redirigiendo a:', url);
         window.location.href = url;
     });
     
-    console.log('=== CONFIGURACIÓN COMPLETADA ===');
+    // Actualización inicial de botones
+    updateButtons();
 });
 </script>
 @endpush
