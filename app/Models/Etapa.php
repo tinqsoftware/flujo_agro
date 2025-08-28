@@ -52,4 +52,9 @@ class Etapa extends Model
     {
         return $this->hasMany(Tarea::class, 'id_etapa');
     }
+
+    public function detalleEtapas()
+    {
+        return $this->hasMany(DetalleEtapa::class, 'id_etapa');
+    }
 }

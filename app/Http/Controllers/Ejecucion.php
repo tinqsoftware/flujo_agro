@@ -10,6 +10,8 @@ use App\Models\Documento;
 use App\Models\Empresa;
 use App\Models\DetalleTarea;
 use App\Models\DetalleDocumento;
+use App\Models\DetalleFlujo;
+use App\Models\DetalleEtapa;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
@@ -29,11 +31,11 @@ class Ejecucion extends Controller
         $q = trim((string)$request->get('q', ''));
         $empresa_id = $request->get('empresa_id', '');
 
-        // Query base - solo flujos activos para ejecución (estado = 1)
+        // Query base - AHORA LISTAMOS TODOS LOS FLUJOS ACTIVOS (no filtramos por estado de ejecución)
         $query = Flujo::with(['empresa', 'tipo', 'etapas' => function($query) {
                 $query->where('estado', 1)->orderBy('nro');
             }])
-            ->where('estado', 1) // Solo flujos con estado 1 (activos/listos para ejecutar)
+            ->where('estado', 1) // Solo flujos configurados y activos
             ->when(!$isSuper, fn($x) => $x->where('id_emp', $user->id_emp))
             ->when($q !== '', fn($x) => $x->where('nombre', 'like', "%{$q}%"))
             ->when($empresa_id !== '' && $isSuper, fn($x) => $x->where('id_emp', $empresa_id));
@@ -41,28 +43,11 @@ class Ejecucion extends Controller
         // Aplicar filtros adicionales si es necesario
         $flujos = $query->orderBy('nombre')->paginate(12)->appends($request->query());
 
-        // Debug log para verificar qué flujos se están cargando
-        Log::info('Flujos cargados en ejecución:', [
-            'total' => $flujos->total(),
-            'query_params' => $request->query(),
-            'user_empresa' => $isSuper ? 'SUPERADMIN' : $user->id_emp,
-            'flujos_encontrados' => $flujos->map(function($flujo) {
-                return [
-                    'id' => $flujo->id,
-                    'nombre' => $flujo->nombre,
-                    'estado' => $flujo->estado,
-                    'etapas_count' => $flujo->etapas->count(),
-                    'total_etapas' => $flujo->total_etapas ?? 0,
-                    'tiene_etapas' => $flujo->etapas->count() > 0
-                ];
-            })->toArray()
-        ]);
-
         // Contar etapas y documentos por flujo
         $flujosConContadores = $flujos->getCollection()->map(function($flujo) {
             $totalEtapas = $flujo->etapas->count();
             $totalDocumentos = $flujo->etapas->sum(function($etapa) {
-                return $etapa->documentos()->whereIn('estado', [1, 2, 3])->count();
+                return $etapa->documentos()->where('estado', 1)->count();
             });
             
             $flujo->total_etapas = $totalEtapas;
@@ -73,27 +58,40 @@ class Ejecucion extends Controller
 
         $flujos->setCollection($flujosConContadores);
 
-        // Obtener flujos en ejecución y terminados para mostrar en sección separada
-        $flujosEnProceso = Flujo::with(['empresa', 'tipo', 'etapas' => function($query) {
-                $query->whereIn('estado', [1, 2, 3])->orderBy('nro');
-            }])
-            ->whereIn('estado', [2, 3]) // Estado 2 = En ejecución, Estado 3 = Terminado
-            ->when(!$isSuper, fn($x) => $x->where('id_emp', $user->id_emp))
-            ->orderBy('estado') // Primero los en ejecución (2), luego los terminados (3)
-            ->orderBy('updated_at', 'desc')
-            ->get();
+        // Obtener ejecuciones activas usando la tabla detalle_flujo
+        $ejecucionesActivas = collect();
+        if (!$isSuper) {
+            $ejecucionesActivas = DetalleFlujo::with(['flujo.empresa', 'flujo.tipo', 'flujo.etapas'])
+                ->where('id_emp', $user->id_emp)
+                ->whereIn('estado', [2, 3]) // 2 = En ejecución, 3 = Terminado
+                ->orderBy('estado') // Primero en ejecución, luego terminados
+                ->orderBy('updated_at', 'desc')
+                ->get();
+        } else {
+            // Para SUPERADMIN, mostrar todas las ejecuciones
+            $ejecucionesActivas = DetalleFlujo::with(['flujo.empresa', 'flujo.tipo', 'flujo.etapas'])
+                ->whereIn('estado', [2, 3])
+                ->orderBy('estado')
+                ->orderBy('updated_at', 'desc')
+                ->get();
+        }
 
-        // Contar etapas y documentos por flujo en proceso
-        $flujosEnProceso = $flujosEnProceso->map(function($flujo) {
-            $totalEtapas = $flujo->etapas->count();
-            $totalDocumentos = $flujo->etapas->sum(function($etapa) {
-                return $etapa->documentos()->whereIn('estado', [1, 2, 3])->count();
-            });
-            
-            $flujo->total_etapas = $totalEtapas;
-            $flujo->total_documentos = $totalDocumentos;
-            
-            return $flujo;
+        // Agregar información de progreso a las ejecuciones
+        $ejecucionesActivas = $ejecucionesActivas->map(function($detalleFlujo) {
+            if ($detalleFlujo->flujo) {
+                $flujo = $detalleFlujo->flujo;
+                $totalEtapas = $flujo->etapas->count();
+                $totalDocumentos = $flujo->etapas->sum(function($etapa) {
+                    return $etapa->documentos()->where('estado', 1)->count();
+                });
+                
+                $flujo->total_etapas = $totalEtapas;
+                $flujo->total_documentos = $totalDocumentos;
+                $flujo->estado_ejecucion = $detalleFlujo->estado;
+                $flujo->detalle_flujo_id = $detalleFlujo->id;
+                $flujo->fecha_ejecucion = $detalleFlujo->updated_at;
+            }
+            return $detalleFlujo;
         });
 
         // Empresas para filtro (solo para SUPERADMIN)
@@ -103,7 +101,7 @@ class Ejecucion extends Controller
         }
 
         return view('superadmin.ejecucion.index', compact(
-            'flujos', 'flujosEnProceso', 'isSuper', 'estado', 'q', 'empresas', 'empresa_id'
+            'flujos', 'ejecucionesActivas', 'isSuper', 'estado', 'q', 'empresas', 'empresa_id'
         ));
     }
 
@@ -222,140 +220,92 @@ class Ejecucion extends Controller
             abort(403, 'No tienes permisos para ejecutar este flujo.');
         }
 
-        // Verificar que el flujo esté activo (estado 1) o en ejecución (estado 2)
-        if ($flujo->estado != 1 && $flujo->estado != 2) {
+        // Verificar que el flujo esté configurado (estado 1)
+        if ($flujo->estado != 1) {
             abort(404, 'El flujo no está disponible para ejecución.');
         }
 
-        // Si el flujo está en estado 1 (listo), cambiarlo a estado 2 (en ejecución)
-        if ($flujo->estado == 1) {
-            Log::info('Iniciando proceso de ejecución automáticamente', [
-                'flujo_id' => $flujo->id,
-                'flujo_nombre' => $flujo->nombre,
-                'user_id' => $user->id
+        // SIEMPRE crear una nueva ejecución independiente
+        Log::info('Creando nueva ejecución de flujo', [
+            'flujo_id' => $flujo->id,
+            'flujo_nombre' => $flujo->nombre,
+            'user_id' => $user->id,
+            'empresa_id' => $user->id_emp,
+            'mensaje' => 'NUEVA INSTANCIA DE EJECUCIÓN CREADA - SIEMPRE SE CREA UNA NUEVA'
+        ]);
+
+        // Crear nuevo registro de ejecución (SIEMPRE)
+        $detalleFlujoActivo = DetalleFlujo::create([
+            'id_flujo' => $flujo->id,
+            'id_emp' => $user->id_emp,
+            'id_user_create' => $user->id,
+            'estado' => 2 // En ejecución
+        ]);
+
+        Log::info('Nueva ejecución creada exitosamente', [
+            'detalle_flujo_id' => $detalleFlujoActivo->id,
+            'flujo_original_id' => $flujo->id,
+            'estado_inicial' => $detalleFlujoActivo->estado
+        ]);
+
+        // Crear registros de detalle_etapa para cada etapa del flujo
+        foreach ($flujo->etapas()->where('estado', 1)->get() as $etapa) {
+            DetalleEtapa::create([
+                'id_etapa' => $etapa->id,
+                'id_detalle_flujo' => $detalleFlujoActivo->id,
+                'estado' => 2 // En ejecución
             ]);
-
-            // Cambiar estado del flujo a 2 (en ejecución)
-            $flujo->update(['estado' => 2]);
-
-            // Cambiar estado de todas las etapas activas a 2
-            $flujo->etapas()->where('estado', 1)->update(['estado' => 2]);
-
-            // Cambiar estado de todas las tareas y documentos activos a 2
-            foreach ($flujo->etapas as $etapa) {
-                $etapa->tareas()->where('estado', 1)->update(['estado' => 2]);
-                $etapa->documentos()->where('estado', 1)->update(['estado' => 2]);
-            }
-
-            // Recargar el flujo para obtener los datos actualizados
-            $flujo->refresh();
         }
 
-        // Cargar etapas con sus tareas y documentos activos, en ejecución o completados
-        $estadoACargar = [1, 2, 3]; // Cargar estados activos, en ejecución y completados
-        
+        Log::info('Registros de detalle_etapa creados para nueva ejecución', [
+            'detalle_flujo_id' => $detalleFlujoActivo->id,
+            'total_etapas_creadas' => $flujo->etapas()->where('estado', 1)->count()
+        ]);
+
+        // Cargar etapas con sus tareas y documentos
         $flujo->load([
-            'etapas' => function($query) use ($estadoACargar) {
-                $query->whereIn('estado', $estadoACargar)->orderBy('nro');
+            'etapas' => function($query) {
+                $query->where('estado', 1)->orderBy('nro');
             },
-            'etapas.tareas' => function($query) use ($estadoACargar) {
-                $query->whereIn('estado', $estadoACargar);
+            'etapas.tareas' => function($query) {
+                $query->where('estado', 1);
             },
-            'etapas.documentos' => function($query) use ($estadoACargar) {
-                $query->whereIn('estado', $estadoACargar);
+            'etapas.documentos' => function($query) {
+                $query->where('estado', 1);
             }
         ]);
 
-        // Cargar detalles de tareas y documentos existentes
-        foreach ($flujo->etapas as $etapa) {
-            foreach ($etapa->tareas as $tarea) {
-                $detalle = DetalleTarea::where('id_tarea', $tarea->id)->first();
-                // Una tarea está completada si tiene detalle con estado true O si la tarea principal está en estado 3
-                $tarea->completada = ($detalle && (bool)$detalle->estado) || ($tarea->estado == 3);
-                $tarea->detalle_id = $detalle ? $detalle->id : null;
-            }
-            foreach ($etapa->documentos as $documento) {
-                $detalle = DetalleDocumento::where('id_documento', $documento->id)->first();
-                // Un documento está subido si tiene detalle con estado true O si el documento principal está en estado 3
-                $documento->subido = ($detalle && (bool)$detalle->estado) || ($documento->estado == 3);
-                $documento->archivo_url = ($detalle && $detalle->ruta_doc) ? Storage::url($detalle->ruta_doc) : null;
-                $documento->detalle_id = $detalle ? $detalle->id : null;
-            }
-        }
-
-        // El proceso está iniciado porque acabamos de cambiarlo a estado 2 o ya estaba en estado 2
+            // Cargar estados de tareas y documentos para esta ejecución específica
+            foreach ($flujo->etapas as $etapa) {
+                foreach ($etapa->tareas as $tarea) {
+                    // Buscar detalle de tarea vinculado a esta ejecución específica
+                    $detalle = DetalleTarea::where('id_tarea', $tarea->id)
+                        ->whereHas('tarea.etapa.detalleEtapas', function($query) use ($detalleFlujoActivo) {
+                            $query->where('id_detalle_flujo', $detalleFlujoActivo->id);
+                        })
+                        ->first();
+                    $tarea->completada = $detalle ? (bool)$detalle->estado : false;
+                    $tarea->detalle_id = $detalle ? $detalle->id : null;
+                }
+                
+                foreach ($etapa->documentos as $documento) {
+                    // Buscar detalle de documento vinculado a esta ejecución específica
+                    $detalle = DetalleDocumento::where('id_documento', $documento->id)
+                        ->whereHas('documento.etapa.detalleEtapas', function($query) use ($detalleFlujoActivo) {
+                            $query->where('id_detalle_flujo', $detalleFlujoActivo->id);
+                        })
+                        ->first();
+                    $documento->subido = $detalle ? (bool)$detalle->estado : false;
+                    $documento->archivo_url = ($detalle && $detalle->ruta_doc) ? Storage::url($detalle->ruta_doc) : null;
+                    $documento->detalle_id = $detalle ? $detalle->id : null;
+                }
+            }        // Agregar información de la ejecución al flujo
         $flujo->proceso_iniciado = true;
+        $flujo->detalle_flujo_id = $detalleFlujoActivo->id;
+        $flujo->estado_ejecucion = $detalleFlujoActivo->estado;
 
         return view('superadmin.ejecucion.procesos.ejecutar', compact('flujo', 'isSuper'));
     }
-
-    /**
-     * Iniciar el proceso de ejecución de un flujo
-     */
-    public function iniciarProceso(Request $request, Flujo $flujo)
-    {
-        try {
-            $user = Auth::user();
-            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
-
-            // SUPERADMIN no puede ejecutar procesos
-            if ($isSuper) {
-                return response()->json(['error' => 'Los SUPERADMIN no pueden ejecutar flujos'], 403);
-            }
-
-            // Verificar permisos de empresa
-            if ($flujo->id_emp != $user->id_emp) {
-                return response()->json(['error' => 'No autorizado'], 403);
-            }
-
-            // Verificar que el flujo no esté ya en estado de ejecución
-            if ($flujo->estado == 2) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'El proceso ya está en ejecución'
-                ]);
-            }
-
-            // Cambiar estado del flujo a 2 (en ejecución)
-            $flujo->update(['estado' => 2]);
-
-            // Cambiar estado de todas las etapas activas a 2
-            $flujo->etapas()->where('estado', 1)->update(['estado' => 2]);
-
-            // Cambiar estado de todas las tareas activas a 2
-            foreach ($flujo->etapas as $etapa) {
-                $etapa->tareas()->where('estado', 1)->update(['estado' => 2]);
-                $etapa->documentos()->where('estado', 1)->update(['estado' => 2]);
-            }
-
-            Log::info('Proceso de flujo iniciado', [
-                'flujo_id' => $flujo->id,
-                'user_id' => $user->id,
-                'flujo_nombre' => $flujo->nombre
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Proceso de ejecución iniciado correctamente'
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Error al iniciar proceso de flujo: ' . $e->getMessage(), [
-                'flujo_id' => $flujo->id,
-                'user_id' => $user->id,
-                'trace' => $e->getTraceAsString()
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Error al iniciar el proceso: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-
-
-    
 
     /**
      * Actualizar el estado de una tarea
@@ -375,15 +325,32 @@ class Ejecucion extends Controller
             
             $request->validate([
                 'tarea_id' => 'required|exists:tareas,id',
-                'completada' => 'required|boolean'
+                'completada' => 'required|boolean',
+                'detalle_flujo_id' => 'required|exists:detalle_flujo,id'
             ]);
+            
             $tareaId = $request->tarea_id;
             $completada = $request->completada;
+            $detalleFlujoId = $request->detalle_flujo_id;
 
-            Log::info('Datos validados', ['tarea_id' => $tareaId, 'completada' => $completada, 'user_id' => $user->id]);
+            Log::info('Datos validados', [
+                'tarea_id' => $tareaId, 
+                'completada' => $completada, 
+                'detalle_flujo_id' => $detalleFlujoId,
+                'user_id' => $user->id
+            ]);
 
-            // Verificar si ya existe un detalle para esta tarea
-            $detalle = DetalleTarea::where('id_tarea', $tareaId)->first();
+            // Verificar que el detalle_flujo pertenece a la empresa del usuario
+            $detalleFlujo = DetalleFlujo::where('id', $detalleFlujoId)
+                ->where('id_emp', $user->id_emp)
+                ->firstOrFail();
+
+            // Buscar si ya existe un detalle para esta tarea en esta ejecución específica
+            $detalle = DetalleTarea::where('id_tarea', $tareaId)
+                ->whereHas('tarea.etapa.detalleEtapas', function($query) use ($detalleFlujoId) {
+                    $query->where('id_detalle_flujo', $detalleFlujoId);
+                })
+                ->first();
             
             if ($detalle) {
                 // Actualizar el existente
@@ -393,7 +360,7 @@ class Ejecucion extends Controller
                 ]);
                 Log::info('Detalle actualizado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado]);
             } else {
-                // Crear nuevo detalle
+                // Crear nuevo detalle para esta ejecución específica
                 $detalle = DetalleTarea::create([
                     'id_tarea' => $tareaId,
                     'estado' => $completada,
@@ -402,27 +369,12 @@ class Ejecucion extends Controller
                 Log::info('Detalle creado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado]);
             }
 
-            // ACTUALIZAR ESTADO EN LA TABLA PRINCIPAL TAREAS
-            $tarea = Tarea::find($tareaId);
-            if ($tarea) {
-                if ($completada) {
-                    // Si se completa la tarea, cambiar estado a 3 (completado)
-                    $tarea->update(['estado' => 3]);
-                    Log::info('Tarea marcada como completada en tabla principal', ['tarea_id' => $tareaId, 'nuevo_estado' => 3]);
-                } else {
-                    // Si se desmarca, volver a estado 2 (en ejecución)
-                    $tarea->update(['estado' => 2]);
-                    Log::info('Tarea regresada a estado en ejecución', ['tarea_id' => $tareaId, 'nuevo_estado' => 2]);
-                }
-            }
-
             return response()->json([
                 'success' => true,
                 'message' => $completada ? 'Tarea marcada como completada' : 'Tarea marcada como pendiente',
                 'completada' => (bool)$detalle->estado,
                 'detalle_id' => $detalle->id,
-                'tarea_estado_principal' => $tarea ? $tarea->estado : null,
-                'estados' => $this->verificarYActualizarEstados($tareaId)
+                'estados' => $this->verificarYActualizarEstados($tareaId, 'tarea', $detalleFlujoId)
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -463,13 +415,21 @@ class Ejecucion extends Controller
             $request->validate([
                 'documento_id' => 'required|exists:documentos,id',
                 'archivo' => 'required|file|mimes:pdf|max:10240', // 10MB máximo
-                'comentarios' => 'nullable|string|max:500'
+                'comentarios' => 'nullable|string|max:500',
+                'detalle_flujo_id' => 'required|exists:detalle_flujo,id'
             ]);
+            
             $documentoId = $request->documento_id;
             $archivo = $request->file('archivo');
+            $detalleFlujoId = $request->detalle_flujo_id;
+
+            // Verificar que el detalle_flujo pertenece a la empresa del usuario
+            $detalleFlujo = DetalleFlujo::where('id', $detalleFlujoId)
+                ->where('id_emp', $user->id_emp)
+                ->firstOrFail();
 
             // Crear directorio si no existe
-            $directorio = 'documentos/ejecucion/' . date('Y/m');
+            $directorio = 'documentos/ejecucion/' . $detalleFlujoId . '/' . date('Y/m');
             
             // Generar nombre único para el archivo
             $nombreArchivo = time() . '_' . $documentoId . '_' . $archivo->getClientOriginalName();
@@ -477,22 +437,28 @@ class Ejecucion extends Controller
             // Guardar archivo
             $rutaArchivo = $archivo->storeAs($directorio, $nombreArchivo, 'public');
 
-            // Buscar o crear el detalle del documento
-            $detalle = DetalleDocumento::updateOrCreate(
-                ['id_documento' => $documentoId],
-                [
+            // Buscar si ya existe un detalle para este documento en esta ejecución específica
+            $detalle = DetalleDocumento::where('id_documento', $documentoId)
+                ->whereHas('documento.etapa.detalleEtapas', function($query) use ($detalleFlujoId) {
+                    $query->where('id_detalle_flujo', $detalleFlujoId);
+                })
+                ->first();
+
+            if ($detalle) {
+                // Actualizar el existente
+                $detalle->update([
                     'estado' => true,
                     'ruta_doc' => $rutaArchivo,
                     'id_user_create' => $user->id
-                ]
-            );
-
-            // ACTUALIZAR ESTADO EN LA TABLA PRINCIPAL DOCUMENTOS
-            $documento = Documento::find($documentoId);
-            if ($documento) {
-                // Cuando se sube un documento, cambiar estado a 3 (completado)
-                $documento->update(['estado' => 3]);
-                Log::info('Documento marcado como completado en tabla principal', ['documento_id' => $documentoId, 'nuevo_estado' => 3]);
+                ]);
+            } else {
+                // Crear nuevo detalle para esta ejecución específica
+                $detalle = DetalleDocumento::create([
+                    'id_documento' => $documentoId,
+                    'estado' => true,
+                    'ruta_doc' => $rutaArchivo,
+                    'id_user_create' => $user->id
+                ]);
             }
 
             return response()->json([
@@ -501,8 +467,7 @@ class Ejecucion extends Controller
                 'archivo_url' => Storage::url($rutaArchivo),
                 'nombre_archivo' => $archivo->getClientOriginalName(),
                 'detalle_id' => $detalle->id,
-                'documento_estado_principal' => $documento ? $documento->estado : null,
-                'estados' => $this->verificarYActualizarEstados($documentoId, 'documento')
+                'estados' => $this->verificarYActualizarEstados($documentoId, 'documento', $detalleFlujoId)
             ]);
 
         } catch (\Exception $e) {
@@ -571,9 +536,9 @@ class Ejecucion extends Controller
     }
 
     /**
-     * Verificar y actualizar automáticamente los estados de etapas y flujos
+     * Verificar y actualizar automáticamente los estados de etapas y flujos para una ejecución específica
      */
-    private function verificarYActualizarEstados($itemId, $tipo = 'tarea')
+    private function verificarYActualizarEstados($itemId, $tipo = 'tarea', $detalleFlujoId = null)
     {
         try {
             // Obtener la etapa correspondiente según el tipo de ítem
@@ -587,21 +552,34 @@ class Ejecucion extends Controller
                 $etapa = $documento->etapa;
             }
 
-            if (!$etapa) return false;
+            if (!$etapa || !$detalleFlujoId) return false;
 
-            // Verificar si todas las tareas de la etapa están completadas
-            $totalTareas = $etapa->tareas()->where('estado', '!=', 0)->count();
+            // Buscar el detalle_etapa para esta ejecución específica
+            $detalleEtapa = DetalleEtapa::where('id_etapa', $etapa->id)
+                ->where('id_detalle_flujo', $detalleFlujoId)
+                ->first();
+
+            if (!$detalleEtapa) return false;
+
+            // Verificar si todas las tareas de la etapa están completadas para esta ejecución
+            $totalTareas = $etapa->tareas()->where('estado', 1)->count();
             $tareasCompletadas = DetalleTarea::where('estado', true)
-                ->whereIn('id_tarea', $etapa->tareas()->where('estado', '!=', 0)->pluck('id'))
+                ->whereIn('id_tarea', $etapa->tareas()->where('estado', 1)->pluck('id'))
+                ->whereHas('tarea.etapa.detalleEtapas', function($query) use ($detalleFlujoId) {
+                    $query->where('id_detalle_flujo', $detalleFlujoId);
+                })
                 ->count();
 
-            // Verificar si todos los documentos de la etapa están subidos
-            $totalDocumentos = $etapa->documentos()->where('estado', '!=', 0)->count();
+            // Verificar si todos los documentos de la etapa están subidos para esta ejecución
+            $totalDocumentos = $etapa->documentos()->where('estado', 1)->count();
             $documentosSubidos = DetalleDocumento::where('estado', true)
-                ->whereIn('id_documento', $etapa->documentos()->where('estado', '!=', 0)->pluck('id'))
+                ->whereIn('id_documento', $etapa->documentos()->where('estado', 1)->pluck('id'))
+                ->whereHas('documento.etapa.detalleEtapas', function($query) use ($detalleFlujoId) {
+                    $query->where('id_detalle_flujo', $detalleFlujoId);
+                })
                 ->count();
 
-            Log::info("Verificando etapa {$etapa->id}", [
+            Log::info("Verificando etapa {$etapa->id} para ejecución {$detalleFlujoId}", [
                 'total_tareas' => $totalTareas,
                 'tareas_completadas' => $tareasCompletadas,
                 'total_documentos' => $totalDocumentos,
@@ -611,33 +589,37 @@ class Ejecucion extends Controller
             // Si todas las tareas y documentos están completados, marcar etapa como completada
             $etapaCompletada = false;
             if ($totalTareas === $tareasCompletadas && $totalDocumentos === $documentosSubidos && ($totalTareas > 0 || $totalDocumentos > 0)) {
-                if ($etapa->estado != 3) {
-                    $etapa->update(['estado' => 3]);
+                if ($detalleEtapa->estado != 3) {
+                    $detalleEtapa->update(['estado' => 3]);
                     $etapaCompletada = true;
-                    Log::info("Etapa {$etapa->id} marcada como completada");
+                    Log::info("DetalleEtapa {$detalleEtapa->id} marcado como completado para ejecución {$detalleFlujoId}");
 
-                    // Verificar si todas las etapas del flujo están completadas
-                    $flujo = $etapa->flujo;
-                    $totalEtapas = $flujo->etapas()->where('estado', '!=', 0)->count();
-                    $etapasCompletadas = $flujo->etapas()->where('estado', 3)->count();
+                    // Verificar si todas las etapas de esta ejecución están completadas
+                    $detalleFlujo = DetalleFlujo::find($detalleFlujoId);
+                    if ($detalleFlujo) {
+                        $totalEtapasEjecucion = DetalleEtapa::where('id_detalle_flujo', $detalleFlujoId)->count();
+                        $etapasCompletadasEjecucion = DetalleEtapa::where('id_detalle_flujo', $detalleFlujoId)
+                            ->where('estado', 3)->count();
 
-                    Log::info("Verificando flujo {$flujo->id}", [
-                        'total_etapas' => $totalEtapas,
-                        'etapas_completadas' => $etapasCompletadas
-                    ]);
+                        Log::info("Verificando ejecución {$detalleFlujoId}", [
+                            'total_etapas' => $totalEtapasEjecucion,
+                            'etapas_completadas' => $etapasCompletadasEjecucion
+                        ]);
 
-                    // Si todas las etapas están completadas, marcar flujo como completado
-                    if ($totalEtapas === $etapasCompletadas && $totalEtapas > 0) {
-                        $flujo->update(['estado' => 3]);
-                        Log::info("Flujo {$flujo->id} marcado como completado");
-                        
-                        // Retornar información especial para flujo completado
-                        return [
-                            'etapa_completada' => true,
-                            'flujo_completado' => true,
-                            'flujo_id' => $flujo->id,
-                            'flujo_nombre' => $flujo->nombre
-                        ];
+                        // Si todas las etapas están completadas, marcar ejecución como completada
+                        if ($totalEtapasEjecucion === $etapasCompletadasEjecucion && $totalEtapasEjecucion > 0) {
+                            $detalleFlujo->update(['estado' => 3]);
+                            Log::info("Ejecución {$detalleFlujoId} marcada como completada");
+                            
+                            // Retornar información especial para ejecución completada
+                            return [
+                                'etapa_completada' => true,
+                                'ejecucion_completada' => true,
+                                'detalle_flujo_id' => $detalleFlujoId,
+                                'flujo_id' => $detalleFlujo->id_flujo,
+                                'flujo_nombre' => $detalleFlujo->flujo->nombre ?? 'Flujo desconocido'
+                            ];
+                        }
                     }
                 }
             }
@@ -648,6 +630,7 @@ class Ejecucion extends Controller
             Log::error('Error en verificarYActualizarEstados: ' . $e->getMessage(), [
                 'item_id' => $itemId,
                 'tipo' => $tipo,
+                'detalle_flujo_id' => $detalleFlujoId,
                 'trace' => $e->getTraceAsString()
             ]);
             return false;
