@@ -57,6 +57,16 @@
 </div>
 
 <!-- Lista de Flujos -->
+<div class="mb-4">
+    <div class="d-flex align-items-center mb-4">
+        <h4 class="mb-0">
+            <i class="fas fa-rocket text-primary me-2"></i>
+            Flujos Listos para Ejecutar
+        </h4>
+        <span class="badge bg-primary ms-2">{{ $flujos->total() }}</span>
+    </div>
+</div>
+
 <div class="row g-4">
     @forelse($flujos as $flujo)
         <div class="col-12 col-lg-6 col-xl-4">
@@ -189,6 +199,118 @@
     </div>
 @endif
 
+<!-- Sección de Flujos en Proceso y Terminados -->
+@if($flujosEnProceso->count() > 0)
+    <div class="mt-5">
+        <div class="d-flex align-items-center mb-4">
+            <h4 class="mb-0">
+                <i class="fas fa-history text-info me-2"></i>
+                Flujos en Proceso y Terminados
+            </h4>
+            <span class="badge bg-secondary ms-2">{{ $flujosEnProceso->count() }}</span>
+        </div>
+
+        <div class="row g-4">
+            @foreach($flujosEnProceso as $flujo)
+                <div class="col-12 col-lg-6 col-xl-4">
+                    <div class="card h-100 shadow-sm border-0 {{ $flujo->estado == 2 ? 'border-warning' : 'border-success' }}">
+                        <div class="card-body p-4">
+                            <!-- Header del flujo -->
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div class="flex-grow-1">
+                                    <h5 class="card-title mb-1 text-primary fw-bold">{{ $flujo->nombre }}</h5>
+                                    <div class="text-muted small">
+                                        <span class="badge bg-light text-dark">{{ $flujo->tipo->nombre ?? 'Sin tipo' }}</span>
+                                        @if($isSuper)
+                                            <span class="badge bg-secondary ms-1">{{ $flujo->empresa->nombre ?? 'Sin empresa' }}</span>
+                                        @endif
+                                    </div>
+                                </div>
+                                <div class="status-indicator">
+                                    @if($flujo->estado == 2)
+                                        <span class="badge bg-warning">
+                                            <i class="fas fa-play me-1"></i>En Ejecución
+                                        </span>
+                                    @elseif($flujo->estado == 3)
+                                        <span class="badge bg-success">
+                                            <i class="fas fa-check-circle me-1"></i>Terminado
+                                        </span>
+                                    @endif
+                                </div>
+                            </div>
+
+                            <!-- Descripción del flujo -->
+                            @if($flujo->descripcion)
+                                <p class="text-muted small mb-3">
+                                    {{ \Illuminate\Support\Str::limit($flujo->descripcion, 120) }}
+                                </p>
+                            @endif
+
+                            <!-- Contadores -->
+                            <div class="row text-center mb-3">
+                                <div class="col-6">
+                                    <div class="p-2 bg-light rounded">
+                                        <i class="fas fa-list-ol text-primary d-block mb-1"></i>
+                                        <div class="fw-bold">{{ $flujo->total_etapas }}</div>
+                                        <small class="text-muted">etapas</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="p-2 bg-light rounded">
+                                        <i class="fas fa-file-alt text-info d-block mb-1"></i>
+                                        <div class="fw-bold">{{ $flujo->total_documentos }}</div>
+                                        <small class="text-muted">documentos</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Progreso (solo para flujos en ejecución) -->
+                            @if($flujo->estado == 2)
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <small class="text-muted">Progreso</small>
+                                        <small class="text-muted">En desarrollo...</small>
+                                    </div>
+                                    <div class="progress" style="height: 6px;">
+                                        <div class="progress-bar bg-warning progress-bar-animated" role="progressbar" style="width: 45%"></div>
+                                    </div>
+                                </div>
+                            @endif
+
+                            <!-- Información de fecha -->
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    @if($flujo->estado == 2)
+                                        Iniciado: {{ $flujo->updated_at->diffForHumans() }}
+                                    @else
+                                        Terminado: {{ $flujo->updated_at->diffForHumans() }}
+                                    @endif
+                                </small>
+                            </div>
+
+                            <!-- Botones de acción -->
+                            <div class="text-center">
+                                @if($flujo->estado == 2)
+                                    <!-- Flujo en ejecución - botón para continuar -->
+                                    <a href="/ejecucion/{{ $flujo->id }}/ejecutar" class="btn btn-warning btn-sm w-100">
+                                        <i class="fas fa-play me-2"></i>Continuar Ejecución
+                                    </a>
+                                @else
+                                    <!-- Flujo terminado - botón para ver detalles -->
+                                    <a href="/ejecucion/{{ $flujo->id }}" class="btn btn-outline-success btn-sm w-100">
+                                        <i class="fas fa-eye me-2"></i>Ver Detalles
+                                    </a>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </div>
+@endif
+
 @endsection
 
 @push('styles')
@@ -291,6 +413,36 @@
 #ver-detalle-btn:not(:disabled):hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 15px rgba(23, 162, 184, 0.3);
+}
+
+/* Estilos para flujos en proceso y terminados */
+.border-warning {
+    border: 2px solid #ffc107 !important;
+}
+
+.border-success {
+    border: 2px solid #198754 !important;
+}
+
+.progress-bar-animated {
+    animation: progress-bar-stripes 1s linear infinite;
+}
+
+@keyframes progress-bar-stripes {
+    0% {
+        background-position: 1rem 0;
+    }
+    100% {
+        background-position: 0 0;
+    }
+}
+
+.card.border-warning:hover {
+    box-shadow: 0 8px 25px rgba(255, 193, 7, 0.2) !important;
+}
+
+.card.border-success:hover {
+    box-shadow: 0 8px 25px rgba(25, 135, 84, 0.2) !important;
 }
 </style>
 @endpush

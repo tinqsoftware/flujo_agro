@@ -71,6 +71,29 @@ class Ejecucion extends Controller
 
         $flujos->setCollection($flujosConContadores);
 
+        // Obtener flujos en ejecución y terminados para mostrar en sección separada
+        $flujosEnProceso = Flujo::with(['empresa', 'tipo', 'etapas' => function($query) {
+                $query->whereIn('estado', [1, 2])->orderBy('nro');
+            }])
+            ->whereIn('estado', [2, 3]) // Estado 2 = En ejecución, Estado 3 = Terminado
+            ->when(!$isSuper, fn($x) => $x->where('id_emp', $user->id_emp))
+            ->orderBy('estado') // Primero los en ejecución (2), luego los terminados (3)
+            ->orderBy('updated_at', 'desc')
+            ->get();
+
+        // Contar etapas y documentos por flujo en proceso
+        $flujosEnProceso = $flujosEnProceso->map(function($flujo) {
+            $totalEtapas = $flujo->etapas->count();
+            $totalDocumentos = $flujo->etapas->sum(function($etapa) {
+                return $etapa->documentos()->whereIn('estado', [1, 2])->count();
+            });
+            
+            $flujo->total_etapas = $totalEtapas;
+            $flujo->total_documentos = $totalDocumentos;
+            
+            return $flujo;
+        });
+
         // Empresas para filtro (solo para SUPERADMIN)
         $empresas = collect();
         if ($isSuper) {
@@ -78,7 +101,7 @@ class Ejecucion extends Controller
         }
 
         return view('superadmin.ejecucion.index', compact(
-            'flujos', 'isSuper', 'estado', 'q', 'empresas', 'empresa_id'
+            'flujos', 'flujosEnProceso', 'isSuper', 'estado', 'q', 'empresas', 'empresa_id'
         ));
     }
 
