@@ -42,8 +42,18 @@ class Ejecucion extends Controller
         // Debug log para verificar qué flujos se están cargando
         Log::info('Flujos cargados en ejecución:', [
             'total' => $flujos->total(),
-            'flujos' => $flujos->pluck('id', 'nombre')->toArray(),
-            'estados' => $flujos->pluck('estado', 'id')->toArray()
+            'query_params' => $request->query(),
+            'user_empresa' => $isSuper ? 'SUPERADMIN' : $user->id_emp,
+            'flujos_encontrados' => $flujos->map(function($flujo) {
+                return [
+                    'id' => $flujo->id,
+                    'nombre' => $flujo->nombre,
+                    'estado' => $flujo->estado,
+                    'etapas_count' => $flujo->etapas->count(),
+                    'total_etapas' => $flujo->total_etapas ?? 0,
+                    'tiene_etapas' => $flujo->etapas->count() > 0
+                ];
+            })->toArray()
         ]);
 
         // Contar etapas y documentos por flujo
@@ -124,8 +134,32 @@ class Ejecucion extends Controller
             abort(404, 'El flujo no está disponible para ejecución.');
         }
 
+        // Si el flujo está en estado 1 (listo), cambiarlo a estado 2 (en ejecución)
+        if ($flujo->estado == 1) {
+            Log::info('Iniciando proceso de ejecución automáticamente', [
+                'flujo_id' => $flujo->id,
+                'flujo_nombre' => $flujo->nombre,
+                'user_id' => $user->id
+            ]);
+
+            // Cambiar estado del flujo a 2 (en ejecución)
+            $flujo->update(['estado' => 2]);
+
+            // Cambiar estado de todas las etapas activas a 2
+            $flujo->etapas()->where('estado', 1)->update(['estado' => 2]);
+
+            // Cambiar estado de todas las tareas y documentos activos a 2
+            foreach ($flujo->etapas as $etapa) {
+                $etapa->tareas()->where('estado', 1)->update(['estado' => 2]);
+                $etapa->documentos()->where('estado', 1)->update(['estado' => 2]);
+            }
+
+            // Recargar el flujo para obtener los datos actualizados
+            $flujo->refresh();
+        }
+
         // Cargar etapas con sus tareas y documentos activos o en ejecución
-        $estadoACargar = ($flujo->estado == 2) ? [1, 2] : [1]; // Si está en ejecución, cargar estados 1 y 2
+        $estadoACargar = [1, 2]; // Cargar tanto estados activos como en ejecución
         
         $flujo->load([
             'etapas' => function($query) use ($estadoACargar) {
@@ -154,20 +188,8 @@ class Ejecucion extends Controller
             }
         }
 
-        // Verificar si el proceso ya está iniciado
-        $procesoIniciado = ($flujo->estado == 2);
-        
-        // Si no está iniciado, verificar si hay alguna tarea completada o documento subido como fallback
-        if (!$procesoIniciado) {
-            foreach ($flujo->etapas as $etapa) {
-                if ($etapa->tareas->contains('completada', true) || $etapa->documentos->contains('subido', true)) {
-                    $procesoIniciado = true;
-                    break;
-                }
-            }
-        }
-        
-        $flujo->proceso_iniciado = $procesoIniciado;
+        // El proceso está iniciado porque acabamos de cambiarlo a estado 2 o ya estaba en estado 2
+        $flujo->proceso_iniciado = true;
 
         return view('superadmin.ejecucion.procesos.ejecutar', compact('flujo', 'isSuper'));
     }
