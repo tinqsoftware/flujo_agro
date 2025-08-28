@@ -20,7 +20,7 @@ class Tarea extends Model
     ];
 
     protected $casts = [
-        'estado' => 'boolean'
+        'estado' => 'integer'
     ];
 
     // Relaciones

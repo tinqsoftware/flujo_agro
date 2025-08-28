@@ -27,17 +27,24 @@ class Ejecucion extends Controller
         $q = trim((string)$request->get('q', ''));
         $empresa_id = $request->get('empresa_id', '');
 
-        // Query base - solo flujos activos para ejecución
+        // Query base - solo flujos activos para ejecución (estado = 1)
         $query = Flujo::with(['empresa', 'tipo', 'etapas' => function($query) {
                 $query->where('estado', 1)->orderBy('nro');
             }])
-            ->where('estado', 1) // Solo flujos activos
+            ->where('estado', 1) // Solo flujos con estado 1 (activos/listos para ejecutar)
             ->when(!$isSuper, fn($x) => $x->where('id_emp', $user->id_emp))
             ->when($q !== '', fn($x) => $x->where('nombre', 'like', "%{$q}%"))
             ->when($empresa_id !== '' && $isSuper, fn($x) => $x->where('id_emp', $empresa_id));
 
         // Aplicar filtros adicionales si es necesario
         $flujos = $query->orderBy('nombre')->paginate(12)->appends($request->query());
+
+        // Debug log para verificar qué flujos se están cargando
+        Log::info('Flujos cargados en ejecución:', [
+            'total' => $flujos->total(),
+            'flujos' => $flujos->pluck('id', 'nombre')->toArray(),
+            'estados' => $flujos->pluck('estado', 'id')->toArray()
+        ]);
 
         // Contar etapas y documentos por flujo
         $flujosConContadores = $flujos->getCollection()->map(function($flujo) {
@@ -78,8 +85,8 @@ class Ejecucion extends Controller
             abort(403, 'No tienes permisos para ejecutar este flujo.');
         }
 
-        // Verificar que el flujo esté activo
-        if (!$flujo->estado) {
+        // Verificar que el flujo esté activo (estado = 1)
+        if ($flujo->estado != 1) {
             abort(404, 'El flujo no está disponible para ejecución.');
         }
 
@@ -112,8 +119,8 @@ class Ejecucion extends Controller
             abort(403, 'No tienes permisos para ejecutar este flujo.');
         }
 
-        // Verificar que el flujo esté activo o en ejecución
-        if (!$flujo->estado && $flujo->estado != 2) {
+        // Verificar que el flujo esté activo (estado 1) o en ejecución (estado 2)
+        if ($flujo->estado != 1 && $flujo->estado != 2) {
             abort(404, 'El flujo no está disponible para ejecución.');
         }
 

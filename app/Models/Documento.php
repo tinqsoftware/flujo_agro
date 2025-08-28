@@ -20,7 +20,7 @@ class Documento extends Model
     ];
 
     protected $casts = [
-        'estado' => 'boolean'
+        'estado' => 'integer'
     ];
 
     // Relaciones

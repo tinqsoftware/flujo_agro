@@ -23,7 +23,7 @@ class Etapa extends Model
     ];
 
     protected $casts = [
-        'estado' => 'boolean',
+        'estado' => 'integer',
         'paralelo' => 'boolean'
     ];
 

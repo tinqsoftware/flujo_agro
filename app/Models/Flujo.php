@@ -24,7 +24,7 @@ class Flujo extends Model
 
     protected $casts = [
         'fecha_inicio' => 'datetime',
-        'estado' => 'boolean'
+        'estado' => 'integer'
     ];
 
     // Relaciones
