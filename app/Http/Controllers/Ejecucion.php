@@ -147,8 +147,14 @@ class Ejecucion extends Controller
         $user = Auth::user();
         $isSuper = ($user->rol->nombre === 'SUPERADMIN');
 
-        // Verificar permisos
-        if (!$isSuper && $flujo->id_emp != $user->id_emp) {
+        // SUPERADMIN no puede ejecutar flujos, solo visualizarlos
+        if ($isSuper) {
+            return redirect()->route('ejecucion.show', $flujo)
+                ->with('warning', 'Como SUPERADMIN solo puedes visualizar los flujos. La ejecución debe ser realizada por usuarios de la empresa.');
+        }
+
+        // Verificar permisos de empresa
+        if ($flujo->id_emp != $user->id_emp) {
             abort(403, 'No tienes permisos para ejecutar este flujo.');
         }
 
@@ -226,8 +232,13 @@ class Ejecucion extends Controller
             $user = Auth::user();
             $isSuper = ($user->rol->nombre === 'SUPERADMIN');
 
-            // Verificar permisos
-            if (!$isSuper && $flujo->id_emp != $user->id_emp) {
+            // SUPERADMIN no puede ejecutar procesos
+            if ($isSuper) {
+                return response()->json(['error' => 'Los SUPERADMIN no pueden ejecutar flujos'], 403);
+            }
+
+            // Verificar permisos de empresa
+            if ($flujo->id_emp != $user->id_emp) {
                 return response()->json(['error' => 'No autorizado'], 403);
             }
 
@@ -286,14 +297,20 @@ class Ejecucion extends Controller
     public function actualizarTarea(Request $request)
     {
         try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+            // SUPERADMIN no puede actualizar tareas
+            if ($isSuper) {
+                return response()->json(['error' => 'Los SUPERADMIN no pueden modificar tareas'], 403);
+            }
+
             Log::info('Iniciando actualización de tarea', $request->all());
             
             $request->validate([
                 'tarea_id' => 'required|exists:tareas,id',
                 'completada' => 'required|boolean'
             ]);
-
-            $user = Auth::user();
             $tareaId = $request->tarea_id;
             $completada = $request->completada;
 
@@ -353,13 +370,19 @@ class Ejecucion extends Controller
     public function subirDocumento(Request $request)
     {
         try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+            // SUPERADMIN no puede subir documentos
+            if ($isSuper) {
+                return response()->json(['error' => 'Los SUPERADMIN no pueden subir documentos'], 403);
+            }
+
             $request->validate([
                 'documento_id' => 'required|exists:documentos,id',
                 'archivo' => 'required|file|mimes:pdf|max:10240', // 10MB máximo
                 'comentarios' => 'nullable|string|max:500'
             ]);
-
-            $user = Auth::user();
             $documentoId = $request->documento_id;
             $archivo = $request->file('archivo');
 
@@ -407,7 +430,7 @@ class Ejecucion extends Controller
         $user = Auth::user();
         $isSuper = ($user->rol->nombre === 'SUPERADMIN');
 
-        // Verificar permisos
+        // Verificar permisos - tanto SUPERADMIN como usuarios de empresa pueden ver progreso
         if (!$isSuper && $flujo->id_emp != $user->id_emp) {
             return response()->json(['error' => 'No autorizado'], 403);
         }

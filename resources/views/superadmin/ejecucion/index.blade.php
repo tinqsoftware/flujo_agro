@@ -5,6 +5,22 @@
 
 @section('content-area')
 
+@if($isSuper)
+    <!-- Aviso para SUPERADMIN -->
+    <div class="alert alert-info border-0 shadow-sm mb-4">
+        <div class="d-flex align-items-start">
+            <div class="flex-shrink-0">
+                <i class="fas fa-info-circle fa-lg mt-1"></i>
+            </div>
+            <div class="flex-grow-1 ms-3">
+                <h6 class="alert-heading mb-2">Modo Supervisión - SUPERADMIN</h6>
+                <p class="mb-1">Como SUPERADMIN, solo puedes <strong>visualizar</strong> los flujos de todas las empresas para supervisión.</p>
+                <p class="mb-0"><small class="text-muted">La ejecución de flujos debe ser realizada por usuarios de la empresa correspondiente</small></p>
+            </div>
+        </div>
+    </div>
+@endif
+
 
 <!-- Sección de Selección de Flujo -->
 <div class="selection-section mb-4">
@@ -13,10 +29,16 @@
             <div class="row align-items-center">
                 <div class="col-md-8">
                     <h5 class="mb-2">
-                        <i class="fas fa-play-circle text-success me-2"></i>
-                        Ejecutar Flujo
+                        <i class="fas fa-{{ $isSuper ? 'eye' : 'play-circle' }} text-{{ $isSuper ? 'info' : 'success' }} me-2"></i>
+                        {{ $isSuper ? 'Supervisar Flujos' : 'Ejecutar Flujo' }}
                     </h5>
-                    <p class="text-muted mb-0">Selecciona un flujo para ver su estado actual o ejecutarlo</p>
+                    <p class="text-muted mb-0">
+                        @if($isSuper)
+                            Supervisa los flujos de todas las empresas - Solo visualización
+                        @else
+                            Selecciona un flujo para ver su estado actual o ejecutarlo
+                        @endif
+                    </p>
                 </div>
                 <div class="col-md-4">
                     <div class="d-grid">
@@ -35,12 +57,18 @@
                             @endforeach
                         </select>
                         <div class="row g-2">
-                            
-                            <div class="col-6">
+                            <div class="col-12">
+                                <button id="ver-detalle-btn" class="btn btn-outline-info w-100" disabled>
+                                    <i class="fas fa-eye me-2"></i>Ver Estado
+                                </button>
+                            </div>
+                            @if(!$isSuper)
+                            <div class="col-12">
                                 <button id="ejecutar-btn" class="btn btn-success w-100" disabled>
                                     <i class="fas fa-play me-2"></i>Ejecutar
                                 </button>
                             </div>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -53,10 +81,10 @@
 <div class="mb-4">
     <div class="d-flex align-items-center mb-4">
         <h4 class="mb-0">
-            <i class="fas fa-rocket text-primary me-2"></i>
-            Flujos Listos para Ejecutar
+            <i class="fas fa-{{ $isSuper ? 'eye' : 'rocket' }} text-{{ $isSuper ? 'info' : 'primary' }} me-2"></i>
+            {{ $isSuper ? 'Flujos de Todas las Empresas' : 'Flujos Listos para Ejecutar' }}
         </h4>
-        <span class="badge bg-primary ms-2">{{ $flujos->total() }}</span>
+        <span class="badge bg-{{ $isSuper ? 'info' : 'primary' }} ms-2">{{ $flujos->total() }}</span>
     </div>
 </div>
 
@@ -147,7 +175,11 @@
                         <div class="text-center">
                             <small class="text-muted">
                                 <i class="fas fa-mouse-pointer me-1"></i>
-                                Selecciona este flujo arriba para ejecutar
+                                @if($isSuper)
+                                    Selecciona este flujo arriba para ver detalles
+                                @else
+                                    Selecciona este flujo arriba para ejecutar
+                                @endif
                             </small>
                         </div>
                     @else
@@ -285,12 +317,20 @@
                             <!-- Botones de acción -->
                             <div class="text-center">
                                 @if($flujo->estado == 2)
-                                    <!-- Flujo en ejecución - botón para continuar -->
-                                    <a href="/ejecucion/{{ $flujo->id }}/ejecutar" class="btn btn-warning btn-sm w-100">
-                                        <i class="fas fa-play me-2"></i>Continuar Ejecución
-                                    </a>
+                                    <!-- Flujo en ejecución -->
+                                    @if($isSuper)
+                                        <!-- SUPERADMIN solo puede ver -->
+                                        <a href="/ejecucion/{{ $flujo->id }}" class="btn btn-outline-info btn-sm w-100">
+                                            <i class="fas fa-eye me-2"></i>Ver Estado de Ejecución
+                                        </a>
+                                    @else
+                                        <!-- Usuarios de empresa pueden continuar -->
+                                        <a href="/ejecucion/{{ $flujo->id }}/ejecutar" class="btn btn-warning btn-sm w-100">
+                                            <i class="fas fa-play me-2"></i>Continuar Ejecución
+                                        </a>
+                                    @endif
                                 @else
-                                    <!-- Flujo terminado - botón para ver detalles -->
+                                    <!-- Flujo terminado - todos pueden ver detalles -->
                                     <a href="/ejecucion/{{ $flujo->id }}" class="btn btn-outline-success btn-sm w-100">
                                         <i class="fas fa-eye me-2"></i>Ver Detalles
                                     </a>
@@ -448,9 +488,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const ejecutarBtn = document.getElementById('ejecutar-btn');
     const verDetalleBtn = document.getElementById('ver-detalle-btn');
     const flujoCards = document.querySelectorAll('.flujo-card');
+    const isSuper = @json($isSuper);
 
-    // Verificar que todos los elementos existan
-    if (!flujoSelector || !ejecutarBtn || !verDetalleBtn) {
+    // Verificar que los elementos básicos existan
+    if (!flujoSelector || !verDetalleBtn) {
+        return;
+    }
+
+    // Para usuarios no-super, verificar que existe el botón ejecutar
+    if (!isSuper && !ejecutarBtn) {
         return;
     }
 
@@ -459,8 +505,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedValue = flujoSelector.value;
         const shouldEnable = selectedValue !== '' && selectedValue !== null && selectedValue !== undefined;
         
-        ejecutarBtn.disabled = !shouldEnable;
         verDetalleBtn.disabled = !shouldEnable;
+        
+        // Solo actualizar botón ejecutar si no es SUPERADMIN
+        if (!isSuper && ejecutarBtn) {
+            ejecutarBtn.disabled = !shouldEnable;
+        }
     }
 
     // Manejar cambio en el selector
@@ -503,7 +553,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Eventos para los botones
+    // Evento para el botón ver detalles
     verDetalleBtn.addEventListener('click', function(e) {
         e.preventDefault();
         const selectedId = flujoSelector.value;
@@ -517,22 +567,25 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = url;
     });
 
-    ejecutarBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        const selectedId = flujoSelector.value;
-        
-        if (!selectedId) {
-            alert('Por favor selecciona un flujo primero');
-            return;
-        }
-        
-        if (!confirm('¿Estás seguro de que quieres ejecutar este flujo?')) {
-            return;
-        }
-        
-        const url = `/ejecucion/${selectedId}/ejecutar`;
-        window.location.href = url;
-    });
+    // Evento para el botón ejecutar (solo si no es SUPERADMIN)
+    if (!isSuper && ejecutarBtn) {
+        ejecutarBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const selectedId = flujoSelector.value;
+            
+            if (!selectedId) {
+                alert('Por favor selecciona un flujo primero');
+                return;
+            }
+            
+            if (!confirm('¿Estás seguro de que quieres ejecutar este flujo?')) {
+                return;
+            }
+            
+            const url = `/ejecucion/${selectedId}/ejecutar`;
+            window.location.href = url;
+        });
+    }
     
     // Actualización inicial de botones
     updateButtons();
