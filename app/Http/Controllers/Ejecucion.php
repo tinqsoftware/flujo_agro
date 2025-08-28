@@ -115,11 +115,16 @@ class Ejecucion extends Controller
         try {
             $user = Auth::user();
             $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+            $isAdmin = ($user->rol->nombre === 'ADMINISTRADOR');
+            $isAdministrativo = ($user->rol->nombre === 'ADMINISTRATIVO');
 
             Log::info('Show method called', [
                 'id_parameter' => $id,
                 'user_id' => $user->id,
-                'is_super' => $isSuper
+                'user_rol' => $user->rol->nombre,
+                'is_super' => $isSuper,
+                'is_admin' => $isAdmin,
+                'is_administrativo' => $isAdministrativo
             ]);
 
             // Cargar el flujo manualmente con todas sus relaciones
@@ -137,22 +142,36 @@ class Ejecucion extends Controller
                 'flujo_id' => $flujo->id,
                 'flujo_nombre' => $flujo->nombre,
                 'flujo_estado' => $flujo->estado,
+                'flujo_empresa_id' => $flujo->id_emp,
+                'user_empresa_id' => $user->id_emp,
                 'etapas_count' => $flujo->etapas->count(),
                 'relations_loaded' => $flujo->relationLoaded('etapas')
             ]);
 
-            // Verificar permisos - SUPERADMIN puede ver todo, otros solo de su empresa
+            // Verificar permisos:
+            // - SUPERADMIN puede ver todo
+            // - ADMINISTRADOR y ADMINISTRATIVO solo de su empresa
             if (!$isSuper && $flujo->id_emp != $user->id_emp) {
+                Log::warning('Access denied - different empresa', [
+                    'user_id' => $user->id,
+                    'user_role' => $user->rol->nombre,
+                    'user_empresa' => $user->id_emp,
+                    'flujo_empresa' => $flujo->id_emp
+                ]);
                 abort(403, 'No tienes permisos para ver este flujo.');
             }
 
-            Log::info('Sending to view', [
+            Log::info('Access granted - sending to view', [
                 'flujo_id' => $flujo->id,
                 'isSuper' => $isSuper,
+                'user_role' => $user->rol->nombre,
                 'view_data_flujo_id' => $flujo->id
             ]);
 
-            return view('superadmin.ejecucion.show', compact('flujo', 'isSuper'));
+            // Pasar información del rol para la vista
+            $userRole = $user->rol->nombre;
+
+            return view('superadmin.ejecucion.show', compact('flujo', 'isSuper', 'userRole'));
 
         } catch (\Exception $e) {
             Log::error('Error in show method', [

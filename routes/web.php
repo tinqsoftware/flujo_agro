@@ -38,7 +38,7 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
     });
     
     // Gestión de Roles (solo SUPERADMIN)
-    Route::middleware('role:SUPERADMIN,ADMINISTRADOR')->group(function () {
+    Route::middleware('role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO')->group(function () {
         Route::get('/roles', [SuperAdminController::class, 'roles'])->name('roles');
         Route::get('/roles/create', [SuperAdminController::class, 'createRol'])->name('roles.create');
         Route::post('/roles', [SuperAdminController::class, 'storeRol'])->name('roles.store');

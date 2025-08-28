@@ -122,6 +122,32 @@
             </div>
         </div>
     </div>
+@elseif(isset($userRole) && $userRole == 'ADMINISTRADOR')
+    <!-- Aviso para ADMINISTRADOR -->
+    <div class="alert alert-primary border-0 shadow-sm mb-4">
+        <div class="d-flex align-items-start">
+            <div class="flex-shrink-0">
+                <i class="fas fa-user-shield fa-lg mt-1"></i>
+            </div>
+            <div class="flex-grow-1 ms-3">
+                <h6 class="alert-heading mb-2">Vista de Administrador</h6>
+                <p class="mb-0">Puedes visualizar y gestionar los flujos de tu empresa.</p>
+            </div>
+        </div>
+    </div>
+@elseif(isset($userRole) && $userRole == 'ADMINISTRATIVO')
+    <!-- Aviso para ADMINISTRATIVO -->
+    <div class="alert alert-success border-0 shadow-sm mb-4">
+        <div class="d-flex align-items-start">
+            <div class="flex-shrink-0">
+                <i class="fas fa-user-check fa-lg mt-1"></i>
+            </div>
+            <div class="flex-grow-1 ms-3">
+                <h6 class="alert-heading mb-2">Vista Administrativa</h6>
+                <p class="mb-0">Puedes visualizar y ejecutar los flujos asignados a tu empresa.</p>
+            </div>
+        </div>
+    </div>
 @endif
 
 <!-- Header del flujo con información -->
@@ -445,6 +471,14 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     console.log('JavaScript cargado correctamente');
+    
+    // Debug inicial
+    console.log('Variables PHP disponibles:', {
+        flujo: @json($flujo ? ['id' => $flujo->id, 'nombre' => $flujo->nombre, 'estado' => $flujo->estado] : null),
+        isSuper: @json($isSuper ?? false),
+        userRole: @json($userRole ?? 'UNKNOWN'),
+        etapasCount: @json($flujo ? $flujo->etapas->count() : 0)
+    });
     
     // Variables desde PHP
     const flujoId = @json($flujo->id);
