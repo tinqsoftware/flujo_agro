@@ -379,11 +379,26 @@ class Ejecucion extends Controller
                 Log::info('Detalle creado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado]);
             }
 
+            // ACTUALIZAR ESTADO EN LA TABLA PRINCIPAL TAREAS
+            $tarea = Tarea::find($tareaId);
+            if ($tarea) {
+                if ($completada) {
+                    // Si se completa la tarea, cambiar estado a 3 (completado)
+                    $tarea->update(['estado' => 3]);
+                    Log::info('Tarea marcada como completada en tabla principal', ['tarea_id' => $tareaId, 'nuevo_estado' => 3]);
+                } else {
+                    // Si se desmarca, volver a estado 2 (en ejecución)
+                    $tarea->update(['estado' => 2]);
+                    Log::info('Tarea regresada a estado en ejecución', ['tarea_id' => $tareaId, 'nuevo_estado' => 2]);
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => $completada ? 'Tarea marcada como completada' : 'Tarea marcada como pendiente',
                 'completada' => (bool)$detalle->estado,
                 'detalle_id' => $detalle->id,
+                'tarea_estado_principal' => $tarea ? $tarea->estado : null,
                 'estados' => $this->verificarYActualizarEstados($tareaId)
             ]);
 
@@ -449,12 +464,21 @@ class Ejecucion extends Controller
                 ]
             );
 
+            // ACTUALIZAR ESTADO EN LA TABLA PRINCIPAL DOCUMENTOS
+            $documento = Documento::find($documentoId);
+            if ($documento) {
+                // Cuando se sube un documento, cambiar estado a 3 (completado)
+                $documento->update(['estado' => 3]);
+                Log::info('Documento marcado como completado en tabla principal', ['documento_id' => $documentoId, 'nuevo_estado' => 3]);
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Documento subido correctamente',
                 'archivo_url' => Storage::url($rutaArchivo),
                 'nombre_archivo' => $archivo->getClientOriginalName(),
                 'detalle_id' => $detalle->id,
+                'documento_estado_principal' => $documento ? $documento->estado : null,
                 'estados' => $this->verificarYActualizarEstados($documentoId, 'documento')
             ]);
 

@@ -58,7 +58,7 @@
                         </select>
                         <div class="row g-2">
                             <!-- Botón oculto pero funcional para el JavaScript -->
-                            <button id="ver-detalle-btn" class="btn btn-outline-info w-100 d-none" disabled>
+                            <button id="ver-detalle-btn" class="btn btn-outline-info w-100" disabled>
                                 <i class="fas fa-eye me-2"></i>Ver Estado
                             </button>
                             
