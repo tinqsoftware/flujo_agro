@@ -57,7 +57,11 @@
                             @endforeach
                         </select>
                         <div class="row g-2">
-                            
+                            <div class="col-12">
+                                <button id="ver-detalle-btn" class="btn btn-outline-info w-100" disabled>
+                                    <i class="fas fa-eye me-2"></i>Ver Estado
+                                </button>
+                            </div>
                             @if(!$isSuper)
                             <div class="col-12">
                                 <button id="ejecutar-btn" class="btn btn-success w-100" disabled>
