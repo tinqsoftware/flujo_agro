@@ -230,8 +230,8 @@ class Ejecucion extends Controller
             $flujo->refresh();
         }
 
-        // Cargar etapas con sus tareas y documentos activos o en ejecución
-        $estadoACargar = [1, 2]; // Cargar tanto estados activos como en ejecución
+        // Cargar etapas con sus tareas y documentos activos, en ejecución o completados
+        $estadoACargar = [1, 2, 3]; // Cargar estados activos, en ejecución y completados
         
         $flujo->load([
             'etapas' => function($query) use ($estadoACargar) {
@@ -249,12 +249,14 @@ class Ejecucion extends Controller
         foreach ($flujo->etapas as $etapa) {
             foreach ($etapa->tareas as $tarea) {
                 $detalle = DetalleTarea::where('id_tarea', $tarea->id)->first();
-                $tarea->completada = $detalle ? (bool)$detalle->estado : false;
+                // Una tarea está completada si tiene detalle con estado true O si la tarea principal está en estado 3
+                $tarea->completada = ($detalle && (bool)$detalle->estado) || ($tarea->estado == 3);
                 $tarea->detalle_id = $detalle ? $detalle->id : null;
             }
             foreach ($etapa->documentos as $documento) {
                 $detalle = DetalleDocumento::where('id_documento', $documento->id)->first();
-                $documento->subido = $detalle ? (bool)$detalle->estado : false;
+                // Un documento está subido si tiene detalle con estado true O si el documento principal está en estado 3
+                $documento->subido = ($detalle && (bool)$detalle->estado) || ($documento->estado == 3);
                 $documento->archivo_url = ($detalle && $detalle->ruta_doc) ? Storage::url($detalle->ruta_doc) : null;
                 $documento->detalle_id = $detalle ? $detalle->id : null;
             }
