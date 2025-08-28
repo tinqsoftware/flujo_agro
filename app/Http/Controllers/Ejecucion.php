@@ -110,68 +110,57 @@ class Ejecucion extends Controller
     /**
      * Show the execution interface for a specific flow.
      */
-    public function show(Flujo $flujo)
+    public function show($id)
     {
-        $user = Auth::user();
-        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+        try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
 
-        // Debug: Verificar que el flujo llegue correctamente
-        Log::info('Show Flujo Debug', [
-            'flujo_id' => $flujo->id,
-            'flujo_nombre' => $flujo->nombre,
-            'flujo_estado' => $flujo->estado,
-            'user_id' => $user->id,
-            'is_super' => $isSuper
-        ]);
+            Log::info('Show method called', [
+                'id_parameter' => $id,
+                'user_id' => $user->id,
+                'is_super' => $isSuper
+            ]);
 
-        // Verificar permisos
-        if (!$isSuper && $flujo->id_emp != $user->id_emp) {
-            abort(403, 'No tienes permisos para ver este flujo.');
-        }
+            // Cargar el flujo manualmente con todas sus relaciones
+            $flujo = Flujo::with([
+                'tipo',
+                'empresa', 
+                'etapas' => function($query) {
+                    $query->orderBy('nro');
+                },
+                'etapas.tareas',
+                'etapas.documentos'
+            ])->findOrFail($id);
 
-        // Cargar relaciones siempre, sin filtros de estado para debug
-        $flujo->load([
-            'tipo',
-            'empresa', 
-            'etapas' => function($query) {
-                $query->orderBy('nro');
-            },
-            'etapas.tareas',
-            'etapas.documentos'
-        ]);
+            Log::info('Flujo loaded successfully', [
+                'flujo_id' => $flujo->id,
+                'flujo_nombre' => $flujo->nombre,
+                'flujo_estado' => $flujo->estado,
+                'etapas_count' => $flujo->etapas->count(),
+                'relations_loaded' => $flujo->relationLoaded('etapas')
+            ]);
 
-        Log::info('Flujo Loaded Debug', [
-            'etapas_count' => $flujo->etapas->count(),
-            'etapas_data' => $flujo->etapas->map(function($etapa) {
-                return [
-                    'id' => $etapa->id,
-                    'nombre' => $etapa->nombre,
-                    'nro' => $etapa->nro,
-                    'estado' => $etapa->estado,
-                    'tareas_count' => $etapa->tareas->count(),
-                    'documentos_count' => $etapa->documentos->count()
-                ];
-            })
-        ]);
-
-        // Si el flujo está en ejecución o completado, cargar detalles
-        if ($flujo->estado >= 2) {
-            foreach ($flujo->etapas as $etapa) {
-                foreach ($etapa->tareas as $tarea) {
-                    $detalle = DetalleTarea::where('id_tarea', $tarea->id)->first();
-                    $tarea->completada = $detalle ? (bool)$detalle->estado : false;
-                    $tarea->detalle_id = $detalle ? $detalle->id : null;
-                }
-                foreach ($etapa->documentos as $documento) {
-                    $detalle = DetalleDocumento::where('id_documento', $documento->id)->first();
-                    $documento->subido = $detalle ? (bool)$detalle->estado : false;
-                    $documento->archivo_url = ($detalle && $detalle->ruta_doc) ? Storage::url($detalle->ruta_doc) : null;
-                    $documento->detalle_id = $detalle ? $detalle->id : null;
-                }
+            // Verificar permisos - SUPERADMIN puede ver todo, otros solo de su empresa
+            if (!$isSuper && $flujo->id_emp != $user->id_emp) {
+                abort(403, 'No tienes permisos para ver este flujo.');
             }
-        }
 
-        return view('superadmin.ejecucion.show', compact('flujo', 'isSuper'));
+            Log::info('Sending to view', [
+                'flujo_id' => $flujo->id,
+                'isSuper' => $isSuper,
+                'view_data_flujo_id' => $flujo->id
+            ]);
+
+            return view('superadmin.ejecucion.show', compact('flujo', 'isSuper'));
+
+        } catch (\Exception $e) {
+            Log::error('Error in show method', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -597,5 +586,81 @@ class Ejecucion extends Controller
             ]);
             return false;
         }
+    }
+
+    /**
+     * Get progress information for a flow via AJAX
+     */
+    public function progreso(Flujo $flujo)
+    {
+        $user = Auth::user();
+        
+        // Verificar permisos básicos
+        if ($user->rol->nombre !== 'SUPERADMIN' && $flujo->id_emp != $user->id_emp) {
+            abort(403, 'No tienes permisos para ver este flujo.');
+        }
+
+        // Cargar el flujo con todas las relaciones necesarias
+        $flujo->load([
+            'etapas.tareas', 
+            'etapas.documentos'
+        ]);
+
+        $progreso_general = 0;
+        $total_items = 0;
+        $items_completados = 0;
+        $etapas_data = [];
+
+        foreach ($flujo->etapas as $etapa) {
+            $tareas_completadas = 0;
+            $total_tareas = $etapa->tareas->count();
+            
+            foreach ($etapa->tareas as $tarea) {
+                $detalle = DetalleTarea::where('id_tarea', $tarea->id)->first();
+                if ($detalle && $detalle->estado) {
+                    $tareas_completadas++;
+                    $items_completados++;
+                }
+                $total_items++;
+            }
+
+            $documentos_subidos = 0;
+            $total_documentos = $etapa->documentos->count();
+            
+            foreach ($etapa->documentos as $documento) {
+                $detalle = DetalleDocumento::where('id_documento', $documento->id)->first();
+                if ($detalle && $detalle->estado) {
+                    $documentos_subidos++;
+                    $items_completados++;
+                }
+                $total_items++;
+            }
+
+            $progreso_etapa = 0;
+            if (($total_tareas + $total_documentos) > 0) {
+                $progreso_etapa = round((($tareas_completadas + $documentos_subidos) / ($total_tareas + $total_documentos)) * 100);
+            }
+
+            $etapas_data[] = [
+                'id' => $etapa->id,
+                'nombre' => $etapa->nombre,
+                'progreso' => $progreso_etapa,
+                'tareas_completadas' => $tareas_completadas,
+                'total_tareas' => $total_tareas,
+                'documentos_subidos' => $documentos_subidos,
+                'total_documentos' => $total_documentos,
+                'estado' => $etapa->estado
+            ];
+        }
+
+        if ($total_items > 0) {
+            $progreso_general = round(($items_completados / $total_items) * 100);
+        }
+
+        return response()->json([
+            'progreso_general' => $progreso_general,
+            'etapas' => $etapas_data,
+            'flujo_estado' => $flujo->estado
+        ]);
     }
 }

@@ -109,18 +109,6 @@
 
 @section('content-area')
 
-{{-- DEBUG TEMPORAL --}}
-<div class="alert alert-warning">
-    <strong>DEBUG INFO:</strong><br>
-    Flujo existe: {{ isset($flujo) ? 'SÍ' : 'NO' }}<br>
-    @if(isset($flujo))
-        Flujo ID: {{ $flujo->id ?? 'NULL' }}<br>
-        Flujo Nombre: {{ $flujo->nombre ?? 'NULL' }}<br>
-        Etapas Count: {{ $flujo->etapas->count() ?? 'NULL' }}<br>
-    @endif
-    IsSuper: {{ isset($isSuper) ? ($isSuper ? 'SÍ' : 'NO') : 'NO DEFINIDO' }}
-</div>
-
 @if($isSuper)
     <!-- Aviso para SUPERADMIN -->
     <div class="alert alert-info border-0 shadow-sm mb-4">
@@ -458,44 +446,122 @@
 document.addEventListener('DOMContentLoaded', function() {
     console.log('JavaScript cargado correctamente');
     
-    // Variables desde PHP con más debug
-    const flujoData = @json($flujo);
-    const flujoId = flujoData ? flujoData.id : null;
-    const etapasCount = flujoData && flujoData.etapas ? flujoData.etapas.length : 0;
+    // Variables desde PHP
+    const flujoId = @json($flujo->id);
+    const flujoEstado = @json($flujo->estado);
+    const isSuper = @json($isSuper);
+    const etapasCount = @json($flujo->etapas->count());
     
-    console.log('Flujo completo:', flujoData);
     console.log('Flujo ID:', flujoId);
+    console.log('Estado del flujo:', flujoEstado);
+    console.log('Es SUPERADMIN:', isSuper);
     console.log('Número de etapas:', etapasCount);
-    console.log('IsSuper:', @json($isSuper));
     
-    // Si hay etapas, mostrar detalles
-    if (flujoData && flujoData.etapas) {
-        console.log('Etapas detalle:', flujoData.etapas);
-        flujoData.etapas.forEach((etapa, index) => {
-            console.log(`Etapa ${index + 1}:`, {
-                id: etapa.id,
-                nombre: etapa.nombre,
-                nro: etapa.nro,
-                estado: etapa.estado,
-                tareas: etapa.tareas ? etapa.tareas.length : 0,
-                documentos: etapa.documentos ? etapa.documentos.length : 0
-            });
+    // Si el flujo está en ejecución o completado, obtener progreso real
+    if (flujoEstado >= 2) {
+        actualizarProgreso();
+    }
+
+    // Ver PDF
+    function verPDF() {
+        const documentoId = this.dataset.documentoId;
+        const url = this.dataset.url;
+        const documentoNombre = this.dataset.nombre || this.closest('.documento-item').querySelector('h6').textContent;
+        
+        document.getElementById('pdf-title').textContent = documentoNombre;
+        document.getElementById('pdf-viewer').src = url;
+        document.getElementById('pdf-download').href = url;
+        document.getElementById('pdf-download').download = documentoNombre + '.pdf';
+        
+        const modal = new bootstrap.Modal(document.getElementById('pdfModal'));
+        modal.show();
+    }
+
+    // Agregar event listeners a botones de ver PDF
+    document.querySelectorAll('.ver-pdf').forEach(btn => {
+        btn.addEventListener('click', verPDF);
+    });
+
+    // Función para actualizar progreso desde el servidor
+    function actualizarProgreso() {
+        if (flujoEstado < 2) return; // Solo obtener progreso si está en ejecución o completado
+        
+        const url = '/ejecucion/' + flujoId + '/progreso';
+        console.log('URL de progreso:', url);
+        
+        fetch(url)
+        .then(response => {
+            console.log('Response status:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Datos recibidos:', data);
+            if (data.progreso_general !== undefined) {
+                document.getElementById('progreso-general').textContent = data.progreso_general + '%';
+                
+                // Actualizar estado visual de cada etapa basado en el progreso real
+                data.etapas.forEach(etapaData => {
+                    console.log('Procesando etapa:', etapaData);
+                    const etapaElement = document.querySelector(`[data-etapa-id="${etapaData.id}"]`);
+                    if (etapaElement) {
+                        const estadoIcon = etapaElement.querySelector('.estado-etapa i');
+                        const statusText = etapaElement.querySelector('.card-header small');
+                        
+                        // Actualizar ícono y estado según progreso
+                        if (etapaData.progreso === 100) {
+                            estadoIcon.classList.remove('text-primary', 'text-warning', 'text-secondary');
+                            estadoIcon.classList.add('text-success');
+                            estadoIcon.classList.remove('fa-circle', 'fa-play-circle');
+                            estadoIcon.classList.add('fa-check-circle');
+                            statusText.innerHTML = `Completada • Progreso: ${etapaData.progreso}%`;
+                            etapaElement.classList.add('completada');
+                        } else if (etapaData.progreso > 0) {
+                            estadoIcon.classList.remove('text-secondary', 'text-success');
+                            estadoIcon.classList.add('text-warning');
+                            estadoIcon.classList.remove('fa-circle', 'fa-check-circle');
+                            estadoIcon.classList.add('fa-play-circle');
+                            statusText.innerHTML = `En progreso • Progreso: ${etapaData.progreso}%`;
+                            etapaElement.classList.add('activa');
+                        }
+                        
+                        // Actualizar contador de tareas en el header
+                        const tareasHeader = etapaElement.querySelector('.tareas-list')?.parentElement.querySelector('h6');
+                        if (tareasHeader) {
+                            tareasHeader.textContent = `Tareas (${etapaData.tareas_completadas}/${etapaData.total_tareas})`;
+                        }
+                        
+                        // Actualizar contador de documentos en el header
+                        const documentosHeader = etapaElement.querySelector('.documentos-list')?.parentElement.querySelector('h6');
+                        if (documentosHeader) {
+                            documentosHeader.textContent = `Documentos (${etapaData.documentos_subidos}/${etapaData.total_documentos})`;
+                        }
+                    }
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error al obtener progreso:', error);
         });
     }
-    
+
     // Auto-expandir primera etapa si hay contenido
     const primeraEtapa = document.querySelector('.etapa-card .collapse');
     if (primeraEtapa) {
         primeraEtapa.classList.add('show');
+        const botonToggle = document.querySelector('.etapa-card [data-bs-toggle="collapse"] i');
+        if (botonToggle) {
+            botonToggle.classList.remove('fa-chevron-down');
+            botonToggle.classList.add('fa-chevron-up');
+        }
         console.log('Primera etapa expandida');
     } else {
         console.log('No se encontró primera etapa');
     }
-    
+
     // Logs de verificación del DOM
     const etapas = document.querySelectorAll('.etapa-card');
     console.log('Etapas encontradas en DOM:', etapas.length);
-    
+
     // Manejar toggle de etapas
     document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(btn => {
         btn.addEventListener('click', function() {

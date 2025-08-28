@@ -113,7 +113,7 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::post('ejecucion/{flujo}/iniciar', [Ejecucion::class, 'iniciarProceso'])->name('ejecucion.iniciar');
         Route::post('ejecucion/tarea/actualizar', [Ejecucion::class, 'actualizarTarea'])->name('ejecucion.tarea.actualizar');
         Route::post('ejecucion/documento/subir', [Ejecucion::class, 'subirDocumento'])->name('ejecucion.documento.subir');
-        Route::get('ejecucion/{flujo}/progreso', [Ejecucion::class, 'obtenerProgreso'])->name('ejecucion.progreso');
+        Route::get('ejecucion/{flujo}/progreso', [Ejecucion::class, 'progreso'])->name('ejecucion.progreso');
 
     
     // Gestión de Usuarios (SUPERADMIN y ADMINISTRADOR)
