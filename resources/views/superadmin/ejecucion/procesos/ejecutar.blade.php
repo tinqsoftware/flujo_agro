@@ -452,6 +452,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         label.classList.remove('text-decoration-line-through', 'text-muted');
                     }
                     
+                    // Verificar si se completó etapa o flujo
+                    if (data.estados) {
+                        if (typeof data.estados === 'object' && data.estados.flujo_completado) {
+                            // Flujo completado - mostrar animación y redirigir
+                            mostrarAnimacionComplecion(data.estados.flujo_nombre);
+                        } else if (data.estados === true) {
+                            // Solo etapa completada
+                            const etapaCard = this.closest('.etapa-card');
+                            marcarEtapaComoCompletada(etapaCard);
+                        }
+                    }
+                    
                     // Actualizar progreso de la etapa
                     const etapaCard = this.closest('.etapa-card');
                     actualizarProgresoEtapa(etapaCard);
@@ -566,6 +578,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 btnGroup.querySelector('.ver-pdf').addEventListener('click', verPDF);
                 btnGroup.querySelector('.subir-documento').addEventListener('click', arguments.callee.parentNode);
                 
+                // Verificar si se completó etapa o flujo
+                if (data.estados) {
+                    if (typeof data.estados === 'object' && data.estados.flujo_completado) {
+                        // Flujo completado - mostrar animación y redirigir
+                        mostrarAnimacionComplecion(data.estados.flujo_nombre);
+                    } else if (data.estados === true) {
+                        // Solo etapa completada
+                        const etapaCard = documentoItem.closest('.etapa-card');
+                        marcarEtapaComoCompletada(etapaCard);
+                    }
+                }
+                
                 // Cerrar modal
                 bootstrap.Modal.getInstance(document.getElementById('uploadModal')).hide();
                 document.getElementById('uploadForm').reset();
@@ -669,6 +693,148 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function actualizarProgreso() {
         actualizarProgresoEtapa(null); // Usar null ya que la función ahora obtiene datos del servidor
+    }
+
+    // Función para marcar etapa como completada
+    function marcarEtapaComoCompletada(etapaCard) {
+        if (!etapaCard) return;
+        
+        etapaCard.classList.remove('activa');
+        etapaCard.classList.add('completada');
+        
+        const estadoIcon = etapaCard.querySelector('.estado-etapa i');
+        const statusText = etapaCard.querySelector('.card-header small');
+        
+        estadoIcon.classList.remove('text-primary', 'text-warning', 'text-secondary');
+        estadoIcon.classList.add('text-success');
+        statusText.innerHTML = 'Completada • Progreso: <span class="progreso-etapa">100%</span>';
+        
+        // Activar siguiente etapa si existe
+        const siguienteEtapa = etapaCard.nextElementSibling;
+        if (siguienteEtapa && siguienteEtapa.classList.contains('etapa-card') && 
+            !siguienteEtapa.classList.contains('activa') && 
+            !siguienteEtapa.classList.contains('completada')) {
+            siguienteEtapa.classList.add('activa');
+            const siguienteIcon = siguienteEtapa.querySelector('.estado-etapa i');
+            siguienteIcon.classList.remove('text-secondary');
+            siguienteIcon.classList.add('text-primary');
+            
+            // Expandir automáticamente la siguiente etapa
+            const collapseElement = siguienteEtapa.querySelector('.collapse');
+            if (collapseElement && !collapseElement.classList.contains('show')) {
+                collapseElement.classList.add('show');
+            }
+        }
+    }
+
+    // Función para mostrar animación de flujo completado
+    function mostrarAnimacionComplecion(flujoNombre) {
+        // Crear overlay para la animación
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(40, 167, 69, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            color: white;
+            text-align: center;
+            animation: fadeIn 0.5s ease-in;
+        `;
+        
+        overlay.innerHTML = `
+            <div style="max-width: 500px; padding: 2rem;">
+                <div style="font-size: 4rem; margin-bottom: 1rem; animation: bounceIn 1s ease-out;">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <h2 style="margin-bottom: 1rem; animation: slideInUp 0.8s ease-out 0.2s both;">
+                    ¡Flujo Completado!
+                </h2>
+                <h4 style="margin-bottom: 2rem; opacity: 0.9; animation: slideInUp 0.8s ease-out 0.4s both;">
+                    "${flujoNombre}"
+                </h4>
+                <p style="font-size: 1.1rem; margin-bottom: 2rem; animation: slideInUp 0.8s ease-out 0.6s both;">
+                    Todas las etapas han sido completadas exitosamente.<br>
+                    Serás redirigido automáticamente en <span id="countdown">5</span> segundos.
+                </p>
+                <button id="redirect-now" class="btn btn-light btn-lg" style="animation: slideInUp 0.8s ease-out 0.8s both;">
+                    <i class="fas fa-arrow-left me-2"></i>Ir a Flujos Ahora
+                </button>
+            </div>
+        `;
+        
+        // Agregar estilos de animación
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes bounceIn {
+                0%, 20%, 40%, 60%, 80% {
+                    animation-timing-function: cubic-bezier(0.215, 0.610, 0.355, 1.000);
+                }
+                0% {
+                    opacity: 0;
+                    transform: scale3d(.3, .3, .3);
+                }
+                20% {
+                    transform: scale3d(1.1, 1.1, 1.1);
+                }
+                40% {
+                    transform: scale3d(.9, .9, .9);
+                }
+                60% {
+                    opacity: 1;
+                    transform: scale3d(1.03, 1.03, 1.03);
+                }
+                80% {
+                    transform: scale3d(.97, .97, .97);
+                }
+                100% {
+                    opacity: 1;
+                    transform: scale3d(1, 1, 1);
+                }
+            }
+            @keyframes slideInUp {
+                from {
+                    transform: translate3d(0, 100%, 0);
+                    visibility: visible;
+                    opacity: 0;
+                }
+                to {
+                    transform: translate3d(0, 0, 0);
+                    opacity: 1;
+                }
+            }
+        `;
+        
+        document.head.appendChild(style);
+        document.body.appendChild(overlay);
+        
+        // Countdown
+        let countdown = 5;
+        const countdownElement = overlay.querySelector('#countdown');
+        const countdownInterval = setInterval(() => {
+            countdown--;
+            countdownElement.textContent = countdown;
+            if (countdown <= 0) {
+                clearInterval(countdownInterval);
+                window.location.href = '{{ route('ejecucion.index') }}';
+            }
+        }, 1000);
+        
+        // Botón para redirigir inmediatamente
+        overlay.querySelector('#redirect-now').addEventListener('click', () => {
+            clearInterval(countdownInterval);
+            window.location.href = '{{ route('ejecucion.index') }}';
+        });
     }
 });
 </script>

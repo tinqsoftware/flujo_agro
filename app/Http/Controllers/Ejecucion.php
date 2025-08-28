@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Flujo;
 use App\Models\Etapa;
+use App\Models\Tarea;
+use App\Models\Documento;
 use App\Models\Empresa;
 use App\Models\DetalleTarea;
 use App\Models\DetalleDocumento;
@@ -114,7 +116,7 @@ class Ejecucion extends Controller
         $isSuper = ($user->rol->nombre === 'SUPERADMIN');
 
         // Debug: Verificar que el flujo llegue correctamente
-        \Log::info('Show Flujo Debug', [
+        Log::info('Show Flujo Debug', [
             'flujo_id' => $flujo->id,
             'flujo_nombre' => $flujo->nombre,
             'flujo_estado' => $flujo->estado,
@@ -138,7 +140,7 @@ class Ejecucion extends Controller
             'etapas.documentos'
         ]);
 
-        \Log::info('Flujo Loaded Debug', [
+        Log::info('Flujo Loaded Debug', [
             'etapas_count' => $flujo->etapas->count(),
             'etapas_data' => $flujo->etapas->map(function($etapa) {
                 return [
@@ -373,7 +375,8 @@ class Ejecucion extends Controller
                 'success' => true,
                 'message' => $completada ? 'Tarea marcada como completada' : 'Tarea marcada como pendiente',
                 'completada' => (bool)$detalle->estado,
-                'detalle_id' => $detalle->id
+                'detalle_id' => $detalle->id,
+                'estados' => $this->verificarYActualizarEstados($tareaId)
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -443,7 +446,8 @@ class Ejecucion extends Controller
                 'message' => 'Documento subido correctamente',
                 'archivo_url' => Storage::url($rutaArchivo),
                 'nombre_archivo' => $archivo->getClientOriginalName(),
-                'detalle_id' => $detalle->id
+                'detalle_id' => $detalle->id,
+                'estados' => $this->verificarYActualizarEstados($documentoId, 'documento')
             ]);
 
         } catch (\Exception $e) {
@@ -509,5 +513,89 @@ class Ejecucion extends Controller
             'total_items' => $totalItems,
             'items_completados' => $itemsCompletados
         ]);
+    }
+
+    /**
+     * Verificar y actualizar automáticamente los estados de etapas y flujos
+     */
+    private function verificarYActualizarEstados($itemId, $tipo = 'tarea')
+    {
+        try {
+            // Obtener la etapa correspondiente según el tipo de ítem
+            if ($tipo === 'tarea') {
+                $tarea = \App\Models\Tarea::find($itemId);
+                if (!$tarea) return false;
+                $etapa = $tarea->etapa;
+            } else { // documento
+                $documento = \App\Models\Documento::find($itemId);
+                if (!$documento) return false;
+                $etapa = $documento->etapa;
+            }
+
+            if (!$etapa) return false;
+
+            // Verificar si todas las tareas de la etapa están completadas
+            $totalTareas = $etapa->tareas()->where('estado', '!=', 0)->count();
+            $tareasCompletadas = DetalleTarea::where('estado', true)
+                ->whereIn('id_tarea', $etapa->tareas()->where('estado', '!=', 0)->pluck('id'))
+                ->count();
+
+            // Verificar si todos los documentos de la etapa están subidos
+            $totalDocumentos = $etapa->documentos()->where('estado', '!=', 0)->count();
+            $documentosSubidos = DetalleDocumento::where('estado', true)
+                ->whereIn('id_documento', $etapa->documentos()->where('estado', '!=', 0)->pluck('id'))
+                ->count();
+
+            Log::info("Verificando etapa {$etapa->id}", [
+                'total_tareas' => $totalTareas,
+                'tareas_completadas' => $tareasCompletadas,
+                'total_documentos' => $totalDocumentos,
+                'documentos_subidos' => $documentosSubidos
+            ]);
+
+            // Si todas las tareas y documentos están completados, marcar etapa como completada
+            $etapaCompletada = false;
+            if ($totalTareas === $tareasCompletadas && $totalDocumentos === $documentosSubidos && ($totalTareas > 0 || $totalDocumentos > 0)) {
+                if ($etapa->estado != 3) {
+                    $etapa->update(['estado' => 3]);
+                    $etapaCompletada = true;
+                    Log::info("Etapa {$etapa->id} marcada como completada");
+
+                    // Verificar si todas las etapas del flujo están completadas
+                    $flujo = $etapa->flujo;
+                    $totalEtapas = $flujo->etapas()->where('estado', '!=', 0)->count();
+                    $etapasCompletadas = $flujo->etapas()->where('estado', 3)->count();
+
+                    Log::info("Verificando flujo {$flujo->id}", [
+                        'total_etapas' => $totalEtapas,
+                        'etapas_completadas' => $etapasCompletadas
+                    ]);
+
+                    // Si todas las etapas están completadas, marcar flujo como completado
+                    if ($totalEtapas === $etapasCompletadas && $totalEtapas > 0) {
+                        $flujo->update(['estado' => 3]);
+                        Log::info("Flujo {$flujo->id} marcado como completado");
+                        
+                        // Retornar información especial para flujo completado
+                        return [
+                            'etapa_completada' => true,
+                            'flujo_completado' => true,
+                            'flujo_id' => $flujo->id,
+                            'flujo_nombre' => $flujo->nombre
+                        ];
+                    }
+                }
+            }
+
+            return $etapaCompletada;
+
+        } catch (\Exception $e) {
+            Log::error('Error en verificarYActualizarEstados: ' . $e->getMessage(), [
+                'item_id' => $itemId,
+                'tipo' => $tipo,
+                'trace' => $e->getTraceAsString()
+            ]);
+            return false;
+        }
     }
 }
