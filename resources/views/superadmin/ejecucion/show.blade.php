@@ -1,219 +1,451 @@
 @extends('layouts.dashboard')
-@section('title','Ejecutar: ' . $flujo->nombre)
-@section('page-title','Ejecución de Flujo')
+@section('title','Detalle: ' . $flujo->nombre)
+@section('page-title','Detalle del Flujo')
 @section('page-subtitle', $flujo->nombre)
 
 @section('header-actions')
     <a href="{{ route('ejecucion.index') }}" class="btn btn-light">
         <i class="fas fa-arrow-left me-1"></i> Volver a Flujos
     </a>
+    @if(!$isSuper && $flujo->estado == 1)
+        <a href="{{ route('ejecucion.ejecutar', $flujo) }}" class="btn btn-success ms-2">
+            <i class="fas fa-play me-1"></i> Ejecutar Flujo
+        </a>
+    @elseif(!$isSuper && $flujo->estado == 2)
+        <a href="{{ route('ejecucion.ejecutar', $flujo) }}" class="btn btn-warning ms-2">
+            <i class="fas fa-play me-1"></i> Continuar Ejecución
+        </a>
+    @endif
 @endsection
 
+@push('styles')
+<style>
+.etapa-card {
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.etapa-card.activa {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.etapa-card.completada {
+    border-color: #28a745;
+    background-color: #f8fff9;
+}
+
+.estado-etapa i.text-warning {
+    color: #ffc107 !important;
+}
+
+.estado-etapa i.text-success {
+    color: #28a745 !important;
+}
+
+.estado-etapa i.text-primary {
+    color: #007bff !important;
+}
+
+.tarea-item {
+    transition: all 0.2s ease;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    border: 1px solid #e9ecef;
+    margin-bottom: 0.5rem;
+}
+
+.tarea-item.completada {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+}
+
+.tarea-item.pendiente {
+    background-color: #fff3cd;
+    border-color: #ffeaa7;
+}
+
+.documento-item {
+    transition: all 0.2s ease;
+    border: 1px solid #e9ecef !important;
+}
+
+.documento-item.subido {
+    background-color: #d4edda;
+    border-color: #c3e6cb !important;
+}
+
+.documento-item.pendiente {
+    background-color: #fff3cd;
+    border-color: #ffeaa7 !important;
+}
+
+#pdf-viewer {
+    height: calc(100vh - 200px);
+    min-height: 500px;
+}
+
+.estado-flujo-badge {
+    font-size: 0.875rem;
+    padding: 0.5rem 1rem;
+}
+
+.info-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.readonly-indicator {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.progreso-circular {
+    width: 60px;
+    height: 60px;
+}
+</style>
+@endpush
+
 @section('content-area')
-<!-- Header del flujo -->
-<div class="header-section mb-4">
-    <div class="row align-items-center">
-        <div class="col">
-            <h2 class="h4 mb-1 text-white">{{ $flujo->nombre }}</h2>
-            <div class="d-flex align-items-center text-white-50">
-                <span class="badge bg-white text-primary me-2">{{ $flujo->tipo->nombre ?? 'Sin tipo' }}</span>
-                @if($isSuper)
-                    <span class="badge bg-light text-dark">{{ $flujo->empresa->nombre ?? 'Sin empresa' }}</span>
-                @endif
+
+{{-- DEBUG TEMPORAL --}}
+<div class="alert alert-warning">
+    <strong>DEBUG INFO:</strong><br>
+    Flujo existe: {{ isset($flujo) ? 'SÍ' : 'NO' }}<br>
+    @if(isset($flujo))
+        Flujo ID: {{ $flujo->id ?? 'NULL' }}<br>
+        Flujo Nombre: {{ $flujo->nombre ?? 'NULL' }}<br>
+        Etapas Count: {{ $flujo->etapas->count() ?? 'NULL' }}<br>
+    @endif
+    IsSuper: {{ isset($isSuper) ? ($isSuper ? 'SÍ' : 'NO') : 'NO DEFINIDO' }}
+</div>
+
+@if($isSuper)
+    <!-- Aviso para SUPERADMIN -->
+    <div class="alert alert-info border-0 shadow-sm mb-4">
+        <div class="d-flex align-items-start">
+            <div class="flex-shrink-0">
+                <i class="fas fa-info-circle fa-lg mt-1"></i>
             </div>
-        </div>
-        <div class="col-auto">
-            <div class="text-white text-center">
-                <div class="h5 mb-0">{{ $flujo->etapas->count() }}</div>
-                <small>Etapas</small>
+            <div class="flex-grow-1 ms-3">
+                <h6 class="alert-heading mb-2">Modo Solo Visualización - SUPERADMIN</h6>
+                <p class="mb-0">Estás viendo los detalles del flujo en modo supervisión. No puedes realizar modificaciones.</p>
             </div>
         </div>
     </div>
-    
-    @if($flujo->descripcion)
-        <div class="mt-3">
-            <p class="text-white-75 mb-0">{{ $flujo->descripcion }}</p>
+@endif
+
+<!-- Header del flujo con información -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card border-0 info-section">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h4 class="card-title mb-1">{{ $flujo->nombre }}</h4>
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="me-3">Tipo: <strong>{{ $flujo->tipo->nombre ?? 'Sin tipo' }}</strong></span>
+                            @if($isSuper)
+                                <span class="me-3">Empresa: <strong>{{ $flujo->empresa->nombre ?? 'Sin empresa' }}</strong></span>
+                            @endif
+                        </div>
+                        @if($flujo->descripcion)
+                            <p class="mb-0 opacity-75">{{ $flujo->descripcion }}</p>
+                        @endif
+                    </div>
+                    <div class="text-end">
+                        @if($flujo->estado == 1)
+                            <span class="badge bg-primary estado-flujo-badge">
+                                <i class="fas fa-circle me-1"></i>Listo para Ejecutar
+                            </span>
+                        @elseif($flujo->estado == 2)
+                            <span class="badge bg-warning estado-flujo-badge">
+                                <i class="fas fa-play me-1"></i>En Ejecución
+                            </span>
+                        @elseif($flujo->estado == 3)
+                            <span class="badge bg-success estado-flujo-badge">
+                                <i class="fas fa-check-circle me-1"></i>Completado
+                            </span>
+                        @endif
+                    </div>
+                </div>
+            </div>
         </div>
-    @endif
+    </div>
+    <div class="col-md-4">
+        <div class="row g-3">
+            <div class="col-6">
+                <div class="card border-0 text-center h-100">
+                    <div class="card-body">
+                        <h5 class="text-primary mb-1">Progreso</h5>
+                        <h2 class="mb-0" id="progreso-general">
+                            @if($flujo->estado == 3)
+                                100%
+                            @elseif($flujo->estado == 2)
+                                <span class="text-warning">En curso</span>
+                            @else
+                                0%
+                            @endif
+                        </h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card border-0 text-center h-100">
+                    <div class="card-body">
+                        <h5 class="text-info mb-1">Etapas</h5>
+                        <h2 class="mb-0">{{ $flujo->etapas->count() }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<!-- Progreso del flujo -->
-<div class="card mb-4">
-    <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 class="mb-0">Progreso del Flujo</h6>
-            <span class="text-muted">0 de {{ $flujo->etapas->count() }} etapas completadas</span>
-        </div>
-        <div class="progress" style="height: 8px;">
-            <div class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
+<!-- Resumen de estado -->
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title mb-3">
+                    <i class="fas fa-chart-bar text-primary me-2"></i>
+                    Resumen del Flujo
+                </h5>
+                <div class="row text-center">
+                    <div class="col-md-3">
+                        <div class="border rounded p-3">
+                            <i class="fas fa-list-ol fa-2x text-primary mb-2"></i>
+                            <h4 class="mb-1">{{ $flujo->etapas->count() }}</h4>
+                            <p class="text-muted mb-0">Etapas Totales</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded p-3">
+                            <i class="fas fa-tasks fa-2x text-warning mb-2"></i>
+                            <h4 class="mb-1">{{ $flujo->etapas->sum(function($etapa) { return $etapa->tareas->count(); }) }}</h4>
+                            <p class="text-muted mb-0">Tareas Totales</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded p-3">
+                            <i class="fas fa-file-pdf fa-2x text-danger mb-2"></i>
+                            <h4 class="mb-1">{{ $flujo->etapas->sum(function($etapa) { return $etapa->documentos->count(); }) }}</h4>
+                            <p class="text-muted mb-0">Documentos Totales</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded p-3">
+                            <i class="fas fa-clock fa-2x text-info mb-2"></i>
+                            <h4 class="mb-1">
+                                @if($flujo->created_at)
+                                    {{ $flujo->created_at->diffForHumans() }}
+                                @else
+                                    Sin fecha
+                                @endif
+                            </h4>
+                            <p class="text-muted mb-0">Creado</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 <!-- Etapas del flujo -->
-<div class="row g-4">
-    @forelse($flujo->etapas as $index => $etapa)
-        <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light">
-                    <div class="row align-items-center">
-                        <div class="col">
-                            <h5 class="mb-0">
-                                <span class="badge bg-primary me-2">{{ $etapa->nro }}</span>
-                                {{ $etapa->nombre }}
-                                @if($etapa->paralelo)
-                                    <span class="badge bg-warning ms-2">
-                                        <i class="fas fa-code-branch me-1"></i>Paralelo
-                                    </span>
-                                @endif
-                            </h5>
-                            @if($etapa->descripcion)
-                                <p class="text-muted mb-0 mt-1">{{ $etapa->descripcion }}</p>
-                            @endif
-                        </div>
-                        <div class="col-auto">
-                            <div class="d-flex align-items-center gap-3">
-                                @if($etapa->tareas->count() > 0)
-                                    <div class="text-center">
-                                        <div class="text-primary h6 mb-0">{{ $etapa->tareas->count() }}</div>
-                                        <small class="text-muted">Tareas</small>
+@foreach($flujo->etapas as $index => $etapa)
+<div class="card mb-3 etapa-card" data-etapa-id="{{ $etapa->id }}">
+    <div class="card-header bg-light">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <div class="estado-etapa me-3">
+                    @if($flujo->estado == 3)
+                        <i class="fas fa-check-circle text-success" id="estado-etapa-{{ $etapa->id }}"></i>
+                    @elseif($flujo->estado == 2)
+                        <i class="fas fa-play-circle text-warning" id="estado-etapa-{{ $etapa->id }}"></i>
+                    @else
+                        <i class="fas fa-circle text-secondary" id="estado-etapa-{{ $etapa->id }}"></i>
+                    @endif
+                </div>
+                <div>
+                    <h6 class="mb-0">{{ $etapa->nro }}. {{ $etapa->nombre }}</h6>
+                    <small class="text-muted">
+                        @if($flujo->estado == 3)
+                            Completada
+                        @elseif($flujo->estado == 2)
+                            En ejecución
+                        @else
+                            Lista para ejecutar
+                        @endif
+                        @if($etapa->descripcion)
+                            • {{ \Illuminate\Support\Str::limit($etapa->descripcion, 50) }}
+                        @endif
+                    </small>
+                </div>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-outline-primary" type="button" 
+                        data-bs-toggle="collapse" 
+                        data-bs-target="#etapa-content-{{ $etapa->id }}" 
+                        aria-expanded="false">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="collapse" id="etapa-content-{{ $etapa->id }}">
+        <div class="card-body">
+            <div class="row">
+                <!-- Tareas -->
+                @if($etapa->tareas->count() > 0)
+                <div class="col-md-6">
+                    <div class="d-flex align-items-center mb-3">
+                        <i class="fas fa-tasks text-primary me-2"></i>
+                        <h6 class="mb-0">Tareas ({{ $etapa->tareas->count() }})</h6>
+                    </div>
+                    
+                    <div class="tareas-list">
+                        @foreach($etapa->tareas as $tarea)
+                        <div class="tarea-item {{ isset($tarea->completada) && $tarea->completada ? 'completada' : 'pendiente' }}" data-tarea-id="{{ $tarea->id }}">
+                            <div class="d-flex align-items-start">
+                                <div class="me-3">
+                                    @if(isset($tarea->completada) && $tarea->completada)
+                                        <i class="fas fa-check-circle text-success"></i>
+                                    @else
+                                        <i class="fas fa-clock text-warning"></i>
+                                    @endif
+                                </div>
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1 {{ isset($tarea->completada) && $tarea->completada ? 'text-decoration-line-through text-muted' : '' }}">
+                                        {{ $tarea->nombre }}
+                                    </h6>
+                                    @if($tarea->descripcion)
+                                        <p class="small text-muted mb-0">{{ $tarea->descripcion }}</p>
+                                    @endif
+                                    <div class="small text-muted mt-1">
+                                        Estado: 
+                                        @if(isset($tarea->completada) && $tarea->completada)
+                                            <span class="text-success fw-bold">Completada</span>
+                                        @else
+                                            <span class="text-warning fw-bold">Pendiente</span>
+                                        @endif
                                     </div>
-                                @endif
-                                @if($etapa->documentos->count() > 0)
-                                    <div class="text-center">
-                                        <div class="text-info h6 mb-0">{{ $etapa->documentos->count() }}</div>
-                                        <small class="text-muted">Documentos</small>
-                                    </div>
-                                @endif
-                                <button class="btn btn-outline-primary btn-sm" type="button" 
-                                        data-bs-toggle="collapse" 
-                                        data-bs-target="#etapa-{{ $etapa->id }}" 
-                                        aria-expanded="false">
-                                    <i class="fas fa-chevron-down"></i>
-                                </button>
+                                </div>
                             </div>
                         </div>
+                        @endforeach
                     </div>
                 </div>
-                
-                <div class="collapse" id="etapa-{{ $etapa->id }}">
-                    <div class="card-body">
-                        <div class="row">
-                            <!-- Tareas -->
-                            @if($etapa->tareas->count() > 0)
-                                <div class="{{ $etapa->documentos->count() > 0 ? 'col-md-6' : 'col-12' }}">
-                                    <h6 class="text-primary mb-3">
-                                        <i class="fas fa-tasks me-2"></i>Tareas
-                                    </h6>
-                                    <div class="list-group list-group-flush">
-                                        @foreach($etapa->tareas as $tarea)
-                                            <div class="list-group-item border-0 px-0">
-                                                <div class="d-flex align-items-center">
-                                                    <div class="form-check me-3">
-                                                        <input class="form-check-input" type="checkbox" 
-                                                               id="tarea-{{ $tarea->id }}" 
-                                                               data-tarea-id="{{ $tarea->id }}">
-                                                    </div>
-                                                    <div class="flex-grow-1">
-                                                        <label class="form-check-label fw-medium" for="tarea-{{ $tarea->id }}">
-                                                            {{ $tarea->nombre }}
-                                                        </label>
-                                                        @if($tarea->descripcion)
-                                                            <div class="text-muted small">{{ $tarea->descripcion }}</div>
-                                                        @endif
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        @endforeach
-                                    </div>
-                                </div>
-                            @endif
+                @endif
 
-                            <!-- Documentos -->
-                            @if($etapa->documentos->count() > 0)
-                                <div class="{{ $etapa->tareas->count() > 0 ? 'col-md-6' : 'col-12' }}">
-                                    <h6 class="text-info mb-3">
-                                        <i class="fas fa-file-alt me-2"></i>Documentos
-                                    </h6>
-                                    <div class="list-group list-group-flush">
-                                        @foreach($etapa->documentos as $documento)
-                                            <div class="list-group-item border-0 px-0">
-                                                <div class="d-flex align-items-center justify-content-between">
-                                                    <div>
-                                                        <div class="fw-medium">{{ $documento->nombre }}</div>
-                                                        @if($documento->descripcion)
-                                                            <div class="text-muted small">{{ $documento->descripcion }}</div>
-                                                        @endif
-                                                    </div>
-                                                    <div class="btn-group btn-group-sm">
-                                                        <button class="btn btn-outline-secondary" 
-                                                                title="Subir documento"
-                                                                data-documento-id="{{ $documento->id }}">
-                                                            <i class="fas fa-upload"></i>
-                                                        </button>
-                                                        <button class="btn btn-outline-primary" 
-                                                                title="Ver documento"
-                                                                data-documento-id="{{ $documento->id }}">
-                                                            <i class="fas fa-eye"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        @endforeach
+                <!-- Documentos -->
+                @if($etapa->documentos->count() > 0)
+                <div class="col-md-6">
+                    <div class="d-flex align-items-center mb-3">
+                        <i class="fas fa-file-pdf text-danger me-2"></i>
+                        <h6 class="mb-0">Documentos ({{ $etapa->documentos->count() }})</h6>
+                    </div>
+                    
+                    <div class="documentos-list">
+                        @foreach($etapa->documentos as $documento)
+                        <div class="documento-item mb-3 p-3 rounded {{ isset($documento->archivo_url) && $documento->archivo_url ? 'subido' : 'pendiente' }}" data-documento-id="{{ $documento->id }}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">{{ $documento->nombre }}</h6>
+                                    @if($documento->descripcion)
+                                        <p class="text-muted small mb-2">{{ $documento->descripcion }}</p>
+                                    @endif
+                                    
+                                    <!-- Estado del documento -->
+                                    <div class="document-status mb-2" id="status-{{ $documento->id }}">
+                                        @if(isset($documento->archivo_url) && $documento->archivo_url)
+                                            <span class="badge bg-success">
+                                                <i class="fas fa-check me-1"></i>Documento Subido
+                                            </span>
+                                        @else
+                                            <span class="badge bg-warning text-dark">
+                                                <i class="fas fa-clock me-1"></i>Pendiente
+                                            </span>
+                                        @endif
                                     </div>
+                                    
+                                    @if(isset($documento->archivo_url) && $documento->archivo_url)
+                                        <div class="small text-muted">
+                                            <i class="fas fa-paperclip me-1"></i>
+                                            Archivo disponible para descarga
+                                        </div>
+                                    @endif
                                 </div>
-                            @endif
+                                
+                                <!-- Botones de acción -->
+                                <div class="btn-group-vertical btn-group-sm">
+                                    @if(isset($documento->archivo_url) && $documento->archivo_url)
+                                        <!-- Botón para ver PDF -->
+                                        <button class="btn btn-outline-primary btn-sm ver-pdf" 
+                                                data-documento-id="{{ $documento->id }}"
+                                                data-url="{{ $documento->archivo_url }}"
+                                                data-nombre="{{ $documento->nombre }}"
+                                                title="Ver PDF">
+                                            <i class="fas fa-eye me-1"></i>Ver
+                                        </button>
+                                        <!-- Botón para descargar -->
+                                        <a href="{{ $documento->archivo_url }}" 
+                                           class="btn btn-outline-secondary btn-sm" 
+                                           download
+                                           title="Descargar PDF">
+                                            <i class="fas fa-download me-1"></i>Descargar
+                                        </a>
+                                    @else
+                                        <button class="btn btn-outline-muted btn-sm" disabled title="Sin archivo">
+                                            <i class="fas fa-times me-1"></i>Sin archivo
+                                        </button>
+                                    @endif
+                                </div>
+                            </div>
                         </div>
-
-                        <!-- Botón de completar etapa -->
-                        <div class="mt-4 text-end">
-                            <button class="btn btn-success" data-etapa-id="{{ $etapa->id }}">
-                                <i class="fas fa-check me-2"></i>Completar Etapa
-                            </button>
-                        </div>
+                        @endforeach
                     </div>
                 </div>
+                @endif
             </div>
         </div>
-    @empty
-        <div class="col-12">
-            <div class="card">
-                <div class="card-body text-center py-5">
-                    <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
-                    <h5 class="text-muted">Sin etapas configuradas</h5>
-                    <p class="text-muted mb-0">Este flujo no tiene etapas configuradas para ejecutar.</p>
-                </div>
-            </div>
-        </div>
-    @endforelse
+    </div>
 </div>
+@endforeach
 
-<!-- Modal para subir documentos -->
-<div class="modal fade" id="uploadModal" tabindex="-1">
-    <div class="modal-dialog">
+@if($flujo->etapas->count() == 0)
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-info-circle fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Sin Etapas Configuradas</h5>
+            <p class="text-muted mb-0">Este flujo aún no tiene etapas configuradas.</p>
+        </div>
+    </div>
+@endif
+
+<!-- Modal para visualizar PDF -->
+<div class="modal fade" id="pdfModal" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Subir Documento</h5>
+                <h5 class="modal-title">
+                    <i class="fas fa-file-pdf text-danger me-2"></i>
+                    <span id="pdf-title">Documento PDF</span>
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
-                <form id="uploadForm">
-                    <div class="mb-3">
-                        <label class="form-label">Seleccionar archivo</label>
-                        <input type="file" class="form-control" id="documentFile" multiple>
-                        <div class="form-text">Puedes seleccionar múltiples archivos</div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Comentarios (opcional)</label>
-                        <textarea class="form-control" rows="3" id="documentComments" placeholder="Agregar comentarios sobre el documento..."></textarea>
-                    </div>
-                </form>
+            <div class="modal-body p-0">
+                <iframe id="pdf-viewer" src="" width="100%" frameborder="0"></iframe>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary" id="saveDocument">
-                    <i class="fas fa-upload me-2"></i>Subir Documento
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Cerrar
                 </button>
+                <a id="pdf-download" href="" class="btn btn-primary" download>
+                    <i class="fas fa-download me-2"></i>Descargar PDF
+                </a>
             </div>
         </div>
     </div>
@@ -221,132 +453,65 @@
 
 @endsection
 
-@section('styles')
-<style>
-.header-section {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    margin: -1.5rem -1.5rem 0 -1.5rem;
-    padding: 2rem 1.5rem;
-    color: white;
-    border-radius: 0.5rem 0.5rem 0 0;
-}
-
-.text-white-75 {
-    color: rgba(255,255,255,0.75) !important;
-}
-
-.text-white-50 {
-    color: rgba(255,255,255,0.5) !important;
-}
-
-.card-header {
-    border-bottom: 1px solid rgba(0,0,0,0.125);
-}
-
-.list-group-item {
-    transition: background-color 0.15s ease-in-out;
-}
-
-.list-group-item:hover {
-    background-color: rgba(0,0,0,0.025);
-}
-
-.form-check-input:checked {
-    background-color: #28a745;
-    border-color: #28a745;
-}
-
-.btn-group-sm > .btn {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
-}
-</style>
-@endsection
-
-@section('scripts')
+@push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Manejar clics en botones de subir documento
-    document.querySelectorAll('[data-documento-id]').forEach(btn => {
-        if (btn.querySelector('.fa-upload')) {
-            btn.addEventListener('click', function() {
-                const documentoId = this.dataset.documentoId;
-                const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
-                modal.show();
-                
-                // Guardar ID del documento en el modal
-                document.getElementById('uploadModal').dataset.documentoId = documentoId;
+    console.log('JavaScript cargado correctamente');
+    
+    // Variables desde PHP con más debug
+    const flujoData = @json($flujo);
+    const flujoId = flujoData ? flujoData.id : null;
+    const etapasCount = flujoData && flujoData.etapas ? flujoData.etapas.length : 0;
+    
+    console.log('Flujo completo:', flujoData);
+    console.log('Flujo ID:', flujoId);
+    console.log('Número de etapas:', etapasCount);
+    console.log('IsSuper:', @json($isSuper));
+    
+    // Si hay etapas, mostrar detalles
+    if (flujoData && flujoData.etapas) {
+        console.log('Etapas detalle:', flujoData.etapas);
+        flujoData.etapas.forEach((etapa, index) => {
+            console.log(`Etapa ${index + 1}:`, {
+                id: etapa.id,
+                nombre: etapa.nombre,
+                nro: etapa.nro,
+                estado: etapa.estado,
+                tareas: etapa.tareas ? etapa.tareas.length : 0,
+                documentos: etapa.documentos ? etapa.documentos.length : 0
             });
-        }
-    });
-
-    // Manejar guardado de documento
-    document.getElementById('saveDocument').addEventListener('click', function() {
-        const documentoId = document.getElementById('uploadModal').dataset.documentoId;
-        const files = document.getElementById('documentFile').files;
-        const comments = document.getElementById('documentComments').value;
-
-        if (files.length === 0) {
-            alert('Por favor selecciona al menos un archivo');
-            return;
-        }
-
-        // Aquí iría la lógica para subir el archivo
-        console.log('Subir documento:', {documentoId, files, comments});
-        
-        // Cerrar modal y limpiar
-        bootstrap.Modal.getInstance(document.getElementById('uploadModal')).hide();
-        document.getElementById('uploadForm').reset();
-        
-        // Mostrar mensaje de éxito
-        alert('Documento subido correctamente');
-    });
-
-    // Manejar check de tareas
-    document.querySelectorAll('[data-tarea-id]').forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            const tareaId = this.dataset.tareaId;
-            const completed = this.checked;
-            
-            // Aquí iría la lógica para marcar la tarea como completada
-            console.log('Tarea completada:', {tareaId, completed});
-            
-            // Actualizar progreso
-            updateProgress();
         });
-    });
-
-    // Manejar completar etapa
-    document.querySelectorAll('[data-etapa-id]').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const etapaId = this.dataset.etapaId;
-            
-            if (confirm('¿Estás seguro de que quieres completar esta etapa?')) {
-                // Aquí iría la lógica para completar la etapa
-                console.log('Etapa completada:', etapaId);
-                
-                this.innerHTML = '<i class="fas fa-check me-2"></i>Etapa Completada';
-                this.classList.remove('btn-success');
-                this.classList.add('btn-secondary');
-                this.disabled = true;
-                
-                updateProgress();
-            }
-        });
-    });
-
-    function updateProgress() {
-        // Aquí calcularías el progreso real basado en las etapas/tareas completadas
-        const totalEtapas = {!! $flujo->etapas->count() !!};
-        const completedEtapas = document.querySelectorAll('[data-etapa-id]:disabled').length;
-        const progress = totalEtapas > 0 ? (completedEtapas / totalEtapas) * 100 : 0;
-        
-        const progressBar = document.querySelector('.progress-bar');
-        const progressText = document.querySelector('.card-body span.text-muted');
-        
-        progressBar.style.width = progress + '%';
-        progressText.textContent = `${completedEtapas} de ${totalEtapas} etapas completadas`;
     }
+    
+    // Auto-expandir primera etapa si hay contenido
+    const primeraEtapa = document.querySelector('.etapa-card .collapse');
+    if (primeraEtapa) {
+        primeraEtapa.classList.add('show');
+        console.log('Primera etapa expandida');
+    } else {
+        console.log('No se encontró primera etapa');
+    }
+    
+    // Logs de verificación del DOM
+    const etapas = document.querySelectorAll('.etapa-card');
+    console.log('Etapas encontradas en DOM:', etapas.length);
+    
+    // Manejar toggle de etapas
+    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const icon = this.querySelector('i');
+            setTimeout(() => {
+                const target = document.querySelector(this.getAttribute('data-bs-target'));
+                if (target && target.classList.contains('show')) {
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                } else {
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                }
+            }, 50);
+        });
+    });
 });
 </script>
-@endsection
+@endpush

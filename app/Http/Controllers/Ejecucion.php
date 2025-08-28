@@ -113,28 +113,61 @@ class Ejecucion extends Controller
         $user = Auth::user();
         $isSuper = ($user->rol->nombre === 'SUPERADMIN');
 
+        // Debug: Verificar que el flujo llegue correctamente
+        \Log::info('Show Flujo Debug', [
+            'flujo_id' => $flujo->id,
+            'flujo_nombre' => $flujo->nombre,
+            'flujo_estado' => $flujo->estado,
+            'user_id' => $user->id,
+            'is_super' => $isSuper
+        ]);
+
         // Verificar permisos
         if (!$isSuper && $flujo->id_emp != $user->id_emp) {
-            abort(403, 'No tienes permisos para ejecutar este flujo.');
+            abort(403, 'No tienes permisos para ver este flujo.');
         }
 
-        // Verificar que el flujo esté activo (estado = 1)
-        if ($flujo->estado != 1) {
-            abort(404, 'El flujo no está disponible para ejecución.');
-        }
-
-        // Cargar etapas con sus tareas y documentos activos
+        // Cargar relaciones siempre, sin filtros de estado para debug
         $flujo->load([
+            'tipo',
+            'empresa', 
             'etapas' => function($query) {
-                $query->where('estado', 1)->orderBy('nro');
+                $query->orderBy('nro');
             },
-            'etapas.tareas' => function($query) {
-                $query->where('estado', 1);
-            },
-            'etapas.documentos' => function($query) {
-                $query->where('estado', 1);
-            }
+            'etapas.tareas',
+            'etapas.documentos'
         ]);
+
+        \Log::info('Flujo Loaded Debug', [
+            'etapas_count' => $flujo->etapas->count(),
+            'etapas_data' => $flujo->etapas->map(function($etapa) {
+                return [
+                    'id' => $etapa->id,
+                    'nombre' => $etapa->nombre,
+                    'nro' => $etapa->nro,
+                    'estado' => $etapa->estado,
+                    'tareas_count' => $etapa->tareas->count(),
+                    'documentos_count' => $etapa->documentos->count()
+                ];
+            })
+        ]);
+
+        // Si el flujo está en ejecución o completado, cargar detalles
+        if ($flujo->estado >= 2) {
+            foreach ($flujo->etapas as $etapa) {
+                foreach ($etapa->tareas as $tarea) {
+                    $detalle = DetalleTarea::where('id_tarea', $tarea->id)->first();
+                    $tarea->completada = $detalle ? (bool)$detalle->estado : false;
+                    $tarea->detalle_id = $detalle ? $detalle->id : null;
+                }
+                foreach ($etapa->documentos as $documento) {
+                    $detalle = DetalleDocumento::where('id_documento', $documento->id)->first();
+                    $documento->subido = $detalle ? (bool)$detalle->estado : false;
+                    $documento->archivo_url = ($detalle && $detalle->ruta_doc) ? Storage::url($detalle->ruta_doc) : null;
+                    $documento->detalle_id = $detalle ? $detalle->id : null;
+                }
+            }
+        }
 
         return view('superadmin.ejecucion.show', compact('flujo', 'isSuper'));
     }
