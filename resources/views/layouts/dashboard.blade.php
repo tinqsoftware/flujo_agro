@@ -57,7 +57,7 @@
                         <i class="fas fa-project-diagram me-1"></i> Flujos
                     </a>
                 </li>
-                @if(Auth::user()->empresa && Auth::user()->empresa->editable == '1')
+                @if((Auth::user()->empresa && Auth::user()->empresa->editable == '1') || in_array(Auth::user()->id_rol, [2, 3]))
                     <li class="nav-item">
                         <a class="nav-link {{ request()->is('ejecucion*') ? 'active' : '' }}" href="{{ route('ejecucion.index') }}">
                             <i class="fas fa-project-diagram me-1"></i> Ejecución
