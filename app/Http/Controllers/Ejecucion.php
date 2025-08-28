@@ -62,7 +62,7 @@ class Ejecucion extends Controller
         $flujosConContadores = $flujos->getCollection()->map(function($flujo) {
             $totalEtapas = $flujo->etapas->count();
             $totalDocumentos = $flujo->etapas->sum(function($etapa) {
-                return $etapa->documentos()->where('estado', 1)->count();
+                return $etapa->documentos()->whereIn('estado', [1, 2, 3])->count();
             });
             
             $flujo->total_etapas = $totalEtapas;
@@ -75,7 +75,7 @@ class Ejecucion extends Controller
 
         // Obtener flujos en ejecución y terminados para mostrar en sección separada
         $flujosEnProceso = Flujo::with(['empresa', 'tipo', 'etapas' => function($query) {
-                $query->whereIn('estado', [1, 2])->orderBy('nro');
+                $query->whereIn('estado', [1, 2, 3])->orderBy('nro');
             }])
             ->whereIn('estado', [2, 3]) // Estado 2 = En ejecución, Estado 3 = Terminado
             ->when(!$isSuper, fn($x) => $x->where('id_emp', $user->id_emp))
@@ -87,7 +87,7 @@ class Ejecucion extends Controller
         $flujosEnProceso = $flujosEnProceso->map(function($flujo) {
             $totalEtapas = $flujo->etapas->count();
             $totalDocumentos = $flujo->etapas->sum(function($etapa) {
-                return $etapa->documentos()->whereIn('estado', [1, 2])->count();
+                return $etapa->documentos()->whereIn('estado', [1, 2, 3])->count();
             });
             
             $flujo->total_etapas = $totalEtapas;
@@ -137,6 +137,27 @@ class Ejecucion extends Controller
                 'etapas.tareas',
                 'etapas.documentos'
             ])->findOrFail($id);
+
+            // Cargar datos de progreso desde las tablas detalle
+            foreach ($flujo->etapas as $etapa) {
+                // Cargar tareas completadas
+                foreach ($etapa->tareas as $tarea) {
+                    $detalleTarea = DetalleTarea::where('id_tarea', $tarea->id)->first();
+                    $tarea->completada = $detalleTarea ? $detalleTarea->estado : false;
+                    $tarea->detalle = $detalleTarea;
+                }
+                
+                // Cargar documentos subidos
+                foreach ($etapa->documentos as $documento) {
+                    $detalleDocumento = DetalleDocumento::where('id_documento', $documento->id)->first();
+                    $documento->subido = $detalleDocumento ? $detalleDocumento->estado : false;
+                    $documento->detalle = $detalleDocumento;
+                    // Si hay archivo subido, generar URL
+                    if ($detalleDocumento && $detalleDocumento->ruta_doc) {
+                        $documento->url_archivo = Storage::url($detalleDocumento->ruta_doc);
+                    }
+                }
+            }
 
             Log::info('Flujo loaded successfully', [
                 'flujo_id' => $flujo->id,

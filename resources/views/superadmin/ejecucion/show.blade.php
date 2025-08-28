@@ -364,7 +364,7 @@
                     
                     <div class="documentos-list">
                         @foreach($etapa->documentos as $documento)
-                        <div class="documento-item mb-3 p-3 rounded {{ isset($documento->archivo_url) && $documento->archivo_url ? 'subido' : 'pendiente' }}" data-documento-id="{{ $documento->id }}">
+                        <div class="documento-item mb-3 p-3 rounded {{ isset($documento->subido) && $documento->subido ? 'subido' : 'pendiente' }}" data-documento-id="{{ $documento->id }}">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div class="flex-grow-1">
                                     <h6 class="mb-1">{{ $documento->nombre }}</h6>
@@ -374,7 +374,7 @@
                                     
                                     <!-- Estado del documento -->
                                     <div class="document-status mb-2" id="status-{{ $documento->id }}">
-                                        @if(isset($documento->archivo_url) && $documento->archivo_url)
+                                        @if(isset($documento->subido) && $documento->subido)
                                             <span class="badge bg-success">
                                                 <i class="fas fa-check me-1"></i>Documento Subido
                                             </span>
@@ -385,38 +385,24 @@
                                         @endif
                                     </div>
                                     
-                                    @if(isset($documento->archivo_url) && $documento->archivo_url)
+                                    @if(isset($documento->url_archivo) && $documento->url_archivo)
                                         <div class="small text-muted">
                                             <i class="fas fa-paperclip me-1"></i>
-                                            Archivo disponible para descarga
+                                            Archivo disponible
                                         </div>
                                     @endif
                                 </div>
                                 
-                                <!-- Botones de acción -->
-                                <div class="btn-group-vertical btn-group-sm">
-                                    @if(isset($documento->archivo_url) && $documento->archivo_url)
-                                        <!-- Botón para ver PDF -->
-                                        <button class="btn btn-outline-primary btn-sm ver-pdf" 
-                                                data-documento-id="{{ $documento->id }}"
-                                                data-url="{{ $documento->archivo_url }}"
-                                                data-nombre="{{ $documento->nombre }}"
-                                                title="Ver PDF">
-                                            <i class="fas fa-eye me-1"></i>Ver
-                                        </button>
-                                        <!-- Botón para descargar -->
-                                        <a href="{{ $documento->archivo_url }}" 
-                                           class="btn btn-outline-secondary btn-sm" 
-                                           download
-                                           title="Descargar PDF">
-                                            <i class="fas fa-download me-1"></i>Descargar
-                                        </a>
-                                    @else
-                                        <button class="btn btn-outline-muted btn-sm" disabled title="Sin archivo">
-                                            <i class="fas fa-times me-1"></i>Sin archivo
-                                        </button>
-                                    @endif
+                                @if(isset($documento->url_archivo) && $documento->url_archivo)
+                                <div class="flex-shrink-0">
+                                    <button type="button" class="btn btn-outline-primary btn-sm ver-pdf" 
+                                            data-documento-id="{{ $documento->id }}"
+                                            data-url="{{ $documento->url_archivo }}"
+                                            data-nombre="{{ $documento->nombre }}">
+                                        <i class="fas fa-eye me-1"></i>Ver PDF
+                                    </button>
                                 </div>
+                                @endif
                             </div>
                         </div>
                         @endforeach
