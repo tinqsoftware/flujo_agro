@@ -15,6 +15,7 @@ use App\Models\DetalleEtapa;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class Ejecucion extends Controller
 {
@@ -202,6 +203,189 @@ class Ejecucion extends Controller
     }
 
     /**
+     * Show the configuration modal for a specific flow execution.
+     */
+    public function configurar(Flujo $flujo)
+    {
+        try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+            // SUPERADMIN no puede ejecutar flujos, solo visualizarlos
+            if ($isSuper) {
+                return response()->json(['error' => 'SUPERADMIN no puede ejecutar flujos'], 403);
+            }
+
+            // Verificar permisos de empresa
+            if ($flujo->id_emp != $user->id_emp) {
+                return response()->json(['error' => 'Sin permisos para este flujo'], 403);
+            }
+
+            // Verificar que el flujo esté configurado (estado 1)
+            if ($flujo->estado != 1) {
+                return response()->json(['error' => 'El flujo no está disponible para ejecución'], 404);
+            }
+
+            // Cargar etapas con sus tareas y documentos para mostrar en la configuración
+            $flujo->load([
+                'etapas' => function($query) {
+                    $query->where('estado', 1)->orderBy('nro');
+                },
+                'etapas.tareas' => function($query) {
+                    $query->where('estado', 1)->orderBy('nombre');
+                },
+                'etapas.documentos' => function($query) {
+                    $query->where('estado', 1)->orderBy('nombre');
+                }
+            ]);
+
+            Log::info('Configuración de flujo cargada', [
+                'flujo_id' => $flujo->id,
+                'etapas_count' => $flujo->etapas->count(),
+                'total_tareas' => $flujo->etapas->sum(function($etapa) { return $etapa->tareas->count(); }),
+                'total_documentos' => $flujo->etapas->sum(function($etapa) { return $etapa->documentos->count(); })
+            ]);
+
+            // Retornar JSON para el modal
+            return response()->json([
+                'success' => true,
+                'flujo' => [
+                    'id' => $flujo->id,
+                    'nombre' => $flujo->nombre,
+                    'descripcion' => $flujo->descripcion,
+                    'etapas' => $flujo->etapas->map(function($etapa) {
+                        return [
+                            'id' => $etapa->id,
+                            'nombre' => $etapa->nombre,
+                            'nro' => $etapa->nro,
+                            'tareas' => $etapa->tareas->map(function($tarea) {
+                                return [
+                                    'id' => $tarea->id,
+                                    'nombre' => $tarea->nombre,
+                                    'descripcion' => $tarea->descripcion
+                                ];
+                            }),
+                            'documentos' => $etapa->documentos->map(function($documento) {
+                                return [
+                                    'id' => $documento->id,
+                                    'nombre' => $documento->nombre,
+                                    'descripcion' => $documento->descripcion
+                                ];
+                            })
+                        ];
+                    })
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error al cargar configuración de flujo', [
+                'flujo_id' => $flujo->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json(['error' => 'Error interno del servidor'], 500);
+        }
+    }
+
+    /**
+     * Create a new execution with configuration.
+     */
+    public function crearEjecucion(Request $request, Flujo $flujo)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+        // SUPERADMIN no puede ejecutar flujos
+        if ($isSuper) {
+            return response()->json(['error' => 'SUPERADMIN no puede ejecutar flujos'], 403);
+        }
+
+        // Verificar permisos de empresa
+        if ($flujo->id_emp != $user->id_emp) {
+            return response()->json(['error' => 'Sin permisos para este flujo'], 403);
+        }
+
+        // Validar datos
+        $request->validate([
+            'nombre' => 'required|string|max:255',
+            'tareas_seleccionadas' => 'array',
+            'documentos_seleccionados' => 'array'
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            // Crear nuevo registro de ejecución con nombre personalizado
+            $detalleFlujoActivo = DetalleFlujo::create([
+                'nombre' => $request->nombre,
+                'id_flujo' => $flujo->id,
+                'id_emp' => $user->id_emp,
+                'id_user_create' => $user->id,
+                'estado' => 2 // En ejecución
+            ]);
+
+            Log::info('Nueva ejecución creada con configuración personalizada', [
+                'detalle_flujo_id' => $detalleFlujoActivo->id,
+                'nombre_personalizado' => $request->nombre,
+                'flujo_original_id' => $flujo->id,
+                'tareas_seleccionadas' => count($request->tareas_seleccionadas ?? []),
+                'documentos_seleccionados' => count($request->documentos_seleccionados ?? [])
+            ]);
+
+            // Crear registros de detalle_etapa para cada etapa del flujo
+            foreach ($flujo->etapas()->where('estado', 1)->get() as $etapa) {
+                DetalleEtapa::create([
+                    'id_etapa' => $etapa->id,
+                    'id_detalle_flujo' => $detalleFlujoActivo->id,
+                    'estado' => 2 // En ejecución
+                ]);
+            }
+
+            // Crear registros de detalle_tarea solo para las tareas seleccionadas
+            if (!empty($request->tareas_seleccionadas)) {
+                foreach ($request->tareas_seleccionadas as $tareaId) {
+                    DetalleTarea::create([
+                        'id_tarea' => $tareaId,
+                        'id_detalle_flujo' => $detalleFlujoActivo->id,
+                        'estado' => 2 // En ejecución, pendiente de completar
+                    ]);
+                }
+            }
+
+            // Crear registros de detalle_documento solo para los documentos seleccionados
+            if (!empty($request->documentos_seleccionados)) {
+                foreach ($request->documentos_seleccionados as $documentoId) {
+                    DetalleDocumento::create([
+                        'id_documento' => $documentoId,
+                        'id_detalle_flujo' => $detalleFlujoActivo->id,
+                        'estado' => 2 // Pendiente de subir
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'redirect_url' => "/ejecucion/{$flujo->id}/ejecutar",
+                'detalle_flujo_id' => $detalleFlujoActivo->id,
+                'mensaje' => 'Ejecución configurada y creada exitosamente'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            Log::error('Error al crear ejecución configurada', [
+                'error' => $e->getMessage(),
+                'flujo_id' => $flujo->id,
+                'user_id' => $user->id
+            ]);
+
+            return response()->json(['error' => 'Error al crear la ejecución'], 500);
+        }
+    }
+
+    /**
      * Show the execution process interface for a specific flow.
      */
     public function ejecutar(Flujo $flujo)
@@ -225,27 +409,23 @@ class Ejecucion extends Controller
             abort(404, 'El flujo no está disponible para ejecución.');
         }
 
-        // SIEMPRE crear una nueva ejecución independiente
-        Log::info('Creando nueva ejecución de flujo', [
-            'flujo_id' => $flujo->id,
-            'flujo_nombre' => $flujo->nombre,
-            'user_id' => $user->id,
-            'empresa_id' => $user->id_emp,
-            'mensaje' => 'NUEVA INSTANCIA DE EJECUCIÓN CREADA - SIEMPRE SE CREA UNA NUEVA'
-        ]);
+        // Buscar ejecución activa más reciente para este usuario/flujo
+        $detalleFlujoActivo = DetalleFlujo::where('id_flujo', $flujo->id)
+            ->where('id_emp', $user->id_emp)
+            ->where('estado', 2) // En ejecución
+            ->orderBy('created_at', 'desc')
+            ->first();
 
-        // Crear nuevo registro de ejecución (SIEMPRE)
-        $detalleFlujoActivo = DetalleFlujo::create([
-            'id_flujo' => $flujo->id,
-            'id_emp' => $user->id_emp,
-            'id_user_create' => $user->id,
-            'estado' => 2 // En ejecución
-        ]);
+        if (!$detalleFlujoActivo) {
+            // Si no hay ejecución activa, redirigir al index para crear una nueva
+            return redirect()->route('ejecucion.index')
+                ->with('info', 'No hay ejecución activa de este flujo. Crea una nueva ejecución desde el selector.');
+        }
 
-        Log::info('Nueva ejecución creada exitosamente', [
+        Log::info('Continuando ejecución existente', [
             'detalle_flujo_id' => $detalleFlujoActivo->id,
-            'flujo_original_id' => $flujo->id,
-            'estado_inicial' => $detalleFlujoActivo->estado
+            'flujo_id' => $flujo->id,
+            'nombre_ejecucion' => $detalleFlujoActivo->nombre
         ]);
 
         // Crear registros de detalle_etapa para cada etapa del flujo

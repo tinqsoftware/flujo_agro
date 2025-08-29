@@ -9,6 +9,7 @@ class DetalleFlujo extends Model
     protected $table = 'detalle_flujo';
     protected $primaryKey = 'id';
     protected $fillable = [
+        'nombre',
         'id_flujo',
         'id_emp',
         'id_user_create',
@@ -17,6 +18,7 @@ class DetalleFlujo extends Model
 
     protected $casts = [
         'id' => 'integer',
+        'nombre' => 'string',
         'id_flujo' => 'integer',
         'id_emp' => 'integer',
         'id_user_create' => 'integer',

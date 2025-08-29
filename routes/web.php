@@ -107,6 +107,8 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
 
         // EJECUCIÓN DE FLUJOS
         Route::resource('ejecucion', Ejecucion::class)->only(['index', 'show']);
+        Route::get('ejecucion/{flujo}/configurar', [Ejecucion::class, 'configurar'])->name('ejecucion.configurar');
+        Route::post('ejecucion/{flujo}/crear', [Ejecucion::class, 'crearEjecucion'])->name('ejecucion.crear');
         Route::get('ejecucion/{flujo}/ejecutar', [Ejecucion::class, 'ejecutar'])->name('ejecucion.ejecutar');
         
         // AJAX para ejecución

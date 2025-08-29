@@ -58,14 +58,14 @@
                         </select>
                         <div class="row g-2">
                             <!-- Botón oculto pero funcional para el JavaScript -->
-                            <button id="ver-detalle-btn" class="btn btn-outline-info w-100" disabled>
+                            <button id="ver-detalle-btn" class="btn btn-outline-info w-100 d-none" disabled>
                                 <i class="fas fa-eye me-2"></i>Ver Estado
                             </button>
                             
                             @if(!$isSuper)
                             <div class="col-12">
                                 <button id="ejecutar-btn" class="btn btn-success w-100" disabled>
-                                    <i class="fas fa-play me-2"></i>Nueva Ejecución
+                                    <i class="fas fa-cog me-2"></i>Configurar y Ejecutar
                                 </button>
                             </div>
                             @endif
@@ -114,7 +114,7 @@
                             <!-- Header del flujo -->
                             <div class="d-flex justify-content-between align-items-start mb-3">
                                 <div class="flex-grow-1">
-                                    <h5 class="card-title mb-1 text-primary fw-bold">{{ $detalleEjecucion->flujo->nombre }}</h5>
+                                    <h5 class="card-title mb-1 text-primary fw-bold">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h5>
                                     <div class="text-muted small">
                                         <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
                                         @if($isSuper)
@@ -183,7 +183,7 @@
                             <div class="text-center">
                                 @if($isSuper)
                                     <!-- SUPERADMIN solo puede ver -->
-                                    <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-info btn-sm w-100">
+                                    <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-info btn-sm w-100 d-none">
                                         <i class="fas fa-eye me-2"></i>Ver Estado de Ejecución
                                     </a>
                                 @else
@@ -222,7 +222,7 @@
                             <!-- Header del flujo -->
                             <div class="d-flex justify-content-between align-items-start mb-3">
                                 <div class="flex-grow-1">
-                                    <h5 class="card-title mb-1 text-primary fw-bold">{{ $detalleEjecucion->flujo->nombre }}</h5>
+                                    <h5 class="card-title mb-1 text-primary fw-bold">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h5>
                                     <div class="text-muted small">
                                         <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
                                         @if($isSuper)
@@ -301,6 +301,80 @@
             @endforeach
         </div>
     </div>
+@endif
+
+@if(!$isSuper)
+<!-- Modal de Configuración de Ejecución -->
+<div class="modal fade" id="modalConfiguracion" tabindex="-1" aria-labelledby="modalConfiguracionLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modalConfiguracionLabel">
+                    <i class="fas fa-cog me-2"></i>Configurar Nueva Ejecución
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="formConfiguracion">
+                <div class="modal-body">
+                    <!-- Información del flujo -->
+                    <div class="alert alert-info mb-4">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-info-circle me-2 mt-1"></i>
+                            <div>
+                                <h6 class="mb-1">Flujo: <span id="flujo-nombre-modal">-</span></h6>
+                                <p class="mb-0 small" id="flujo-descripcion-modal">-</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Nombre de la ejecución -->
+                    <div class="mb-4">
+                        <label for="nombre-ejecucion" class="form-label fw-bold">
+                            <i class="fas fa-tag me-1"></i>Nombre de esta ejecución
+                        </label>
+                        <input type="text" class="form-control" id="nombre-ejecucion" name="nombre" required 
+                               placeholder="Ej: Producción Lote #123, Cliente ABC - Enero 2025">
+                        <div class="form-text">Dale un nombre descriptivo para identificar fácilmente esta ejecución</div>
+                    </div>
+
+                    <!-- Configuración de tareas y documentos -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="fw-bold mb-3">
+                                <i class="fas fa-tasks me-1"></i>Tareas a incluir
+                                <button type="button" class="btn btn-sm btn-outline-success ms-2" id="select-all-tareas">
+                                    <i class="fas fa-check-double"></i> Todas
+                                </button>
+                            </h6>
+                            <div id="tareas-container" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                                <!-- Las tareas se cargarán dinámicamente -->
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="fw-bold mb-3">
+                                <i class="fas fa-file-alt me-1"></i>Documentos a incluir
+                                <button type="button" class="btn btn-sm btn-outline-success ms-2" id="select-all-documentos">
+                                    <i class="fas fa-check-double"></i> Todos
+                                </button>
+                            </h6>
+                            <div id="documentos-container" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                                <!-- Los documentos se cargarán dinámicamente -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-play me-1"></i>Crear y Ejecutar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endif
 
 @endsection
@@ -402,15 +476,39 @@ document.addEventListener('DOMContentLoaded', function() {
     const ejecutarBtn = document.getElementById('ejecutar-btn');
     const verDetalleBtn = document.getElementById('ver-detalle-btn');
     const isSuper = @json($isSuper);
+    
+    console.log('DOM loaded. isSuper:', isSuper);
+    console.log('flujoSelector existe:', !!flujoSelector);
+    console.log('ejecutarBtn existe:', !!ejecutarBtn);
+    console.log('verDetalleBtn existe:', !!verDetalleBtn);
+    
+    // Variables para el modal
+    let modalConfiguracion, formConfiguracion;
+    let flujoSeleccionado = null;
 
     // Verificar que los elementos básicos existan
     if (!flujoSelector || !verDetalleBtn) {
+        console.error('Elementos básicos no encontrados');
         return;
     }
 
     // Para usuarios no-super, verificar que existe el botón ejecutar
     if (!isSuper && !ejecutarBtn) {
+        console.error('Botón ejecutar no encontrado para usuario no-super');
         return;
+    }
+
+    // Inicializar modal si no es SUPERADMIN
+    if (!isSuper) {
+        const modalElement = document.getElementById('modalConfiguracion');
+        if (modalElement) {
+            modalConfiguracion = new bootstrap.Modal(modalElement);
+            formConfiguracion = document.getElementById('formConfiguracion');
+            console.log('Modal inicializado correctamente');
+        } else {
+            console.error('Modal de configuración no encontrado');
+            return;
+        }
     }
 
     // Función para actualizar estado de botones
@@ -455,13 +553,239 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('Por favor selecciona un flujo primero');
                 return;
             }
+
+            console.log('Iniciando configuración para flujo ID:', selectedId);
+            console.log('Modal configuración existe:', !!modalConfiguracion);
+            console.log('Form configuración existe:', !!formConfiguracion);
             
-            if (!confirm('¿Estás seguro de que quieres iniciar una nueva ejecución de este flujo?\n\nSe creará una instancia independiente que podrás ejecutar por separado.')) {
-                return;
+            // Cargar configuración del flujo y mostrar modal
+            cargarConfiguracionFlujo(selectedId);
+        });
+    } else if (!isSuper) {
+        console.error('Botón ejecutar no encontrado para usuario no-super');
+    }
+
+    // Función para cargar la configuración del flujo
+    function cargarConfiguracionFlujo(flujoId) {
+        console.log('Cargando configuración para flujo:', flujoId);
+        
+        // Mostrar loading
+        ejecutarBtn.disabled = true;
+        ejecutarBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Cargando...';
+
+        fetch(`/ejecucion/${flujoId}/configurar`)
+            .then(response => {
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Datos recibidos:', data);
+                
+                if (!data.flujo) {
+                    throw new Error('No se recibieron datos del flujo');
+                }
+                
+                flujoSeleccionado = data.flujo;
+                
+                // Verificar que los elementos del modal existan antes de usarlos
+                const nombreModal = document.getElementById('flujo-nombre-modal');
+                const descripcionModal = document.getElementById('flujo-descripcion-modal');
+                const nombreEjecucion = document.getElementById('nombre-ejecucion');
+                
+                console.log('Elementos del modal:');
+                console.log('nombreModal existe:', !!nombreModal);
+                console.log('descripcionModal existe:', !!descripcionModal);
+                console.log('nombreEjecucion existe:', !!nombreEjecucion);
+                
+                if (!nombreModal || !descripcionModal || !nombreEjecucion) {
+                    throw new Error('Elementos del modal no encontrados');
+                }
+                
+                // Llenar información del modal
+                nombreModal.textContent = data.flujo.nombre;
+                descripcionModal.textContent = data.flujo.descripcion || 'Sin descripción';
+                
+                // Pre-llenar nombre de ejecución
+                const fechaHoy = new Date().toLocaleDateString('es-ES');
+                nombreEjecucion.value = `${data.flujo.nombre} - ${fechaHoy}`;
+                
+                // Cargar tareas
+                cargarTareas(data.flujo.etapas);
+                
+                // Cargar documentos
+                cargarDocumentos(data.flujo.etapas);
+                
+                // Mostrar modal
+                console.log('Mostrando modal...');
+                modalConfiguracion.show();
+            })
+            .catch(error => {
+                console.error('Error completo:', error);
+                alert(`Error al cargar la configuración del flujo: ${error.message}`);
+            })
+            .finally(() => {
+                // Restaurar botón
+                ejecutarBtn.disabled = false;
+                ejecutarBtn.innerHTML = '<i class="fas fa-cog me-2"></i>Configurar y Ejecutar';
+            });
+    }
+
+    // Función para cargar tareas en el modal
+    function cargarTareas(etapas) {
+        const container = document.getElementById('tareas-container');
+        if (!container) {
+            console.error('Container de tareas no encontrado');
+            return;
+        }
+        
+        container.innerHTML = '';
+
+        etapas.forEach(etapa => {
+            if (etapa.tareas.length > 0) {
+                // Título de etapa
+                const etapaTitle = document.createElement('div');
+                etapaTitle.className = 'mb-2';
+                etapaTitle.innerHTML = `<small class="fw-bold text-primary">Etapa ${etapa.nro}: ${etapa.nombre}</small>`;
+                container.appendChild(etapaTitle);
+
+                // Tareas de la etapa
+                etapa.tareas.forEach(tarea => {
+                    const tareaDiv = document.createElement('div');
+                    tareaDiv.className = 'form-check mb-2';
+                    tareaDiv.innerHTML = `
+                        <input class="form-check-input tarea-checkbox" type="checkbox" value="${tarea.id}" 
+                               id="tarea-${tarea.id}" checked>
+                        <label class="form-check-label" for="tarea-${tarea.id}">
+                            <strong>${tarea.nombre}</strong>
+                            ${tarea.descripcion ? `<br><small class="text-muted">${tarea.descripcion}</small>` : ''}
+                        </label>
+                    `;
+                    container.appendChild(tareaDiv);
+                });
             }
-            
-            const url = `/ejecucion/${selectedId}/ejecutar`;
-            window.location.href = url;
+        });
+    }
+
+    // Función para cargar documentos en el modal
+    function cargarDocumentos(etapas) {
+        const container = document.getElementById('documentos-container');
+        if (!container) {
+            console.error('Container de documentos no encontrado');
+            return;
+        }
+        
+        container.innerHTML = '';
+
+        etapas.forEach(etapa => {
+            if (etapa.documentos.length > 0) {
+                // Título de etapa
+                const etapaTitle = document.createElement('div');
+                etapaTitle.className = 'mb-2';
+                etapaTitle.innerHTML = `<small class="fw-bold text-primary">Etapa ${etapa.nro}: ${etapa.nombre}</small>`;
+                container.appendChild(etapaTitle);
+
+                // Documentos de la etapa
+                etapa.documentos.forEach(documento => {
+                    const docDiv = document.createElement('div');
+                    docDiv.className = 'form-check mb-2';
+                    docDiv.innerHTML = `
+                        <input class="form-check-input documento-checkbox" type="checkbox" value="${documento.id}" 
+                               id="documento-${documento.id}" checked>
+                        <label class="form-check-label" for="documento-${documento.id}">
+                            <strong>${documento.nombre}</strong>
+                            ${documento.descripcion ? `<br><small class="text-muted">${documento.descripcion}</small>` : ''}
+                        </label>
+                    `;
+                    container.appendChild(docDiv);
+                });
+            }
+        });
+    }
+
+    // Eventos para seleccionar todas las tareas/documentos
+    if (!isSuper) {
+        const selectAllTareas = document.getElementById('select-all-tareas');
+        const selectAllDocumentos = document.getElementById('select-all-documentos');
+        
+        if (selectAllTareas) {
+            selectAllTareas.addEventListener('click', function() {
+                const checkboxes = document.querySelectorAll('.tarea-checkbox');
+                const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                checkboxes.forEach(cb => cb.checked = !allChecked);
+            });
+        }
+
+        if (selectAllDocumentos) {
+            selectAllDocumentos.addEventListener('click', function() {
+                const checkboxes = document.querySelectorAll('.documento-checkbox');
+                const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                checkboxes.forEach(cb => cb.checked = !allChecked);
+            });
+        }
+
+        // Evento para enviar configuración
+        if (formConfiguracion) {
+            formConfiguracion.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const nombre = document.getElementById('nombre-ejecucion').value.trim();
+                if (!nombre) {
+                    alert('Por favor ingresa un nombre para la ejecución');
+                    return;
+                }
+
+                // Recopilar tareas seleccionadas
+                const tareasSeleccionadas = Array.from(document.querySelectorAll('.tarea-checkbox:checked'))
+                    .map(cb => cb.value);
+                
+                // Recopilar documentos seleccionados
+                const documentosSeleccionados = Array.from(document.querySelectorAll('.documento-checkbox:checked'))
+                    .map(cb => cb.value);
+
+                // Enviar configuración
+                enviarConfiguracion(flujoSeleccionado.id, {
+                    nombre: nombre,
+                    tareas_seleccionadas: tareasSeleccionadas,
+                    documentos_seleccionados: documentosSeleccionados
+                });
+            });
+        }
+    }
+
+    // Función para enviar la configuración
+    function enviarConfiguracion(flujoId, configuracion) {
+        const submitBtn = formConfiguracion.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creando...';
+
+        fetch(`/ejecucion/${flujoId}/crear`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify(configuracion)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                modalConfiguracion.hide();
+                // Redirigir a la ejecución
+                window.location.href = data.redirect_url;
+            } else {
+                alert(data.error || 'Error al crear la ejecución');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al crear la ejecución');
+        })
+        .finally(() => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-play me-1"></i>Crear y Ejecutar';
         });
     }
     
