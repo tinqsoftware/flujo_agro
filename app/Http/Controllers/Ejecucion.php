@@ -139,16 +139,16 @@ class Ejecucion extends Controller
 
             // Cargar datos de progreso desde las tablas detalle
             foreach ($flujo->etapas as $etapa) {
-                // Cargar tareas completadas
+                // Cargar tareas completadas con información del usuario
                 foreach ($etapa->tareas as $tarea) {
-                    $detalleTarea = DetalleTarea::where('id_tarea', $tarea->id)->first();
+                    $detalleTarea = DetalleTarea::with('userCreate')->where('id_tarea', $tarea->id)->first();
                     $tarea->completada = $detalleTarea ? $detalleTarea->estado : false;
                     $tarea->detalle = $detalleTarea;
                 }
                 
-                // Cargar documentos subidos
+                // Cargar documentos subidos con información del usuario
                 foreach ($etapa->documentos as $documento) {
-                    $detalleDocumento = DetalleDocumento::where('id_documento', $documento->id)->first();
+                    $detalleDocumento = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)->first();
                     $documento->subido = $detalleDocumento ? $detalleDocumento->estado : false;
                     $documento->detalle = $detalleDocumento;
                     // Si hay archivo subido, generar URL
@@ -536,7 +536,7 @@ class Ejecucion extends Controller
                 // Buscar DetalleTarea vinculado a esta ejecución específica a través del detalle_etapa
                 $detalleTarea = null;
                 if ($detalleEtapa) {
-                    $detalleTarea = DetalleTarea::where('id_tarea', $tarea->id)
+                    $detalleTarea = DetalleTarea::with('userCreate')->where('id_tarea', $tarea->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
                         ->first();
                 }
@@ -545,13 +545,14 @@ class Ejecucion extends Controller
                 $tarea->completada = $detalleTarea ? ($detalleTarea->estado == 3) : false;
                 $tarea->detalle_id = $detalleTarea ? $detalleTarea->id : null;
                 $tarea->detalle_flujo_id = $detalleFlujo->id;
+                $tarea->detalle = $detalleTarea; // Agregar referencia al detalle completo
             }
             
             foreach ($etapa->documentos as $documento) {
                 // Buscar DetalleDocumento vinculado a esta ejecución específica a través del detalle_etapa
                 $detalleDocumento = null;
                 if ($detalleEtapa) {
-                    $detalleDocumento = DetalleDocumento::where('id_documento', $documento->id)
+                    $detalleDocumento = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
                         ->first();
                 }
@@ -562,6 +563,7 @@ class Ejecucion extends Controller
                     Storage::url($detalleDocumento->ruta_doc) : null;
                 $documento->detalle_id = $detalleDocumento ? $detalleDocumento->id : null;
                 $documento->detalle_flujo_id = $detalleFlujo->id;
+                $documento->detalle = $detalleDocumento; // Agregar referencia al detalle completo
             }
         }
 
@@ -947,6 +949,11 @@ class Ejecucion extends Controller
                 'archivo_url' => Storage::url($rutaArchivo),
                 'nombre_archivo' => $archivo->getClientOriginalName(),
                 'detalle_id' => $detalle->id,
+                'usuario' => [
+                    'name' => $user->name,
+                    'id' => $user->id
+                ],
+                'fecha_subida' => $detalle->updated_at->format('d/m/Y H:i'),
                 'estados' => $this->verificarYActualizarEstados($documentoId, 'documento', $detalleFlujoId)
             ]);
 

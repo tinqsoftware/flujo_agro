@@ -197,6 +197,16 @@
                                     @if($tarea->descripcion)
                                         <div class="small text-muted">{{ $tarea->descripcion }}</div>
                                     @endif
+                                    @if($tarea->completada && $tarea->detalle && $tarea->detalle->userCreate)
+                                        <div class="small text-success mt-1">
+                                            <i class="fas fa-user me-1"></i>
+                                            Completada por: <strong>{{ $tarea->detalle->userCreate->name }}</strong>
+                                            <span class="text-muted ms-2">
+                                                <i class="fas fa-clock me-1"></i>
+                                                {{ $tarea->detalle->updated_at->format('d/m/Y H:i') }}
+                                            </span>
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
                             @endforeach
@@ -228,6 +238,16 @@
                                                 <span class="badge bg-success">
                                                     <i class="fas fa-check me-1"></i>Subido
                                                 </span>
+                                                @if($documento->detalle && $documento->detalle->userCreate)
+                                                    <div class="small text-success mt-1">
+                                                        <i class="fas fa-user me-1"></i>
+                                                        Subido por: <strong>{{ $documento->detalle->userCreate->name }}</strong>
+                                                        <span class="text-muted ms-2">
+                                                            <i class="fas fa-clock me-1"></i>
+                                                            {{ $documento->detalle->updated_at->format('d/m/Y H:i') }}
+                                                        </span>
+                                                    </div>
+                                                @endif
                                             @else
                                                 <span class="badge bg-warning text-dark">
                                                     <i class="fas fa-clock me-1"></i>Pendiente
@@ -692,7 +712,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 const btnGroup = documentoItem.querySelector('.btn-group-vertical');
                 
                 // Actualizar estado
-                statusElement.innerHTML = '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Subido</span>';
+                statusElement.innerHTML = `
+                    <span class="badge bg-success">
+                        <i class="fas fa-check me-1"></i>Subido
+                    </span>
+                    <div class="small text-success mt-1">
+                        <i class="fas fa-user me-1"></i>
+                        Subido por: <strong>${data.usuario.name}</strong>
+                        <span class="text-muted ms-2">
+                            <i class="fas fa-clock me-1"></i>
+                            ${data.fecha_subida}
+                        </span>
+                    </div>
+                `;
                 
                 // Agregar botones de ver y descargar
                 btnGroup.innerHTML = `
@@ -708,6 +740,13 @@ document.addEventListener('DOMContentLoaded', function() {
                        title="Descargar">
                         <i class="fas fa-download"></i>
                     </a>
+                    <button type="button" class="btn btn-outline-danger btn-sm eliminar-documento" 
+                            data-documento-id="${documentoId}"
+                            data-documento-nombre="${document.getElementById('documento-nombre').textContent}"
+                            data-url="${data.archivo_url}"
+                            title="Eliminar documento">
+                        <i class="fas fa-trash"></i>
+                    </button>
                     <button type="button" class="btn btn-outline-primary btn-sm subir-documento" 
                             data-documento-id="${documentoId}"
                             title="Cambiar archivo">
@@ -717,6 +756,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Reagregar event listeners
                 btnGroup.querySelector('.ver-pdf').addEventListener('click', verPDF);
+                btnGroup.querySelector('.eliminar-documento').addEventListener('click', function() {
+                    // Lógica de eliminar documento existente
+                    const documentoId = this.dataset.documentoId;
+                    const documentoNombre = this.dataset.documentoNombre;
+                    const documentoUrl = this.dataset.url;
+                    
+                    // Configurar modal
+                    document.getElementById('info-nombre-documento').textContent = documentoNombre;
+                    document.getElementById('preview-documento-eliminar').src = documentoUrl;
+                    document.getElementById('motivo-eliminacion').value = '';
+                    
+                    // Guardar datos para la confirmación
+                    const modal = document.getElementById('confirmarEliminarDocumento');
+                    modal.dataset.documentoId = documentoId;
+                    modal.dataset.documentoNombre = documentoNombre;
+                    
+                    const modalInstance = new bootstrap.Modal(modal);
+                    modalInstance.show();
+                });
                 btnGroup.querySelector('.subir-documento').addEventListener('click', function() {
                     if (!procesoIniciado) {
                         alert('Debes iniciar la ejecución del flujo primero');
