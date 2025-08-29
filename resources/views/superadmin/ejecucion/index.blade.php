@@ -304,9 +304,16 @@
                             <div class="text-center">
                                 @if($isSuper)
                                     <!-- SUPERADMIN solo puede ver -->
-                                    <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-info btn-sm w-100">
-                                        <i class="fas fa-eye me-2"></i>Ver Estado
-                                    </a>
+                                    <div class="d-grid gap-2">
+                                        <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-info btn-sm">
+                                            <i class="fas fa-eye me-2"></i>Ver Estado
+                                        </a>
+                                        <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
+                                                data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
+                                                data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                            <i class="fas fa-search me-2"></i>Previsualizar Flujo
+                                        </button>
+                                    </div>
                                 @else
                                     <!-- Usuarios de empresa pueden reactivar y cancelar -->
                                     <div class="d-grid gap-2">
@@ -315,11 +322,22 @@
                                                 data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
                                             <i class="fas fa-play me-2"></i>Reactivar Ejecución
                                         </button>
-                                        <button type="button" class="btn btn-outline-danger btn-sm cancelar-ejecucion" 
-                                                data-detalle-id="{{ $detalleEjecucion->id }}"
-                                                data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
-                                            <i class="fas fa-times me-2"></i>Cancelar Ejecución
-                                        </button>
+                                        <div class="row g-1">
+                                            <div class="col-6">
+                                                <button type="button" class="btn btn-outline-danger btn-sm cancelar-ejecucion" 
+                                                        data-detalle-id="{{ $detalleEjecucion->id }}"
+                                                        data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                                    <i class="fas fa-times me-1"></i>Cancelar
+                                                </button>
+                                            </div>
+                                            <div class="col-6">
+                                                <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
+                                                        data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
+                                                        data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                                    <i class="fas fa-search me-1"></i>Ver
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 @endif
                             </div>
@@ -418,9 +436,16 @@
                             <!-- Botones de acción -->
                             <div class="text-center">
                                 <!-- Ejecución cancelada - solo se puede ver -->
-                                <button class="btn btn-outline-secondary btn-sm w-100" disabled>
-                                    <i class="fas fa-ban me-2"></i>Ejecución Cancelada
-                                </button>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-secondary btn-sm" disabled>
+                                        <i class="fas fa-ban me-2"></i>Ejecución Cancelada
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
+                                            data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
+                                            data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                        <i class="fas fa-search me-2"></i>Previsualizar Flujo
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -519,9 +544,16 @@
                             <!-- Botones de acción -->
                             <div class="text-center">
                                 <!-- Ejecución terminada - todos pueden ver detalles -->
-                                <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-success btn-sm w-100">
-                                    <i class="fas fa-eye me-2"></i>Ver Detalles Completos
-                                </a>
+                                <div class="d-grid gap-2">
+                                    <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-success btn-sm">
+                                        <i class="fas fa-eye me-2"></i>Ver Detalles Completos
+                                    </a>
+                                    <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
+                                            data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
+                                            data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                        <i class="fas fa-search me-2"></i>Previsualizar Flujo
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -638,8 +670,35 @@
             </form>
         </div>
     </div>
-</div>
+    </div>
 @endif
+
+<!-- Modal para Previsualizar Flujo -->
+<div class="modal fade" id="modalPrevisualizarFlujo" tabindex="-1" aria-labelledby="modalPrevisualizarFlujoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modalPrevisualizarFlujoLabel">
+                    <i class="fas fa-search me-2"></i>Previsualización del Flujo
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                <div id="contenido-previsualizacion">
+                    <div class="text-center py-4">
+                        <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
+                        <p class="mt-2">Cargando información del flujo...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 @endsection
 
@@ -1235,6 +1294,246 @@ document.addEventListener('DOMContentLoaded', function() {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalHtml;
         });
+    }
+    
+    // Manejar botones de previsualizar flujo
+    document.querySelectorAll('.previsualizar-flujo').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const flujoId = this.dataset.flujoId;
+            const flujoNombre = this.dataset.flujoNombre;
+            
+            // Actualizar título del modal
+            document.getElementById('modalPrevisualizarFlujoLabel').innerHTML = 
+                `<i class="fas fa-search me-2"></i>Previsualización: ${flujoNombre}`;
+            
+            // Mostrar modal
+            const modal = new bootstrap.Modal(document.getElementById('modalPrevisualizarFlujo'));
+            modal.show();
+            
+            // Cargar contenido del flujo
+            cargarPrevisualizacionFlujo(flujoId);
+        });
+    });
+
+    // Función para cargar la previsualización del flujo
+    function cargarPrevisualizacionFlujo(flujoId) {
+        const contenido = document.getElementById('contenido-previsualizacion');
+        
+        // Mostrar loading
+        contenido.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
+                <p class="mt-2">Cargando información del flujo...</p>
+            </div>
+        `;
+
+        fetch(`/ejecucion/${flujoId}/previsualizar`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (!data.flujo) {
+                    throw new Error('No se recibieron datos del flujo');
+                }
+                
+                mostrarPrevisualizacionFlujo(data.flujo);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                contenido.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Error al cargar la información del flujo: ${error.message}
+                    </div>
+                `;
+            });
+    }
+
+    // Función para mostrar la previsualización del flujo
+    function mostrarPrevisualizacionFlujo(flujo) {
+        const contenido = document.getElementById('contenido-previsualizacion');
+        
+        let html = `
+            <!-- Información del flujo -->
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle text-primary me-2"></i>
+                        Información General
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Nombre:</strong> ${flujo.nombre}</p>
+                            <p><strong>Tipo:</strong> ${flujo.tipo ? flujo.tipo.nombre : 'Sin tipo'}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Estado:</strong> <span class="badge bg-success">Activo</span></p>
+                            <p><strong>Total Etapas:</strong> ${flujo.etapas.length}</p>
+                        </div>
+                    </div>
+                    ${flujo.descripcion ? `<p><strong>Descripción:</strong> ${flujo.descripcion}</p>` : ''}
+                </div>
+            </div>
+
+            <!-- Etapas del flujo -->
+            <div class="mb-4">
+                <h6 class="mb-3">
+                    <i class="fas fa-list-ol text-primary me-2"></i>
+                    Etapas del Flujo (${flujo.etapas.length})
+                </h6>
+        `;
+
+        flujo.etapas.forEach((etapa, index) => {
+            const totalTareas = etapa.tareas ? etapa.tareas.length : 0;
+            const totalDocumentos = etapa.documentos ? etapa.documentos.length : 0;
+            
+            html += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <span class="badge bg-primary me-2">${etapa.nro}</span>
+                                ${etapa.nombre}
+                            </h6>
+                            <div>
+                                <span class="badge bg-info me-1">${totalTareas} tareas</span>
+                                <span class="badge bg-warning">${totalDocumentos} documentos</span>
+                            </div>
+                        </div>
+                        ${etapa.descripcion ? `<small class="text-muted">${etapa.descripcion}</small>` : ''}
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+            `;
+
+            // Mostrar tareas si existen
+            if (totalTareas > 0) {
+                html += `
+                    <div class="col-md-6">
+                        <h6 class="text-primary">
+                            <i class="fas fa-tasks me-1"></i>Tareas (${totalTareas})
+                        </h6>
+                        <div class="list-group list-group-flush">
+                `;
+                
+                etapa.tareas.forEach(tarea => {
+                    html += `
+                        <div class="list-group-item border-0 px-0">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-circle text-secondary me-2 mt-1" style="font-size: 0.5rem;"></i>
+                                <div class="flex-grow-1">
+                                    <strong>${tarea.nombre}</strong>
+                                    ${tarea.descripcion ? `<br><small class="text-muted">${tarea.descripcion}</small>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Mostrar documentos si existen
+            if (totalDocumentos > 0) {
+                html += `
+                    <div class="col-md-6">
+                        <h6 class="text-primary">
+                            <i class="fas fa-file-pdf me-1"></i>Documentos (${totalDocumentos})
+                        </h6>
+                        <div class="list-group list-group-flush">
+                `;
+                
+                etapa.documentos.forEach(documento => {
+                    html += `
+                        <div class="list-group-item border-0 px-0">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-file-pdf text-danger me-2 mt-1"></i>
+                                <div class="flex-grow-1">
+                                    <strong>${documento.nombre}</strong>
+                                    ${documento.descripcion ? `<br><small class="text-muted">${documento.descripcion}</small>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Si no hay tareas ni documentos
+            if (totalTareas === 0 && totalDocumentos === 0) {
+                html += `
+                    <div class="col-12">
+                        <div class="text-center text-muted py-3">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Esta etapa no tiene tareas ni documentos configurados
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += `
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `
+            </div>
+
+            <!-- Resumen -->
+            <div class="card bg-light">
+                <div class="card-body">
+                    <h6 class="text-primary mb-3">
+                        <i class="fas fa-chart-bar me-1"></i>Resumen del Flujo
+                    </h6>
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <div class="p-3">
+                                <i class="fas fa-list-ol fa-2x text-primary mb-2"></i>
+                                <h5>${flujo.etapas.length}</h5>
+                                <small class="text-muted">Etapas</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3">
+                                <i class="fas fa-tasks fa-2x text-info mb-2"></i>
+                                <h5>${flujo.etapas.reduce((total, etapa) => total + (etapa.tareas ? etapa.tareas.length : 0), 0)}</h5>
+                                <small class="text-muted">Tareas Totales</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3">
+                                <i class="fas fa-file-pdf fa-2x text-warning mb-2"></i>
+                                <h5>${flujo.etapas.reduce((total, etapa) => total + (etapa.documentos ? etapa.documentos.length : 0), 0)}</h5>
+                                <small class="text-muted">Documentos Totales</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3">
+                                <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                                <h5>100%</h5>
+                                <small class="text-muted">Configurado</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        contenido.innerHTML = html;
     }
     
     // Actualización inicial de botones

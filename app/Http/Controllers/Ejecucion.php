@@ -289,6 +289,85 @@ class Ejecucion extends Controller
     }
 
     /**
+     * Get flow preview information.
+     */
+    public function previsualizar(Flujo $flujo)
+    {
+        try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+            // Verificar permisos de empresa (SUPERADMIN puede ver todos)
+            if (!$isSuper && $flujo->id_emp != $user->id_emp) {
+                return response()->json(['error' => 'Sin permisos para ver este flujo'], 403);
+            }
+
+            // Cargar el flujo con todas sus relaciones
+            $flujo->load([
+                'tipo',
+                'empresa',
+                'etapas' => function($query) {
+                    $query->where('estado', 1)->orderBy('nro');
+                },
+                'etapas.tareas' => function($query) {
+                    $query->where('estado', 1)->orderBy('id');
+                },
+                'etapas.documentos' => function($query) {
+                    $query->where('estado', 1)->orderBy('id');
+                }
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'flujo' => [
+                    'id' => $flujo->id,
+                    'nombre' => $flujo->nombre,
+                    'descripcion' => $flujo->descripcion,
+                    'tipo' => $flujo->tipo ? [
+                        'id' => $flujo->tipo->id,
+                        'nombre' => $flujo->tipo->nombre
+                    ] : null,
+                    'empresa' => $flujo->empresa ? [
+                        'id' => $flujo->empresa->id,
+                        'nombre' => $flujo->empresa->nombre
+                    ] : null,
+                    'etapas' => $flujo->etapas->map(function($etapa) {
+                        return [
+                            'id' => $etapa->id,
+                            'nombre' => $etapa->nombre,
+                            'nro' => $etapa->nro,
+                            'descripcion' => $etapa->descripcion,
+                            'tareas' => $etapa->tareas->map(function($tarea) {
+                                return [
+                                    'id' => $tarea->id,
+                                    'nombre' => $tarea->nombre,
+                                    'descripcion' => $tarea->descripcion
+                                ];
+                            }),
+                            'documentos' => $etapa->documentos->map(function($documento) {
+                                return [
+                                    'id' => $documento->id,
+                                    'nombre' => $documento->nombre,
+                                    'descripcion' => $documento->descripcion
+                                ];
+                            })
+                        ];
+                    })
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error al cargar previsualización de flujo', [
+                'flujo_id' => $flujo->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json(['error' => 'Error interno del servidor'], 500);
+        }
+    }
+
+    /**
      * Create a new execution with configuration.
      */
     public function crearEjecucion(Request $request, Flujo $flujo)

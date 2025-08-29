@@ -108,6 +108,7 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         // EJECUCIÓN DE FLUJOS
         Route::resource('ejecucion', Ejecucion::class)->only(['index', 'show']);
         Route::get('ejecucion/{flujo}/configurar', [Ejecucion::class, 'configurar'])->name('ejecucion.configurar');
+        Route::get('ejecucion/{flujo}/previsualizar', [Ejecucion::class, 'previsualizar'])->name('ejecucion.previsualizar');
         Route::post('ejecucion/{flujo}/crear', [Ejecucion::class, 'crearEjecucion'])->name('ejecucion.crear');
         
         // Nueva ruta que usa detalle_flujo_id en lugar de flujo_id
