@@ -6,19 +6,7 @@
 @section('content-area')
 
 @if($isSuper)
-    <!-- Aviso para SUPERADMIN -->
-    <div class="alert alert-info border-0 shadow-sm mb-4">
-        <div class="d-flex align-items-start">
-            <div class="flex-shrink-0">
-                <i class="fas fa-info-circle fa-lg mt-1"></i>
-            </div>
-            <div class="flex-grow-1 ms-3">
-                <h6 class="alert-heading mb-2">Modo Supervisión - SUPERADMIN</h6>
-                <p class="mb-1">Como SUPERADMIN, solo puedes <strong>visualizar</strong> los flujos de todas las empresas para supervisión.</p>
-                <p class="mb-0"><small class="text-muted">La ejecución de flujos debe ser realizada por usuarios de la empresa correspondiente</small></p>
-            </div>
-        </div>
-    </div>
+    <!-- Aviso para SUPERADMIN eliminado -->
 @endif
 
 
@@ -316,17 +304,6 @@
             </div>
             <form id="formConfiguracion">
                 <div class="modal-body">
-                    <!-- Información del flujo -->
-                    <div class="alert alert-info mb-4">
-                        <div class="d-flex align-items-start">
-                            <i class="fas fa-info-circle me-2 mt-1"></i>
-                            <div>
-                                <h6 class="mb-1">Flujo: <span id="flujo-nombre-modal">-</span></h6>
-                                <p class="mb-0 small" id="flujo-descripcion-modal">-</p>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Nombre de la ejecución -->
                     <div class="mb-4">
                         <label for="nombre-ejecucion" class="form-label fw-bold">
@@ -590,23 +567,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 flujoSeleccionado = data.flujo;
                 
-                // Verificar que los elementos del modal existan antes de usarlos
-                const nombreModal = document.getElementById('flujo-nombre-modal');
-                const descripcionModal = document.getElementById('flujo-descripcion-modal');
+                // Verificar que el elemento de nombre de ejecución exista
                 const nombreEjecucion = document.getElementById('nombre-ejecucion');
                 
                 console.log('Elementos del modal:');
-                console.log('nombreModal existe:', !!nombreModal);
-                console.log('descripcionModal existe:', !!descripcionModal);
                 console.log('nombreEjecucion existe:', !!nombreEjecucion);
                 
-                if (!nombreModal || !descripcionModal || !nombreEjecucion) {
-                    throw new Error('Elementos del modal no encontrados');
+                if (!nombreEjecucion) {
+                    throw new Error('Campo de nombre de ejecución no encontrado');
                 }
-                
-                // Llenar información del modal
-                nombreModal.textContent = data.flujo.nombre;
-                descripcionModal.textContent = data.flujo.descripcion || 'Sin descripción';
                 
                 // Pre-llenar nombre de ejecución
                 const fechaHoy = new Date().toLocaleDateString('es-ES');
