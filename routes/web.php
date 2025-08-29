@@ -121,6 +121,7 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::post('ejecucion/detalle/tarea/actualizar', [Ejecucion::class, 'actualizarTarea'])->name('ejecucion.detalle.tarea.actualizar');
         Route::post('ejecucion/detalle/etapa/grabar', [Ejecucion::class, 'grabarEtapa'])->name('ejecucion.detalle.etapa.grabar');
         Route::post('ejecucion/detalle/documento/subir', [Ejecucion::class, 'subirDocumento'])->name('ejecucion.detalle.documento.subir');
+        Route::post('ejecucion/detalle/documento/{documento}/eliminar', [Ejecucion::class, 'eliminarDocumento'])->name('ejecucion.detalle.documento.eliminar');
         Route::get('ejecucion/detalle/{detalleFlujo}/progreso', [Ejecucion::class, 'progreso'])->name('ejecucion.detalle.progreso');
         
         // Rutas para pausar, reactivar y cancelar ejecuciones

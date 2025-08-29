@@ -1116,6 +1116,123 @@ class Ejecucion extends Controller
     }
 
     /**
+     * Eliminar documento subido
+     */
+    public function eliminarDocumento(Request $request, $documentoId)
+    {
+        try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+            // SUPERADMIN no puede eliminar documentos
+            if ($isSuper) {
+                return response()->json(['error' => 'Los SUPERADMIN no pueden eliminar documentos'], 403);
+            }
+
+            Log::info('Iniciando eliminación de documento', [
+                'documento_id' => $documentoId,
+                'user_id' => $user->id,
+                'request' => $request->all()
+            ]);
+
+            $request->validate([
+                'detalle_flujo_id' => 'required|exists:detalle_flujo,id',
+                'motivo' => 'nullable|string|max:500'
+            ]);
+
+            $detalleFlujoId = $request->detalle_flujo_id;
+            $motivo = $request->motivo;
+
+            // Verificar que el detalle_flujo pertenece a la empresa del usuario
+            $detalleFlujo = DetalleFlujo::where('id', $detalleFlujoId)
+                ->where('id_emp', $user->id_emp)
+                ->firstOrFail();
+
+            // Buscar el documento
+            $documento = \App\Models\Documento::findOrFail($documentoId);
+            
+            // Buscar el detalle_etapa correspondiente
+            $detalleEtapa = DetalleEtapa::where('id_etapa', $documento->id_etapa)
+                ->where('id_detalle_flujo', $detalleFlujoId)
+                ->firstOrFail();
+
+            // Buscar el detalle_documento
+            $detalleDocumento = DetalleDocumento::where('id_documento', $documentoId)
+                ->where('id_detalle_etapa', $detalleEtapa->id)
+                ->first();
+
+            if (!$detalleDocumento) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se encontró el documento en esta ejecución'
+                ], 404);
+            }
+
+            if (!$detalleDocumento->archivo_url) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'El documento no tiene archivo para eliminar'
+                ], 400);
+            }
+
+            DB::beginTransaction();
+
+            // Eliminar archivo físico del storage
+            $archivoPath = str_replace('/storage/', '', $detalleDocumento->archivo_url);
+            if (Storage::disk('public')->exists($archivoPath)) {
+                Storage::disk('public')->delete($archivoPath);
+                Log::info('Archivo físico eliminado', ['path' => $archivoPath]);
+            }
+
+            // Actualizar el detalle_documento - resetear a estado inicial
+            $detalleDocumento->update([
+                'archivo_url' => null,
+                'nombre_archivo' => null,
+                'comentarios' => $motivo ? "Eliminado: " . $motivo : "Documento eliminado",
+                'estado' => 0, // Volver a estado inicial/pendiente
+                'id_user_create' => $user->id
+            ]);
+
+            DB::commit();
+
+            Log::info('Documento eliminado exitosamente', [
+                'documento_id' => $documentoId,
+                'detalle_documento_id' => $detalleDocumento->id,
+                'motivo' => $motivo,
+                'user_id' => $user->id
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Documento eliminado correctamente',
+                'documento_id' => $documentoId,
+                'detalle_id' => $detalleDocumento->id
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            Log::error('Error de validación en eliminar documento: ' . $e->getMessage(), [
+                'request' => $request->all(),
+                'errors' => $e->errors()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error de validación: ' . implode(', ', collect($e->errors())->flatten()->toArray())
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error eliminando documento: ' . $e->getMessage(), [
+                'request' => $request->all(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al eliminar el documento: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get progress information for a detalle_flujo via AJAX
      */
     public function progreso(DetalleFlujo $detalleFlujo)

@@ -252,6 +252,14 @@
                                                title="Descargar">
                                                 <i class="fas fa-download"></i>
                                             </a>
+                                            <!-- Botón para eliminar documento -->
+                                            <button type="button" class="btn btn-outline-danger btn-sm eliminar-documento" 
+                                                    data-documento-id="{{ $documento->id }}"
+                                                    data-documento-nombre="{{ $documento->nombre }}"
+                                                    data-url="{{ $documento->archivo_url }}"
+                                                    title="Eliminar documento">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
                                         @endif
                                         
                                         <!-- Botón para subir/cambiar archivo -->
@@ -336,6 +344,87 @@
                 <a id="pdf-download" href="" class="btn btn-primary" download>
                     <i class="fas fa-download me-2"></i>Descargar
                 </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para confirmar desmarcar tarea -->
+<div class="modal fade" id="confirmarDesmarcarTarea" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Acción</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-3">
+                    <i class="fas fa-exclamation-triangle text-warning" style="font-size: 3rem;"></i>
+                </div>
+                <h6 class="text-center mb-3">¿Desmarcar tarea completada?</h6>
+                <p class="text-muted text-center">
+                    Estás a punto de cambiar el estado de la tarea "<strong id="nombre-tarea-desmarcar"></strong>" 
+                    de <span class="badge bg-success">Completada</span> a <span class="badge bg-secondary">Pendiente</span>.
+                </p>
+                <div class="alert alert-warning">
+                    <small><i class="fas fa-info-circle me-2"></i>Esta acción cambiará el progreso de la etapa.</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning" id="confirmar-desmarcar-tarea">
+                    <i class="fas fa-check me-2"></i>Sí, desmarcar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para confirmar eliminar documento -->
+<div class="modal fade" id="confirmarEliminarDocumento" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Eliminación de Documento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="text-center mb-3">
+                            <i class="fas fa-file-pdf text-danger" style="font-size: 3rem;"></i>
+                        </div>
+                        <h6 class="text-center mb-3">Vista previa del documento</h6>
+                        <div class="border rounded p-2" style="height: 300px; overflow-y: auto;">
+                            <iframe id="preview-documento-eliminar" src="" width="100%" height="280px" frameborder="0"></iframe>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>Información del documento</h6>
+                        <p><strong>Nombre:</strong><br><span id="info-nombre-documento"></span></p>
+                        <p><strong>Estado actual:</strong><br><span class="badge bg-success">Subido</span></p>
+                        <p><strong>Nueva acción:</strong><br><span class="badge bg-danger">Eliminar archivo</span></p>
+                        
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>¡Atención!</strong><br>
+                            <small>Esta acción eliminará el archivo del servidor y cambiará el estado del documento a pendiente.</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Motivo de eliminación:</label>
+                            <textarea class="form-control" id="motivo-eliminacion" rows="3" 
+                                    placeholder="Describe por qué eliminas este documento..."></textarea>
+                            <small class="text-muted">Este campo es opcional pero recomendado.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="confirmar-eliminar-documento">
+                    <i class="fas fa-trash me-2"></i>Sí, eliminar documento
+                </button>
             </div>
         </div>
     </div>
@@ -972,15 +1061,188 @@ document.addEventListener('DOMContentLoaded', function() {
     // Función para agregar event listeners a los checkboxes para marcar cambios pendientes
     function agregarListenersCambiosPendientes() {
         document.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
-            checkbox.addEventListener('change', function() {
-                const etapaCard = this.closest('.etapa-card');
-                marcarCambiosPendientes(etapaCard);
+            checkbox.addEventListener('change', function(e) {
+                const wasChecked = e.target.checked;
+                const previouslyChecked = this.dataset.previouslyChecked === 'true';
+                
+                // Si se está desmarcando una tarea que estaba marcada, mostrar modal de confirmación
+                if (!wasChecked && previouslyChecked) {
+                    e.preventDefault();
+                    this.checked = true; // Revertir temporalmente
+                    
+                    const tareaItem = this.closest('.tarea-item');
+                    const tareaLabel = tareaItem.querySelector('label');
+                    const tareaNombre = tareaLabel.textContent.trim();
+                    
+                    // Configurar modal
+                    document.getElementById('nombre-tarea-desmarcar').textContent = tareaNombre;
+                    const modal = new bootstrap.Modal(document.getElementById('confirmarDesmarcarTarea'));
+                    
+                    // Guardar referencia para la confirmación
+                    document.getElementById('confirmar-desmarcar-tarea').dataset.tareaCheckbox = this.id;
+                    
+                    modal.show();
+                } else {
+                    // Comportamiento normal para marcar o cambios que no requieren confirmación
+                    this.dataset.previouslyChecked = wasChecked;
+                    const etapaCard = this.closest('.etapa-card');
+                    marcarCambiosPendientes(etapaCard);
+                }
+            });
+            
+            // Establecer estado inicial
+            checkbox.dataset.previouslyChecked = checkbox.checked;
+        });
+    }
+
+    // Event listener para confirmar desmarcar tarea
+    document.getElementById('confirmar-desmarcar-tarea').addEventListener('click', function() {
+        const checkboxId = this.dataset.tareaCheckbox;
+        const checkbox = document.getElementById(checkboxId);
+        
+        if (checkbox) {
+            checkbox.checked = false;
+            checkbox.dataset.previouslyChecked = 'false';
+            
+            const etapaCard = checkbox.closest('.etapa-card');
+            marcarCambiosPendientes(etapaCard);
+        }
+        
+        // Cerrar modal
+        bootstrap.Modal.getInstance(document.getElementById('confirmarDesmarcarTarea')).hide();
+    });
+
+    // Event listeners para eliminar documentos
+    function agregarListenersEliminarDocumento() {
+        document.querySelectorAll('.eliminar-documento').forEach(btn => {
+            btn.addEventListener('click', function() {
+                if (!procesoIniciado) {
+                    alert('Debes iniciar la ejecución del flujo primero');
+                    return;
+                }
+
+                if (!detalleFlujoId) {
+                    alert('Error: No se encontró ID de ejecución');
+                    return;
+                }
+
+                const documentoId = this.dataset.documentoId;
+                const documentoNombre = this.dataset.documentoNombre;
+                const documentoUrl = this.dataset.url;
+                
+                // Configurar modal
+                document.getElementById('info-nombre-documento').textContent = documentoNombre;
+                document.getElementById('preview-documento-eliminar').src = documentoUrl;
+                document.getElementById('motivo-eliminacion').value = '';
+                
+                // Guardar datos para la confirmación
+                const modal = document.getElementById('confirmarEliminarDocumento');
+                modal.dataset.documentoId = documentoId;
+                modal.dataset.documentoNombre = documentoNombre;
+                
+                const modalInstance = new bootstrap.Modal(modal);
+                modalInstance.show();
             });
         });
     }
 
-    // Inicializar listeners de cambios pendientes
+    // Event listener para confirmar eliminar documento
+    document.getElementById('confirmar-eliminar-documento').addEventListener('click', function() {
+        const modal = document.getElementById('confirmarEliminarDocumento');
+        const documentoId = modal.dataset.documentoId;
+        const motivo = document.getElementById('motivo-eliminacion').value.trim();
+        
+        const submitBtn = this;
+        submitBtn.disabled = true;
+        const originalHtml = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Eliminando...';
+        
+        // Llamar al endpoint para eliminar documento
+        fetch(`/ejecucion/detalle/documento/${documentoId}/eliminar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({
+                detalle_flujo_id: detalleFlujoId,
+                motivo: motivo
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Actualizar UI del documento
+                const documentoItem = document.querySelector(`[data-documento-id="${documentoId}"]`);
+                const statusElement = documentoItem.querySelector('.document-status');
+                const btnGroup = documentoItem.querySelector('.btn-group-vertical');
+                
+                // Cambiar estado a pendiente
+                statusElement.innerHTML = '<span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pendiente</span>';
+                
+                // Restaurar solo el botón de subir
+                btnGroup.innerHTML = `
+                    <button type="button" class="btn btn-outline-primary btn-sm subir-documento" 
+                            data-documento-id="${documentoId}"
+                            title="Subir archivo">
+                        <i class="fas fa-upload"></i>
+                    </button>
+                `;
+                
+                // Reagregar event listener al botón de subir
+                btnGroup.querySelector('.subir-documento').addEventListener('click', function() {
+                    // Lógica de subir documento existente
+                    mostrarModalSubirDocumento(documentoId);
+                });
+                
+                // Marcar cambios pendientes
+                const etapaCard = documentoItem.closest('.etapa-card');
+                marcarCambiosPendientes(etapaCard);
+                
+                // Cerrar modal
+                bootstrap.Modal.getInstance(modal).hide();
+                
+                // Mostrar mensaje de éxito
+                mostrarMensajeExito('Documento eliminado correctamente. Recuerda grabar los cambios de la etapa.');
+            } else {
+                alert('Error al eliminar el documento: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al eliminar el documento');
+        })
+        .finally(() => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalHtml;
+        });
+    });
+
+    // Inicializar listeners de cambios pendientes y eliminación de documentos
     agregarListenersCambiosPendientes();
+    agregarListenersEliminarDocumento();
+
+    // Función auxiliar para mostrar modal de subir documento
+    function mostrarModalSubirDocumento(documentoId) {
+        if (!procesoIniciado) {
+            alert('Debes iniciar la ejecución del flujo primero');
+            return;
+        }
+
+        if (!detalleFlujoId) {
+            alert('Error: No se encontró ID de ejecución');
+            return;
+        }
+
+        const documentoItem = document.querySelector(`[data-documento-id="${documentoId}"]`);
+        const documentoNombre = documentoItem.querySelector('h6').textContent;
+        
+        document.getElementById('documento-nombre').textContent = documentoNombre;
+        document.getElementById('uploadModal').dataset.documentoId = documentoId;
+        
+        const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
+        modal.show();
+    }
 });
 </script>
 @endpush
