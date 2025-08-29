@@ -119,6 +119,7 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         // AJAX para ejecución - actualizar para usar detalle_flujo_id
         Route::post('ejecucion/detalle/{detalleFlujo}/iniciar', [Ejecucion::class, 'iniciarProceso'])->name('ejecucion.detalle.iniciar');
         Route::post('ejecucion/detalle/tarea/actualizar', [Ejecucion::class, 'actualizarTarea'])->name('ejecucion.detalle.tarea.actualizar');
+        Route::post('ejecucion/detalle/etapa/grabar', [Ejecucion::class, 'grabarEtapa'])->name('ejecucion.detalle.etapa.grabar');
         Route::post('ejecucion/detalle/documento/subir', [Ejecucion::class, 'subirDocumento'])->name('ejecucion.detalle.documento.subir');
         Route::get('ejecucion/detalle/{detalleFlujo}/progreso', [Ejecucion::class, 'progreso'])->name('ejecucion.detalle.progreso');
         

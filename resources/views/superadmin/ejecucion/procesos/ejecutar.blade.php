@@ -1,5 +1,5 @@
 @extends('layouts.dashboard')
-@section('title','Ejecución: ' . $flujo->nombre)
+@section('title', $flujo->nombre)
 @section('page-title','Ejecución de Flujo')
 @section('page-subtitle', $flujo->nombre)
 
@@ -169,104 +169,117 @@
     
     <div class="collapse" id="etapa-content-{{ $etapa->id }}">
         <div class="card-body">
-            <div class="row">
-                <!-- Tareas -->
-                @if($etapa->tareas->count() > 0)
-                <div class="col-md-6">
-                    <div class="d-flex align-items-center mb-3">
-                        <i class="fas fa-tasks text-primary me-2"></i>
-                        <h6 class="mb-0">Tareas ({{ $etapa->tareas->where('completada', true)->count() }}/{{ $etapa->tareas->count() }})</h6>
-                    </div>
-                    
-                    <div class="tareas-list">
-                        @foreach($etapa->tareas as $tarea)
-                        <div class="d-flex align-items-center mb-2 tarea-item" data-tarea-id="{{ $tarea->id }}">
-                            <div class="form-check me-3">
-                                <input class="form-check-input tarea-checkbox" 
-                                       type="checkbox" 
-                                       id="tarea-{{ $tarea->id }}" 
-                                       data-tarea-id="{{ $tarea->id }}"
-                                       {{ $tarea->completada ? 'checked' : '' }}>
-                            </div>
-                            <div class="flex-grow-1">
-                                <label class="form-check-label {{ $tarea->completada ? 'text-decoration-line-through text-muted' : '' }}" 
-                                       for="tarea-{{ $tarea->id }}">
-                                    {{ $tarea->nombre }}
-                                </label>
-                                @if($tarea->descripcion)
-                                    <div class="small text-muted">{{ $tarea->descripcion }}</div>
-                                @endif
-                            </div>
+            <form class="etapa-form" data-etapa-id="{{ $etapa->id }}">
+                <div class="row">
+                    <!-- Tareas -->
+                    @if($etapa->tareas->count() > 0)
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-tasks text-primary me-2"></i>
+                            <h6 class="mb-0">Tareas ({{ $etapa->tareas->where('completada', true)->count() }}/{{ $etapa->tareas->count() }})</h6>
                         </div>
-                        @endforeach
-                    </div>
-                </div>
-                @endif
-
-                <!-- Documentos -->
-                @if($etapa->documentos->count() > 0)
-                <div class="col-md-6">
-                    <div class="d-flex align-items-center mb-3">
-                        <i class="fas fa-file-pdf text-danger me-2"></i>
-                        <h6 class="mb-0">Documentos ({{ $etapa->documentos->where('subido', true)->count() }}/{{ $etapa->documentos->count() }})</h6>
-                    </div>
-                    
-                    <div class="documentos-list">
-                        @foreach($etapa->documentos as $documento)
-                        <div class="documento-item mb-3 p-3 border rounded" data-documento-id="{{ $documento->id }}">
-                            <div class="d-flex justify-content-between align-items-start">
+                        
+                        <div class="tareas-list">
+                            @foreach($etapa->tareas as $tarea)
+                            <div class="d-flex align-items-center mb-2 tarea-item" data-tarea-id="{{ $tarea->id }}">
+                                <div class="form-check me-3">
+                                    <input class="form-check-input tarea-checkbox" 
+                                           type="checkbox" 
+                                           id="tarea-{{ $tarea->id }}" 
+                                           data-tarea-id="{{ $tarea->id }}"
+                                           {{ $tarea->completada ? 'checked' : '' }}>
+                                </div>
                                 <div class="flex-grow-1">
-                                    <h6 class="mb-1">{{ $documento->nombre }}</h6>
-                                    @if($documento->descripcion)
-                                        <p class="text-muted small mb-2">{{ $documento->descripcion }}</p>
+                                    <label class="form-check-label {{ $tarea->completada ? 'text-decoration-line-through text-muted' : '' }}" 
+                                           for="tarea-{{ $tarea->id }}">
+                                        {{ $tarea->nombre }}
+                                    </label>
+                                    @if($tarea->descripcion)
+                                        <div class="small text-muted">{{ $tarea->descripcion }}</div>
                                     @endif
-                                    
-                                    <!-- Estado del documento -->
-                                    <div class="document-status" id="status-{{ $documento->id }}">
-                                        @if($documento->archivo_url)
-                                            <span class="badge bg-success">
-                                                <i class="fas fa-check me-1"></i>Subido
-                                            </span>
-                                        @else
-                                            <span class="badge bg-warning text-dark">
-                                                <i class="fas fa-clock me-1"></i>Pendiente
-                                            </span>
+                                </div>
+                            </div>
+                            @endforeach
+                        </div>
+                    </div>
+                    @endif
+
+                    <!-- Documentos -->
+                    @if($etapa->documentos->count() > 0)
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-file-pdf text-danger me-2"></i>
+                            <h6 class="mb-0">Documentos ({{ $etapa->documentos->where('subido', true)->count() }}/{{ $etapa->documentos->count() }})</h6>
+                        </div>
+                        
+                        <div class="documentos-list">
+                            @foreach($etapa->documentos as $documento)
+                            <div class="documento-item mb-3 p-3 border rounded" data-documento-id="{{ $documento->id }}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1">{{ $documento->nombre }}</h6>
+                                        @if($documento->descripcion)
+                                            <p class="text-muted small mb-2">{{ $documento->descripcion }}</p>
                                         @endif
+                                        
+                                        <!-- Estado del documento -->
+                                        <div class="document-status" id="status-{{ $documento->id }}">
+                                            @if($documento->archivo_url)
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-check me-1"></i>Subido
+                                                </span>
+                                            @else
+                                                <span class="badge bg-warning text-dark">
+                                                    <i class="fas fa-clock me-1"></i>Pendiente
+                                                </span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="btn-group-vertical btn-group-sm">
+                                        @if($documento->archivo_url)
+                                            <!-- Botón para ver PDF -->
+                                            <button type="button" class="btn btn-outline-primary btn-sm ver-pdf" 
+                                                    data-documento-id="{{ $documento->id }}"
+                                                    data-url="{{ $documento->archivo_url }}"
+                                                    title="Ver PDF">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <!-- Botón para descargar -->
+                                            <a href="{{ $documento->archivo_url }}" 
+                                               class="btn btn-outline-secondary btn-sm" 
+                                               download
+                                               title="Descargar">
+                                                <i class="fas fa-download"></i>
+                                            </a>
+                                        @endif
+                                        
+                                        <!-- Botón para subir/cambiar archivo -->
+                                        <button type="button" class="btn btn-outline-primary btn-sm subir-documento" 
+                                                data-documento-id="{{ $documento->id }}"
+                                                title="{{ $documento->archivo_url ? 'Cambiar archivo' : 'Subir archivo' }}">
+                                            <i class="fas fa-upload"></i>
+                                        </button>
                                     </div>
                                 </div>
-                                
-                                <div class="btn-group-vertical btn-group-sm">
-                                    @if($documento->archivo_url)
-                                        <!-- Botón para ver PDF -->
-                                        <button class="btn btn-outline-primary btn-sm ver-pdf" 
-                                                data-documento-id="{{ $documento->id }}"
-                                                data-url="{{ $documento->archivo_url }}"
-                                                title="Ver PDF">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                        <!-- Botón para descargar -->
-                                        <a href="{{ $documento->archivo_url }}" 
-                                           class="btn btn-outline-secondary btn-sm" 
-                                           download
-                                           title="Descargar">
-                                            <i class="fas fa-download"></i>
-                                        </a>
-                                    @endif
-                                    
-                                    <!-- Botón para subir/cambiar archivo -->
-                                    <button class="btn btn-outline-primary btn-sm subir-documento" 
-                                            data-documento-id="{{ $documento->id }}"
-                                            title="{{ $documento->archivo_url ? 'Cambiar archivo' : 'Subir archivo' }}">
-                                        <i class="fas fa-upload"></i>
-                                    </button>
-                                </div>
                             </div>
+                            @endforeach
                         </div>
-                        @endforeach
+                    </div>
+                    @endif
+                </div>
+                
+                <!-- Botón de Grabar -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-success grabar-etapa" data-etapa-id="{{ $etapa->id }}">
+                                <i class="fas fa-save me-2"></i>Grabar Cambios
+                            </button>
+                        </div>
                     </div>
                 </div>
-                @endif
-            </div>
+            </form>
         </div>
     </div>
 </div>
@@ -416,50 +429,74 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Manejar checkboxes de tareas
-    document.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
+    // Manejar formularios de etapas (botón Grabar)
+    document.querySelectorAll('.etapa-form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
             if (!procesoIniciado) {
-                this.checked = false;
                 alert('Debes iniciar la ejecución del flujo primero');
                 return;
             }
 
             if (!detalleFlujoId) {
-                this.checked = false;
                 alert('Error: No se encontró ID de ejecución');
                 return;
             }
 
-            const tareaId = this.dataset.tareaId;
-            const completada = this.checked;
-            const label = this.parentElement.nextElementSibling.querySelector('label');
+            const etapaId = this.dataset.etapaId;
+            const submitBtn = this.querySelector('.grabar-etapa');
             
-            // Deshabilitar checkbox mientras se procesa
-            this.disabled = true;
+            // Recopilar datos de tareas
+            const tareas = [];
+            this.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
+                tareas.push({
+                    tarea_id: checkbox.dataset.tareaId,
+                    completada: checkbox.checked
+                });
+            });
             
-            fetch('{{ route('ejecucion.detalle.tarea.actualizar') }}', {
+            // Deshabilitar botón mientras se procesa
+            submitBtn.disabled = true;
+            const originalHtml = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Grabando...';
+            
+            // Enviar datos al servidor
+            fetch('{{ route('ejecucion.detalle.etapa.grabar') }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
                 body: JSON.stringify({
-                    tarea_id: tareaId,
-                    completada: completada,
-                    detalle_flujo_id: detalleFlujoId
+                    etapa_id: etapaId,
+                    detalle_flujo_id: detalleFlujoId,
+                    tareas: tareas
                 })
             })
             .then(response => response.json())
             .then(data => {
-                console.log('Respuesta actualizar tarea:', data);
+                console.log('Respuesta grabar etapa:', data);
                 if (data.success) {
-                    // Actualizar UI
-                    if (data.completada) {
-                        label.classList.add('text-decoration-line-through', 'text-muted');
-                    } else {
-                        label.classList.remove('text-decoration-line-through', 'text-muted');
-                    }
+                    const formElement = this; // Guardar referencia al formulario
+                    
+                    // Actualizar UI de las tareas
+                    tareas.forEach(tareaData => {
+                        const checkbox = formElement.querySelector(`[data-tarea-id="${tareaData.tarea_id}"]`);
+                        if (checkbox) {
+                            const label = checkbox.parentElement.nextElementSibling.querySelector('label');
+                            if (label) {
+                                if (tareaData.completada) {
+                                    label.classList.add('text-decoration-line-through', 'text-muted');
+                                } else {
+                                    label.classList.remove('text-decoration-line-through', 'text-muted');
+                                }
+                            }
+                        }
+                    });
+                    
+                    // Restablecer el botón a su estado original después de grabar exitosamente
+                    restablecerBotonGrabar(formElement.closest('.etapa-card'));
                     
                     // Verificar si se completó etapa o flujo
                     if (data.estados) {
@@ -468,27 +505,27 @@ document.addEventListener('DOMContentLoaded', function() {
                             mostrarAnimacionComplecion(data.estados.flujo_nombre);
                         } else if (data.estados === true) {
                             // Solo etapa completada
-                            const etapaCard = this.closest('.etapa-card');
+                            const etapaCard = formElement.closest('.etapa-card');
                             marcarEtapaComoCompletada(etapaCard);
                         }
                     }
                     
-                    // Actualizar progreso de la etapa
-                    const etapaCard = this.closest('.etapa-card');
-                    actualizarProgresoEtapa(etapaCard);
+                    // Actualizar progreso
                     actualizarProgreso();
+                    
+                    // Mostrar mensaje de éxito
+                    mostrarMensajeExito('Cambios guardados correctamente');
                 } else {
-                    alert('Error al actualizar la tarea: ' + data.message);
-                    this.checked = !completada; // Revertir estado
+                    alert('Error al grabar los cambios: ' + data.message);
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('Error al actualizar la tarea');
-                this.checked = !completada; // Revertir estado
+                alert('Error al grabar los cambios');
             })
             .finally(() => {
-                this.disabled = false;
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHtml;
             });
         });
     });
@@ -570,7 +607,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Agregar botones de ver y descargar
                 btnGroup.innerHTML = `
-                    <button class="btn btn-outline-primary btn-sm ver-pdf" 
+                    <button type="button" class="btn btn-outline-primary btn-sm ver-pdf" 
                             data-documento-id="${documentoId}"
                             data-url="${data.archivo_url}"
                             title="Ver PDF">
@@ -578,11 +615,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     </button>
                     <a href="${data.archivo_url}" 
                        class="btn btn-outline-secondary btn-sm" 
-                       download="${data.nombre_archivo}"
+                       download="${data.nombre_archivo || 'documento.pdf'}"
                        title="Descargar">
                         <i class="fas fa-download"></i>
                     </a>
-                    <button class="btn btn-outline-primary btn-sm subir-documento" 
+                    <button type="button" class="btn btn-outline-primary btn-sm subir-documento" 
                             data-documento-id="${documentoId}"
                             title="Cambiar archivo">
                         <i class="fas fa-upload"></i>
@@ -591,28 +628,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Reagregar event listeners
                 btnGroup.querySelector('.ver-pdf').addEventListener('click', verPDF);
-                btnGroup.querySelector('.subir-documento').addEventListener('click', arguments.callee.parentNode);
-                
-                // Verificar si se completó etapa o flujo
-                if (data.estados) {
-                    if (typeof data.estados === 'object' && data.estados.flujo_completado) {
-                        // Flujo completado - mostrar animación y redirigir
-                        mostrarAnimacionComplecion(data.estados.flujo_nombre);
-                    } else if (data.estados === true) {
-                        // Solo etapa completada
-                        const etapaCard = documentoItem.closest('.etapa-card');
-                        marcarEtapaComoCompletada(etapaCard);
+                btnGroup.querySelector('.subir-documento').addEventListener('click', function() {
+                    if (!procesoIniciado) {
+                        alert('Debes iniciar la ejecución del flujo primero');
+                        return;
                     }
-                }
+
+                    if (!detalleFlujoId) {
+                        alert('Error: No se encontró ID de ejecución');
+                        return;
+                    }
+
+                    const documentoId = this.dataset.documentoId;
+                    const documentoItem = this.closest('.documento-item');
+                    const documentoNombre = documentoItem.querySelector('h6').textContent;
+                    
+                    document.getElementById('documento-nombre').textContent = documentoNombre;
+                    document.getElementById('uploadModal').dataset.documentoId = documentoId;
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
+                    modal.show();
+                });
+                
+                // Marcar que hay cambios pendientes de grabar en la etapa
+                const etapaCard = documentoItem.closest('.etapa-card');
+                marcarCambiosPendientes(etapaCard);
                 
                 // Cerrar modal
                 bootstrap.Modal.getInstance(document.getElementById('uploadModal')).hide();
                 document.getElementById('uploadForm').reset();
                 
-                // Actualizar progreso
-                const etapaCard = documentoItem.closest('.etapa-card');
-                actualizarProgresoEtapa(etapaCard);
-                actualizarProgreso();
+                // Mostrar mensaje de éxito
+                mostrarMensajeExito('Documento subido correctamente. Recuerda grabar los cambios de la etapa.');
                 
                 console.log('Documento subido:', data);
             } else {
@@ -856,6 +903,84 @@ document.addEventListener('DOMContentLoaded', function() {
             window.location.href = '{{ route('ejecucion.index') }}';
         });
     }
+
+    // Función para mostrar mensajes de éxito
+    function mostrarMensajeExito(mensaje) {
+        // Crear toast
+        const toast = document.createElement('div');
+        toast.className = 'toast align-items-center text-white bg-success border-0';
+        toast.style.position = 'fixed';
+        toast.style.top = '20px';
+        toast.style.right = '20px';
+        toast.style.zIndex = '9999';
+        toast.style.minWidth = '300px';
+        toast.setAttribute('role', 'alert');
+        toast.setAttribute('aria-live', 'assertive');
+        toast.setAttribute('aria-atomic', 'true');
+        
+        const flexDiv = document.createElement('div');
+        flexDiv.className = 'd-flex';
+        
+        const bodyDiv = document.createElement('div');
+        bodyDiv.className = 'toast-body';
+        bodyDiv.innerHTML = '<i class="fas fa-check-circle me-2"></i>' + mensaje;
+        
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'btn-close btn-close-white me-2 m-auto';
+        closeBtn.setAttribute('data-bs-dismiss', 'toast');
+        
+        flexDiv.appendChild(bodyDiv);
+        flexDiv.appendChild(closeBtn);
+        toast.appendChild(flexDiv);
+        
+        document.body.appendChild(toast);
+        
+        const toastInstance = new bootstrap.Toast(toast, { delay: 4000 });
+        toastInstance.show();
+        
+        // Eliminar del DOM después de que se oculte
+        toast.addEventListener('hidden.bs.toast', () => {
+            toast.remove();
+        });
+    }
+
+    // Función para marcar cambios pendientes en una etapa
+    function marcarCambiosPendientes(etapaCard) {
+        if (!etapaCard) return;
+        
+        const submitBtn = etapaCard.querySelector('.grabar-etapa');
+        if (submitBtn && !submitBtn.classList.contains('btn-warning') && !submitBtn.disabled) {
+            submitBtn.classList.remove('btn-success');
+            submitBtn.classList.add('btn-warning');
+            submitBtn.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Hay cambios por grabar';
+        }
+    }
+
+    // Función para restablecer botón después de grabar
+    function restablecerBotonGrabar(etapaCard) {
+        if (!etapaCard) return;
+        
+        const submitBtn = etapaCard.querySelector('.grabar-etapa');
+        if (submitBtn) {
+            submitBtn.classList.remove('btn-warning');
+            submitBtn.classList.add('btn-success');
+            submitBtn.innerHTML = '<i class="fas fa-save me-2"></i>Grabar Cambios';
+        }
+    }
+
+    // Función para agregar event listeners a los checkboxes para marcar cambios pendientes
+    function agregarListenersCambiosPendientes() {
+        document.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const etapaCard = this.closest('.etapa-card');
+                marcarCambiosPendientes(etapaCard);
+            });
+        });
+    }
+
+    // Inicializar listeners de cambios pendientes
+    agregarListenersCambiosPendientes();
 });
 </script>
 @endpush

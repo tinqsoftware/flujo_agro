@@ -685,6 +685,181 @@ class Ejecucion extends Controller
     }
 
     /**
+     * Grabar cambios de una etapa completa (tareas en lote)
+     */
+    public function grabarEtapa(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+            // SUPERADMIN no puede actualizar tareas
+            if ($isSuper) {
+                return response()->json(['error' => 'Los SUPERADMIN no pueden modificar tareas'], 403);
+            }
+
+            Log::info('Iniciando grabado de etapa', $request->all());
+            
+            $request->validate([
+                'etapa_id' => 'required|exists:etapas,id',
+                'detalle_flujo_id' => 'required|exists:detalle_flujo,id',
+                'tareas' => 'nullable|array',
+                'tareas.*.tarea_id' => 'required|exists:tareas,id',
+                'tareas.*.completada' => 'required|boolean'
+            ]);
+            
+            $etapaId = $request->etapa_id;
+            $detalleFlujoId = $request->detalle_flujo_id;
+            $tareas = $request->tareas;
+
+            Log::info('Datos validados para grabar etapa', [
+                'etapa_id' => $etapaId,
+                'detalle_flujo_id' => $detalleFlujoId,
+                'tareas_count' => count($tareas),
+                'user_id' => $user->id
+            ]);
+
+            // Verificar que el detalle_flujo pertenece a la empresa del usuario
+            $detalleFlujo = DetalleFlujo::where('id', $detalleFlujoId)
+                ->where('id_emp', $user->id_emp)
+                ->firstOrFail();
+
+            // Verificar que la etapa pertenece al flujo
+            $etapa = \App\Models\Etapa::where('id', $etapaId)
+                ->where('id_flujo', $detalleFlujo->id_flujo)
+                ->firstOrFail();
+
+            // Buscar el detalle_etapa correspondiente
+            $detalleEtapa = DetalleEtapa::where('id_etapa', $etapaId)
+                ->where('id_detalle_flujo', $detalleFlujoId)
+                ->firstOrFail();
+
+            DB::beginTransaction();
+
+            $tareasActualizadas = 0;
+            $etapaCompletada = false;
+            $flujoCompletado = false;
+
+            // Procesar cada tarea (si existen)
+            if (!empty($tareas)) {
+                foreach ($tareas as $tareaData) {
+                    $tareaId = $tareaData['tarea_id'];
+                    $completada = $tareaData['completada'];
+
+                    // Verificar que la tarea pertenece a la etapa
+                    $tarea = \App\Models\Tarea::where('id', $tareaId)
+                        ->where('id_etapa', $etapaId)
+                        ->first();
+                    
+                    if (!$tarea) {
+                        Log::warning('Tarea no pertenece a la etapa', ['tarea_id' => $tareaId, 'etapa_id' => $etapaId]);
+                        continue;
+                    }
+
+                    // Buscar si ya existe un detalle para esta tarea
+                    $detalle = DetalleTarea::where('id_tarea', $tareaId)
+                        ->where('id_detalle_etapa', $detalleEtapa->id)
+                        ->first();
+                    
+                    if ($detalle) {
+                        // Actualizar el existente
+                        $detalle->update([
+                            'estado' => $completada ? 3 : 2, // 3 = completado, 2 = en ejecución
+                            'id_user_create' => $user->id
+                        ]);
+                    } else {
+                        // Crear nuevo detalle
+                    $detalle = DetalleTarea::create([
+                        'id_tarea' => $tareaId,
+                        'id_detalle_etapa' => $detalleEtapa->id,
+                        'estado' => $completada ? 3 : 2,
+                        'id_user_create' => $user->id
+                    ]);
+                }
+
+                    $tareasActualizadas++;
+                    Log::info('Tarea procesada', ['tarea_id' => $tareaId, 'completada' => $completada, 'detalle_id' => $detalle->id]);
+                }
+            }
+
+            // Verificar estados después de procesar todas las tareas
+            if ($tareasActualizadas > 0) {
+                // Usar la primera tarea para verificar estados (todas pertenecen a la misma etapa)
+                $primeraTaskaId = $tareas[0]['tarea_id'];
+                $estadosResult = $this->verificarYActualizarEstados($primeraTaskaId, 'tarea', $detalleFlujoId);
+                
+                if (is_array($estadosResult) && isset($estadosResult['flujo_completado'])) {
+                    $flujoCompletado = $estadosResult;
+                } elseif ($estadosResult === true) {
+                    $etapaCompletada = true;
+                }
+            } else {
+                // Si no hay tareas, verificar si solo hay documentos y están completos
+                $totalDocumentos = $etapa->documentos()->where('estado', 1)->count();
+                $documentosCompletos = DetalleDocumento::whereHas('documento', function($q) use ($etapaId) {
+                        $q->where('id_etapa', $etapaId)->where('estado', 1);
+                    })
+                    ->where('id_detalle_etapa', $detalleEtapa->id)
+                    ->whereNotNull('archivo_url')
+                    ->count();
+                
+                if ($totalDocumentos > 0 && $documentosCompletos == $totalDocumentos) {
+                    // Verificar estados usando cualquier documento de la etapa
+                    $primerDocumento = $etapa->documentos()->where('estado', 1)->first();
+                    if ($primerDocumento) {
+                        $estadosResult = $this->verificarYActualizarEstados($primerDocumento->id, 'documento', $detalleFlujoId);
+                        
+                        if (is_array($estadosResult) && isset($estadosResult['flujo_completado'])) {
+                            $flujoCompletado = $estadosResult;
+                        } elseif ($estadosResult === true) {
+                            $etapaCompletada = true;
+                        }
+                    }
+                }
+            }
+
+            DB::commit();
+
+            Log::info('Etapa grabada exitosamente', [
+                'etapa_id' => $etapaId,
+                'tareas_actualizadas' => $tareasActualizadas,
+                'etapa_completada' => $etapaCompletada,
+                'flujo_completado' => $flujoCompletado
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => $tareasActualizadas > 0 
+                    ? "Etapa grabada correctamente. {$tareasActualizadas} tareas actualizadas."
+                    : "Etapa grabada correctamente.",
+                'tareas_actualizadas' => $tareasActualizadas,
+                'estados' => $flujoCompletado ?: $etapaCompletada
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            Log::error('Error de validación en grabar etapa: ' . $e->getMessage(), [
+                'request' => $request->all(),
+                'errors' => $e->errors()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error de validación: ' . implode(', ', collect($e->errors())->flatten()->toArray())
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error grabando etapa: ' . $e->getMessage(), [
+                'request' => $request->all(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al grabar la etapa: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Subir documento
      */
     public function subirDocumento(Request $request)
