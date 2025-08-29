@@ -13,6 +13,7 @@ class DetalleTarea extends Model
 
     protected $fillable = [
         'id_tarea',
+        'id_detalle_etapa',
         'estado',
         'id_user_create'
     ];
@@ -25,6 +26,11 @@ class DetalleTarea extends Model
     public function tarea()
     {
         return $this->belongsTo(Tarea::class, 'id_tarea');
+    }
+
+    public function detalleEtapa()
+    {
+        return $this->belongsTo(DetalleEtapa::class, 'id_detalle_etapa');
     }
 
     public function userCreate()

@@ -334,6 +334,7 @@
 <script>
 // Variables globales desde PHP
 const flujoId = {{ $flujo->id }};
+let detalleFlujoId = {{ $flujo->detalle_flujo_id ?? 'null' }};
 let procesoIniciado = {{ $flujo->proceso_iniciado ? 'true' : 'false' }};
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -365,7 +366,7 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Iniciando...';
             
-            fetch(`{{ route('ejecucion.iniciar', $flujo->id) }}`, {
+            fetch(`{{ route('ejecucion.crear', $flujo->id) }}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -377,6 +378,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Respuesta de iniciar proceso:', data);
                 if (data.success) {
                     procesoIniciado = true;
+                    detalleFlujoId = data.detalle_flujo_id; // Actualizar variable global
                     btn.innerHTML = '<i class="fas fa-clock me-2"></i>En Progreso';
                     btn.classList.remove('btn-primary');
                     btn.classList.add('btn-success');
@@ -423,6 +425,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            if (!detalleFlujoId) {
+                this.checked = false;
+                alert('Error: No se encontró ID de ejecución');
+                return;
+            }
+
             const tareaId = this.dataset.tareaId;
             const completada = this.checked;
             const label = this.parentElement.nextElementSibling.querySelector('label');
@@ -430,7 +438,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Deshabilitar checkbox mientras se procesa
             this.disabled = true;
             
-            fetch('{{ route('ejecucion.tarea.actualizar') }}', {
+            fetch('{{ route('ejecucion.detalle.tarea.actualizar') }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -438,7 +446,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 body: JSON.stringify({
                     tarea_id: tareaId,
-                    completada: completada
+                    completada: completada,
+                    detalle_flujo_id: detalleFlujoId
                 })
             })
             .then(response => response.json())
@@ -492,6 +501,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            if (!detalleFlujoId) {
+                alert('Error: No se encontró ID de ejecución');
+                return;
+            }
+
             const documentoId = this.dataset.documentoId;
             const documentoItem = this.closest('.documento-item');
             const documentoNombre = documentoItem.querySelector('h6').textContent;
@@ -531,12 +545,13 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('documento_id', documentoId);
         formData.append('archivo', file);
         formData.append('comentarios', comments);
+        formData.append('detalle_flujo_id', detalleFlujoId);
 
         // Deshabilitar botón mientras se sube
         this.disabled = true;
         this.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Subiendo...';
 
-        fetch('{{ route('ejecucion.documento.subir') }}', {
+        fetch('{{ route('ejecucion.detalle.documento.subir') }}', {
             method: 'POST',
             headers: {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
@@ -633,8 +648,13 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function actualizarProgresoEtapa(etapaCard) {
+        if (!detalleFlujoId) {
+            console.log('No hay detalleFlujoId, omitiendo actualización de progreso');
+            return;
+        }
+        
         // Esta función ahora obtiene datos reales del servidor
-        fetch(`{{ route('ejecucion.progreso', ':flujo') }}`.replace(':flujo', flujoId))
+        fetch(`{{ route('ejecucion.detalle.progreso', ':detalleFlujoId') }}`.replace(':detalleFlujoId', detalleFlujoId))
         .then(response => response.json())
         .then(data => {
             if (data.progreso_general !== undefined) {

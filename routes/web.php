@@ -109,13 +109,22 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::resource('ejecucion', Ejecucion::class)->only(['index', 'show']);
         Route::get('ejecucion/{flujo}/configurar', [Ejecucion::class, 'configurar'])->name('ejecucion.configurar');
         Route::post('ejecucion/{flujo}/crear', [Ejecucion::class, 'crearEjecucion'])->name('ejecucion.crear');
+        
+        // Nueva ruta que usa detalle_flujo_id en lugar de flujo_id
+        Route::get('ejecucion/detalle/{detalleFlujo}/ejecutar', [Ejecucion::class, 'ejecutarDetalle'])->name('ejecucion.detalle.ejecutar');
+        
+        // Mantener la ruta antigua para compatibilidad (redirige a nueva estructura)
         Route::get('ejecucion/{flujo}/ejecutar', [Ejecucion::class, 'ejecutar'])->name('ejecucion.ejecutar');
         
-        // AJAX para ejecución
-        Route::post('ejecucion/{flujo}/iniciar', [Ejecucion::class, 'iniciarProceso'])->name('ejecucion.iniciar');
-        Route::post('ejecucion/tarea/actualizar', [Ejecucion::class, 'actualizarTarea'])->name('ejecucion.tarea.actualizar');
-        Route::post('ejecucion/documento/subir', [Ejecucion::class, 'subirDocumento'])->name('ejecucion.documento.subir');
-        Route::get('ejecucion/{flujo}/progreso', [Ejecucion::class, 'progreso'])->name('ejecucion.progreso');
+        // AJAX para ejecución - actualizar para usar detalle_flujo_id
+        Route::post('ejecucion/detalle/{detalleFlujo}/iniciar', [Ejecucion::class, 'iniciarProceso'])->name('ejecucion.detalle.iniciar');
+        Route::post('ejecucion/detalle/tarea/actualizar', [Ejecucion::class, 'actualizarTarea'])->name('ejecucion.detalle.tarea.actualizar');
+        Route::post('ejecucion/detalle/documento/subir', [Ejecucion::class, 'subirDocumento'])->name('ejecucion.detalle.documento.subir');
+        Route::get('ejecucion/detalle/{detalleFlujo}/progreso', [Ejecucion::class, 'progreso'])->name('ejecucion.detalle.progreso');
+        
+        // Rutas para pausar y reactivar ejecuciones
+        Route::post('ejecucion/detalle/{detalleFlujo}/pausar', [Ejecucion::class, 'pausarEjecucion'])->name('ejecucion.detalle.pausar');
+        Route::post('ejecucion/detalle/{detalleFlujo}/reactivar', [Ejecucion::class, 'reactivarEjecucion'])->name('ejecucion.detalle.reactivar');
 
     
     // Gestión de Usuarios (SUPERADMIN y ADMINISTRADOR)

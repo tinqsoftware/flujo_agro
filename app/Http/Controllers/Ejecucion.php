@@ -64,14 +64,14 @@ class Ejecucion extends Controller
         if (!$isSuper) {
             $ejecucionesActivas = DetalleFlujo::with(['flujo.empresa', 'flujo.tipo', 'flujo.etapas'])
                 ->where('id_emp', $user->id_emp)
-                ->whereIn('estado', [2, 3]) // 2 = En ejecución, 3 = Terminado
-                ->orderBy('estado') // Primero en ejecución, luego terminados
+                ->whereIn('estado', [2, 3, 4]) // 2 = En ejecución, 3 = Terminado, 4 = Pausado
+                ->orderBy('estado') // Primero en ejecución, luego pausados, luego terminados
                 ->orderBy('updated_at', 'desc')
                 ->get();
         } else {
             // Para SUPERADMIN, mostrar todas las ejecuciones
             $ejecucionesActivas = DetalleFlujo::with(['flujo.empresa', 'flujo.tipo', 'flujo.etapas'])
-                ->whereIn('estado', [2, 3])
+                ->whereIn('estado', [2, 3, 4])
                 ->orderBy('estado')
                 ->orderBy('updated_at', 'desc')
                 ->get();
@@ -345,22 +345,46 @@ class Ejecucion extends Controller
             // Crear registros de detalle_tarea solo para las tareas seleccionadas
             if (!empty($request->tareas_seleccionadas)) {
                 foreach ($request->tareas_seleccionadas as $tareaId) {
-                    DetalleTarea::create([
-                        'id_tarea' => $tareaId,
-                        'id_detalle_flujo' => $detalleFlujoActivo->id,
-                        'estado' => 2 // En ejecución, pendiente de completar
-                    ]);
+                    // Buscar la tarea para obtener su etapa
+                    $tarea = \App\Models\Tarea::find($tareaId);
+                    if ($tarea && $tarea->etapa) {
+                        // Buscar el detalle_etapa correspondiente
+                        $detalleEtapa = DetalleEtapa::where('id_etapa', $tarea->etapa->id)
+                            ->where('id_detalle_flujo', $detalleFlujoActivo->id)
+                            ->first();
+                        
+                        if ($detalleEtapa) {
+                            DetalleTarea::create([
+                                'id_tarea' => $tareaId,
+                                'id_detalle_etapa' => $detalleEtapa->id,
+                                'estado' => 0, // Inicial/inactivo
+                                'id_user_create' => $user->id
+                            ]);
+                        }
+                    }
                 }
             }
 
             // Crear registros de detalle_documento solo para los documentos seleccionados
             if (!empty($request->documentos_seleccionados)) {
                 foreach ($request->documentos_seleccionados as $documentoId) {
-                    DetalleDocumento::create([
-                        'id_documento' => $documentoId,
-                        'id_detalle_flujo' => $detalleFlujoActivo->id,
-                        'estado' => 2 // Pendiente de subir
-                    ]);
+                    // Buscar el documento para obtener su etapa
+                    $documento = \App\Models\Documento::find($documentoId);
+                    if ($documento && $documento->etapa) {
+                        // Buscar el detalle_etapa correspondiente
+                        $detalleEtapa = DetalleEtapa::where('id_etapa', $documento->etapa->id)
+                            ->where('id_detalle_flujo', $detalleFlujoActivo->id)
+                            ->first();
+                        
+                        if ($detalleEtapa) {
+                            DetalleDocumento::create([
+                                'id_documento' => $documentoId,
+                                'id_detalle_etapa' => $detalleEtapa->id,
+                                'estado' => 0, // Inicial/inactivo
+                                'id_user_create' => $user->id
+                            ]);
+                        }
+                    }
                 }
             }
 
@@ -368,7 +392,7 @@ class Ejecucion extends Controller
 
             return response()->json([
                 'success' => true,
-                'redirect_url' => "/ejecucion/{$flujo->id}/ejecutar",
+                'redirect_url' => "/ejecucion/detalle/{$detalleFlujoActivo->id}/ejecutar",
                 'detalle_flujo_id' => $detalleFlujoActivo->id,
                 'mensaje' => 'Ejecución configurada y creada exitosamente'
             ]);
@@ -442,8 +466,47 @@ class Ejecucion extends Controller
             'total_etapas_creadas' => $flujo->etapas()->where('estado', 1)->count()
         ]);
 
-        // Cargar etapas con sus tareas y documentos
-        $flujo->load([
+        // Redirigir al método ejecutarDetalle para mantener consistencia
+        return redirect()->route('ejecucion.detalle.ejecutar', $detalleFlujoActivo);
+    }
+
+    /**
+     * Show the execution process interface for a specific DetalleFlujo (new method).
+     */
+    public function ejecutarDetalle(DetalleFlujo $detalleFlujo)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+        // SUPERADMIN no puede ejecutar flujos, solo visualizarlos
+        if ($isSuper) {
+            return redirect()->route('ejecucion.show', $detalleFlujo->flujo)
+                ->with('warning', 'Como SUPERADMIN solo puedes visualizar los flujos. La ejecución debe ser realizada por usuarios de la empresa.');
+        }
+
+        // Verificar permisos de empresa
+        if ($detalleFlujo->id_emp != $user->id_emp) {
+            abort(403, 'No tienes permisos para ejecutar esta ejecución.');
+        }
+
+        // Verificar que la ejecución esté activa (estado 2)
+        if ($detalleFlujo->estado != 2) {
+            return redirect()->route('ejecucion.index')
+                ->with('warning', 'Esta ejecución no está activa. Estado actual: ' . 
+                    ($detalleFlujo->estado == 1 ? 'Creada' : ($detalleFlujo->estado == 3 ? 'Completada' : 'Desconocido')));
+        }
+
+        Log::info('Accediendo a ejecución específica', [
+            'detalle_flujo_id' => $detalleFlujo->id,
+            'nombre_ejecucion' => $detalleFlujo->nombre,
+            'flujo_id' => $detalleFlujo->id_flujo,
+            'estado' => $detalleFlujo->estado
+        ]);
+
+        // Cargar el flujo con todas sus relaciones
+        $flujo = $detalleFlujo->flujo()->with([
+            'tipo',
+            'empresa', 
             'etapas' => function($query) {
                 $query->where('estado', 1)->orderBy('nro');
             },
@@ -453,38 +516,74 @@ class Ejecucion extends Controller
             'etapas.documentos' => function($query) {
                 $query->where('estado', 1);
             }
-        ]);
+        ])->first();
 
-            // Cargar estados de tareas y documentos para esta ejecución específica
-            foreach ($flujo->etapas as $etapa) {
-                foreach ($etapa->tareas as $tarea) {
-                    // Buscar detalle de tarea vinculado a esta ejecución específica
-                    $detalle = DetalleTarea::where('id_tarea', $tarea->id)
-                        ->whereHas('tarea.etapa.detalleEtapas', function($query) use ($detalleFlujoActivo) {
-                            $query->where('id_detalle_flujo', $detalleFlujoActivo->id);
-                        })
+        if (!$flujo) {
+            abort(404, 'Flujo no encontrado.');
+        }
+
+        // Cargar estados específicos de esta ejecución (DetalleFlujo)
+        foreach ($flujo->etapas as $etapa) {
+            // Buscar el DetalleEtapa correspondiente
+            $detalleEtapa = DetalleEtapa::where('id_etapa', $etapa->id)
+                ->where('id_detalle_flujo', $detalleFlujo->id)
+                ->first();
+            
+            $etapa->detalle_etapa = $detalleEtapa;
+            $etapa->estado_ejecucion = $detalleEtapa ? $detalleEtapa->estado : 1;
+
+            foreach ($etapa->tareas as $tarea) {
+                // Buscar DetalleTarea vinculado a esta ejecución específica a través del detalle_etapa
+                $detalleTarea = null;
+                if ($detalleEtapa) {
+                    $detalleTarea = DetalleTarea::where('id_tarea', $tarea->id)
+                        ->where('id_detalle_etapa', $detalleEtapa->id)
                         ->first();
-                    $tarea->completada = $detalle ? (bool)$detalle->estado : false;
-                    $tarea->detalle_id = $detalle ? $detalle->id : null;
                 }
                 
-                foreach ($etapa->documentos as $documento) {
-                    // Buscar detalle de documento vinculado a esta ejecución específica
-                    $detalle = DetalleDocumento::where('id_documento', $documento->id)
-                        ->whereHas('documento.etapa.detalleEtapas', function($query) use ($detalleFlujoActivo) {
-                            $query->where('id_detalle_flujo', $detalleFlujoActivo->id);
-                        })
+                // Solo estado 3 significa completado (no estado 2 que es "en ejecución")
+                $tarea->completada = $detalleTarea ? ($detalleTarea->estado == 3) : false;
+                $tarea->detalle_id = $detalleTarea ? $detalleTarea->id : null;
+                $tarea->detalle_flujo_id = $detalleFlujo->id;
+            }
+            
+            foreach ($etapa->documentos as $documento) {
+                // Buscar DetalleDocumento vinculado a esta ejecución específica a través del detalle_etapa
+                $detalleDocumento = null;
+                if ($detalleEtapa) {
+                    $detalleDocumento = DetalleDocumento::where('id_documento', $documento->id)
+                        ->where('id_detalle_etapa', $detalleEtapa->id)
                         ->first();
-                    $documento->subido = $detalle ? (bool)$detalle->estado : false;
-                    $documento->archivo_url = ($detalle && $detalle->ruta_doc) ? Storage::url($detalle->ruta_doc) : null;
-                    $documento->detalle_id = $detalle ? $detalle->id : null;
                 }
-            }        // Agregar información de la ejecución al flujo
-        $flujo->proceso_iniciado = true;
-        $flujo->detalle_flujo_id = $detalleFlujoActivo->id;
-        $flujo->estado_ejecucion = $detalleFlujoActivo->estado;
+                
+                // Solo estado 3 significa subido/completado (no estado 2 que es "pendiente")
+                $documento->subido = $detalleDocumento ? ($detalleDocumento->estado == 3) : false;
+                $documento->archivo_url = ($detalleDocumento && $detalleDocumento->ruta_doc) ? 
+                    Storage::url($detalleDocumento->ruta_doc) : null;
+                $documento->detalle_id = $detalleDocumento ? $detalleDocumento->id : null;
+                $documento->detalle_flujo_id = $detalleFlujo->id;
+            }
+        }
 
-        return view('superadmin.ejecucion.procesos.ejecutar', compact('flujo', 'isSuper'));
+        // Agregar información de la ejecución al flujo
+        $flujo->proceso_iniciado = true;
+        $flujo->detalle_flujo_id = $detalleFlujo->id;
+        $flujo->detalle_flujo = $detalleFlujo;
+        $flujo->nombre_ejecucion = $detalleFlujo->nombre;
+        $flujo->estado_ejecucion = $detalleFlujo->estado;
+
+        Log::info('Datos cargados para vista de ejecución', [
+            'detalle_flujo_id' => $detalleFlujo->id,
+            'etapas_count' => $flujo->etapas->count(),
+            'total_tareas_activas' => $flujo->etapas->sum(function($etapa) { 
+                return $etapa->tareas->count(); 
+            }),
+            'total_documentos_activos' => $flujo->etapas->sum(function($etapa) { 
+                return $etapa->documentos->count(); 
+            })
+        ]);
+
+        return view('superadmin.ejecucion.procesos.ejecutar', compact('flujo', 'isSuper', 'detalleFlujo'));
     }
 
     /**
@@ -525,17 +624,23 @@ class Ejecucion extends Controller
                 ->where('id_emp', $user->id_emp)
                 ->firstOrFail();
 
+            // Buscar la tarea para obtener su etapa
+            $tarea = \App\Models\Tarea::findOrFail($tareaId);
+            
+            // Buscar el detalle_etapa correspondiente
+            $detalleEtapa = DetalleEtapa::where('id_etapa', $tarea->id_etapa)
+                ->where('id_detalle_flujo', $detalleFlujoId)
+                ->firstOrFail();
+
             // Buscar si ya existe un detalle para esta tarea en esta ejecución específica
             $detalle = DetalleTarea::where('id_tarea', $tareaId)
-                ->whereHas('tarea.etapa.detalleEtapas', function($query) use ($detalleFlujoId) {
-                    $query->where('id_detalle_flujo', $detalleFlujoId);
-                })
+                ->where('id_detalle_etapa', $detalleEtapa->id)
                 ->first();
             
             if ($detalle) {
                 // Actualizar el existente
                 $detalle->update([
-                    'estado' => $completada,
+                    'estado' => $completada ? 3 : 2, // 3 = completado, 2 = en ejecución
                     'id_user_create' => $user->id
                 ]);
                 Log::info('Detalle actualizado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado]);
@@ -543,7 +648,8 @@ class Ejecucion extends Controller
                 // Crear nuevo detalle para esta ejecución específica
                 $detalle = DetalleTarea::create([
                     'id_tarea' => $tareaId,
-                    'estado' => $completada,
+                    'id_detalle_etapa' => $detalleEtapa->id,
+                    'estado' => $completada ? 3 : 2, // 3 = completado, 2 = en ejecución (activado desde estado 0)
                     'id_user_create' => $user->id
                 ]);
                 Log::info('Detalle creado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado]);
@@ -552,7 +658,7 @@ class Ejecucion extends Controller
             return response()->json([
                 'success' => true,
                 'message' => $completada ? 'Tarea marcada como completada' : 'Tarea marcada como pendiente',
-                'completada' => (bool)$detalle->estado,
+                'completada' => ($detalle->estado == 3), // Verificar que sea exactamente 3
                 'detalle_id' => $detalle->id,
                 'estados' => $this->verificarYActualizarEstados($tareaId, 'tarea', $detalleFlujoId)
             ]);
@@ -618,16 +724,34 @@ class Ejecucion extends Controller
             $rutaArchivo = $archivo->storeAs($directorio, $nombreArchivo, 'public');
 
             // Buscar si ya existe un detalle para este documento en esta ejecución específica
+            $documento = \App\Models\Documento::find($documentoId);
+            if (!$documento) {
+                throw new \Exception('Documento no encontrado');
+            }
+
+            // Buscar la etapa del documento
+            $etapa = $documento->etapa;
+            if (!$etapa) {
+                throw new \Exception('Etapa del documento no encontrada');
+            }
+
+            // Buscar el detalle_etapa correspondiente a esta ejecución
+            $detalleEtapa = DetalleEtapa::where('id_etapa', $etapa->id)
+                ->where('id_detalle_flujo', $detalleFlujoId)
+                ->first();
+
+            if (!$detalleEtapa) {
+                throw new \Exception('Detalle de etapa no encontrado para esta ejecución');
+            }
+
             $detalle = DetalleDocumento::where('id_documento', $documentoId)
-                ->whereHas('documento.etapa.detalleEtapas', function($query) use ($detalleFlujoId) {
-                    $query->where('id_detalle_flujo', $detalleFlujoId);
-                })
+                ->where('id_detalle_etapa', $detalleEtapa->id)
                 ->first();
 
             if ($detalle) {
                 // Actualizar el existente
                 $detalle->update([
-                    'estado' => true,
+                    'estado' => 3, // 3 = subido/completado
                     'ruta_doc' => $rutaArchivo,
                     'id_user_create' => $user->id
                 ]);
@@ -635,7 +759,8 @@ class Ejecucion extends Controller
                 // Crear nuevo detalle para esta ejecución específica
                 $detalle = DetalleDocumento::create([
                     'id_documento' => $documentoId,
-                    'estado' => true,
+                    'id_detalle_etapa' => $detalleEtapa->id,
+                    'estado' => 3, // 3 = subido/completado
                     'ruta_doc' => $rutaArchivo,
                     'id_user_create' => $user->id
                 ]);
@@ -743,20 +868,18 @@ class Ejecucion extends Controller
 
             // Verificar si todas las tareas de la etapa están completadas para esta ejecución
             $totalTareas = $etapa->tareas()->where('estado', 1)->count();
-            $tareasCompletadas = DetalleTarea::where('estado', true)
+            $tareasCompletadas = DetalleTarea::where('estado', 3) // Solo estado 3 es completado
+                ->where('id_detalle_etapa', $detalleEtapa->id)
                 ->whereIn('id_tarea', $etapa->tareas()->where('estado', 1)->pluck('id'))
-                ->whereHas('tarea.etapa.detalleEtapas', function($query) use ($detalleFlujoId) {
-                    $query->where('id_detalle_flujo', $detalleFlujoId);
-                })
                 ->count();
 
             // Verificar si todos los documentos de la etapa están subidos para esta ejecución
             $totalDocumentos = $etapa->documentos()->where('estado', 1)->count();
-            $documentosSubidos = DetalleDocumento::where('estado', true)
-                ->whereIn('id_documento', $etapa->documentos()->where('estado', 1)->pluck('id'))
-                ->whereHas('documento.etapa.detalleEtapas', function($query) use ($detalleFlujoId) {
+            $documentosSubidos = DetalleDocumento::where('estado', 3) // Solo estado 3 es subido
+                ->whereHas('detalleEtapa', function($query) use ($detalleFlujoId) {
                     $query->where('id_detalle_flujo', $detalleFlujoId);
                 })
+                ->whereIn('id_documento', $etapa->documentos()->where('estado', 1)->pluck('id'))
                 ->count();
 
             Log::info("Verificando etapa {$etapa->id} para ejecución {$detalleFlujoId}", [
@@ -794,7 +917,7 @@ class Ejecucion extends Controller
                             // Retornar información especial para ejecución completada
                             return [
                                 'etapa_completada' => true,
-                                'ejecucion_completada' => true,
+                                'flujo_completado' => true,
                                 'detalle_flujo_id' => $detalleFlujoId,
                                 'flujo_id' => $detalleFlujo->id_flujo,
                                 'flujo_nombre' => $detalleFlujo->flujo->nombre ?? 'Flujo desconocido'
@@ -818,22 +941,26 @@ class Ejecucion extends Controller
     }
 
     /**
-     * Get progress information for a flow via AJAX
+     * Get progress information for a detalle_flujo via AJAX
      */
-    public function progreso(Flujo $flujo)
+    public function progreso(DetalleFlujo $detalleFlujo)
     {
         $user = Auth::user();
         
         // Verificar permisos básicos
-        if ($user->rol->nombre !== 'SUPERADMIN' && $flujo->id_emp != $user->id_emp) {
-            abort(403, 'No tienes permisos para ver este flujo.');
+        if ($user->rol->nombre !== 'SUPERADMIN' && $detalleFlujo->id_emp != $user->id_emp) {
+            abort(403, 'No tienes permisos para ver esta ejecución.');
         }
 
         // Cargar el flujo con todas las relaciones necesarias
-        $flujo->load([
+        $flujo = $detalleFlujo->flujo()->with([
             'etapas.tareas', 
             'etapas.documentos'
-        ]);
+        ])->first();
+
+        if (!$flujo) {
+            return response()->json(['error' => 'Flujo no encontrado'], 404);
+        }
 
         $progreso_general = 0;
         $total_items = 0;
@@ -844,11 +971,20 @@ class Ejecucion extends Controller
             $tareas_completadas = 0;
             $total_tareas = $etapa->tareas->count();
             
+            // Buscar detalle_etapa para esta ejecución
+            $detalleEtapa = DetalleEtapa::where('id_etapa', $etapa->id)
+                ->where('id_detalle_flujo', $detalleFlujo->id)
+                ->first();
+            
             foreach ($etapa->tareas as $tarea) {
-                $detalle = DetalleTarea::where('id_tarea', $tarea->id)->first();
-                if ($detalle && $detalle->estado) {
-                    $tareas_completadas++;
-                    $items_completados++;
+                if ($detalleEtapa) {
+                    $detalle = DetalleTarea::where('id_tarea', $tarea->id)
+                        ->where('id_detalle_etapa', $detalleEtapa->id)
+                        ->first();
+                    if ($detalle && $detalle->estado == 3) { // Solo estado 3 es completado
+                        $tareas_completadas++;
+                        $items_completados++;
+                    }
                 }
                 $total_items++;
             }
@@ -856,13 +992,20 @@ class Ejecucion extends Controller
             $documentos_subidos = 0;
             $total_documentos = $etapa->documentos->count();
             
-            foreach ($etapa->documentos as $documento) {
-                $detalle = DetalleDocumento::where('id_documento', $documento->id)->first();
-                if ($detalle && $detalle->estado) {
-                    $documentos_subidos++;
-                    $items_completados++;
+            if ($detalleEtapa) {
+                foreach ($etapa->documentos as $documento) {
+                    $detalle = DetalleDocumento::where('id_documento', $documento->id)
+                        ->where('id_detalle_etapa', $detalleEtapa->id)
+                        ->first();
+                    if ($detalle && $detalle->estado == 3) { // Solo estado 3 es subido
+                        $documentos_subidos++;
+                        $items_completados++;
+                    }
+                    $total_items++;
                 }
-                $total_items++;
+            } else {
+                // Si no hay detalle_etapa, contar documentos como pendientes
+                $total_items += $total_documentos;
             }
 
             $progreso_etapa = 0;
@@ -889,7 +1032,110 @@ class Ejecucion extends Controller
         return response()->json([
             'progreso_general' => $progreso_general,
             'etapas' => $etapas_data,
-            'flujo_estado' => $flujo->estado
+            'detalle_flujo_estado' => $detalleFlujo->estado,
+            'nombre_ejecucion' => $detalleFlujo->nombre
         ]);
+    }
+
+    /**
+     * Pausar una ejecución activa
+     */
+    public function pausarEjecucion(DetalleFlujo $detalleFlujo)
+    {
+        try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+            // SUPERADMIN no puede pausar ejecuciones
+            if ($isSuper) {
+                return response()->json(['error' => 'SUPERADMIN no puede pausar ejecuciones'], 403);
+            }
+
+            // Verificar permisos de empresa
+            if ($detalleFlujo->id_emp != $user->id_emp) {
+                return response()->json(['error' => 'Sin permisos para esta ejecución'], 403);
+            }
+
+            // Verificar que la ejecución esté activa (estado 2)
+            if ($detalleFlujo->estado != 2) {
+                return response()->json(['error' => 'Solo se pueden pausar ejecuciones activas'], 400);
+            }
+
+            // Pausar la ejecución (estado 4 = pausado)
+            $detalleFlujo->update(['estado' => 4]);
+
+            Log::info('Ejecución pausada', [
+                'detalle_flujo_id' => $detalleFlujo->id,
+                'usuario_id' => $user->id,
+                'fecha_pausa' => now()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Ejecución pausada correctamente',
+                'nuevo_estado' => $detalleFlujo->estado,
+                'fecha_pausa' => $detalleFlujo->updated_at->format('d/m/Y H:i:s')
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error al pausar ejecución', [
+                'detalle_flujo_id' => $detalleFlujo->id ?? null,
+                'error' => $e->getMessage(),
+                'user_id' => $user->id ?? null
+            ]);
+
+            return response()->json(['error' => 'Error interno del servidor'], 500);
+        }
+    }
+
+    /**
+     * Reactivar una ejecución pausada
+     */
+    public function reactivarEjecucion(DetalleFlujo $detalleFlujo)
+    {
+        try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+            // SUPERADMIN no puede reactivar ejecuciones
+            if ($isSuper) {
+                return response()->json(['error' => 'SUPERADMIN no puede reactivar ejecuciones'], 403);
+            }
+
+            // Verificar permisos de empresa
+            if ($detalleFlujo->id_emp != $user->id_emp) {
+                return response()->json(['error' => 'Sin permisos para esta ejecución'], 403);
+            }
+
+            // Verificar que la ejecución esté pausada (estado 4)
+            if ($detalleFlujo->estado != 4) {
+                return response()->json(['error' => 'Solo se pueden reactivar ejecuciones pausadas'], 400);
+            }
+
+            // Reactivar la ejecución (estado 2 = en ejecución)
+            $detalleFlujo->update(['estado' => 2]);
+
+            Log::info('Ejecución reactivada', [
+                'detalle_flujo_id' => $detalleFlujo->id,
+                'usuario_id' => $user->id,
+                'fecha_reactivacion' => now()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Ejecución reactivada correctamente',
+                'nuevo_estado' => $detalleFlujo->estado,
+                'fecha_reactivacion' => $detalleFlujo->updated_at->format('d/m/Y H:i:s')
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error al reactivar ejecución', [
+                'detalle_flujo_id' => $detalleFlujo->id ?? null,
+                'error' => $e->getMessage(),
+                'user_id' => $user->id ?? null
+            ]);
+
+            return response()->json(['error' => 'Error interno del servidor'], 500);
+        }
     }
 }

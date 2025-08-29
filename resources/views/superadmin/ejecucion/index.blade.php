@@ -80,6 +80,7 @@
 <!-- Sección de Ejecuciones Activas -->
 @php
     $ejecucionesEnProceso = $ejecucionesActivas->where('estado', 2);
+    $ejecucionesPausadas = $ejecucionesActivas->where('estado', 4);
     $ejecucionesTerminadas = $ejecucionesActivas->where('estado', 3);
 @endphp
 
@@ -175,10 +176,132 @@
                                         <i class="fas fa-eye me-2"></i>Ver Estado de Ejecución
                                     </a>
                                 @else
-                                    <!-- Usuarios de empresa pueden continuar -->
-                                    <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}/ejecutar" class="btn btn-warning btn-sm w-100">
-                                        <i class="fas fa-play me-2"></i>Continuar Ejecución
+                                    <!-- Usuarios de empresa pueden continuar y pausar -->
+                                    <div class="d-grid gap-2">
+                                        <a href="/ejecucion/detalle/{{ $detalleEjecucion->id }}/ejecutar" class="btn btn-warning btn-sm">
+                                            <i class="fas fa-play me-2"></i>Continuar Ejecución
+                                        </a>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm pausar-ejecucion" 
+                                                data-detalle-id="{{ $detalleEjecucion->id }}"
+                                                data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                            <i class="fas fa-pause me-2"></i>Pausar Ejecución
+                                        </button>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                @endif
+            @endforeach
+        </div>
+    </div>
+@endif
+
+<!-- Sección de Ejecuciones Pausadas -->
+@if($ejecucionesPausadas->count() > 0)
+    <div class="mt-5">
+        <div class="d-flex align-items-center mb-4">
+            <h4 class="mb-0">
+                <i class="fas fa-pause-circle text-secondary me-2"></i>
+                Ejecuciones Pausadas
+            </h4>
+            <span class="badge bg-secondary ms-2">{{ $ejecucionesPausadas->count() }}</span>
+        </div>
+
+        <div class="row g-4">
+            @foreach($ejecucionesPausadas as $detalleEjecucion)
+                @if($detalleEjecucion->flujo)
+                <div class="col-12 col-lg-6 col-xl-4">
+                    <div class="card h-100 shadow-sm border-secondary">
+                        <div class="card-body p-4">
+                            <!-- Header del flujo -->
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div class="flex-grow-1">
+                                    <h5 class="card-title mb-1 text-primary fw-bold">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h5>
+                                    <div class="text-muted small">
+                                        <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
+                                        @if($isSuper)
+                                            <span class="badge bg-secondary ms-1">{{ $detalleEjecucion->flujo->empresa->nombre ?? 'Sin empresa' }}</span>
+                                        @endif
+                                        <span class="badge bg-secondary ms-1">Ejecución #{{ $detalleEjecucion->id }}</span>
+                                    </div>
+                                </div>
+                                <div class="status-indicator">
+                                    <span class="badge bg-secondary">
+                                        <i class="fas fa-pause me-1"></i>Pausada
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Descripción del flujo -->
+                            @if($detalleEjecucion->flujo->descripcion)
+                                <p class="text-muted small mb-3">
+                                    {{ \Illuminate\Support\Str::limit($detalleEjecucion->flujo->descripcion, 120) }}
+                                </p>
+                            @endif
+
+                            <!-- Contadores -->
+                            <div class="row text-center mb-3">
+                                <div class="col-6">
+                                    <div class="p-2 bg-light rounded">
+                                        <i class="fas fa-list-ol text-primary d-block mb-1"></i>
+                                        <div class="fw-bold">{{ $detalleEjecucion->flujo->total_etapas }}</div>
+                                        <small class="text-muted">etapas</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="p-2 bg-light rounded">
+                                        <i class="fas fa-file-alt text-info d-block mb-1"></i>
+                                        <div class="fw-bold">{{ $detalleEjecucion->flujo->total_documentos }}</div>
+                                        <small class="text-muted">documentos</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Información de pausa -->
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted">Estado</small>
+                                    <small class="text-secondary fw-bold">Pausada</small>
+                                </div>
+                                <div class="progress" style="height: 6px;">
+                                    <div class="progress-bar bg-secondary" role="progressbar" style="width: 50%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Información de fecha -->
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-pause me-1"></i>
+                                    Pausada: {{ $detalleEjecucion->updated_at->diffForHumans() }}
+                                </small>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    Iniciada: {{ $detalleEjecucion->created_at->diffForHumans() }}
+                                </small>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="fas fa-user me-1"></i>
+                                    Por: {{ $detalleEjecucion->userCreate->name ?? 'Usuario desconocido' }}
+                                </small>
+                            </div>
+
+                            <!-- Botones de acción -->
+                            <div class="text-center">
+                                @if($isSuper)
+                                    <!-- SUPERADMIN solo puede ver -->
+                                    <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-info btn-sm w-100">
+                                        <i class="fas fa-eye me-2"></i>Ver Estado
                                     </a>
+                                @else
+                                    <!-- Usuarios de empresa pueden reactivar -->
+                                    <button type="button" class="btn btn-success btn-sm w-100 reactivar-ejecucion" 
+                                            data-detalle-id="{{ $detalleEjecucion->id }}"
+                                            data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                        <i class="fas fa-play me-2"></i>Reactivar Ejecución
+                                    </button>
                                 @endif
                             </div>
                         </div>
@@ -413,9 +536,13 @@
     box-shadow: 0 4px 15px rgba(23, 162, 184, 0.3);
 }
 
-/* Estilos para ejecuciones en proceso y terminadas */
+/* Estilos para ejecuciones en proceso, pausadas y terminadas */
 .border-warning {
     border: 2px solid #ffc107 !important;
+}
+
+.border-secondary {
+    border: 2px solid #6c757d !important;
 }
 
 .border-success {
@@ -437,6 +564,10 @@
 
 .card.border-warning:hover {
     box-shadow: 0 8px 25px rgba(255, 193, 7, 0.2) !important;
+}
+
+.card.border-secondary:hover {
+    box-shadow: 0 8px 25px rgba(108, 117, 125, 0.2) !important;
 }
 
 .card.border-success:hover {
@@ -577,9 +708,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     throw new Error('Campo de nombre de ejecución no encontrado');
                 }
                 
-                // Pre-llenar nombre de ejecución
-                const fechaHoy = new Date().toLocaleDateString('es-ES');
-                nombreEjecucion.value = `${data.flujo.nombre} - ${fechaHoy}`;
+                // Limpiar el campo de nombre (sin valor por defecto)
+                nombreEjecucion.value = '';
                 
                 // Cargar tareas
                 cargarTareas(data.flujo.etapas);
@@ -755,6 +885,96 @@ document.addEventListener('DOMContentLoaded', function() {
         .finally(() => {
             submitBtn.disabled = false;
             submitBtn.innerHTML = '<i class="fas fa-play me-1"></i>Crear y Ejecutar';
+        });
+    }
+    
+    // Manejar botones de pausar ejecución
+    document.querySelectorAll('.pausar-ejecucion').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const detalleId = this.dataset.detalleId;
+            const nombre = this.dataset.nombre;
+            
+            if (confirm(`¿Estás seguro de que quieres pausar la ejecución "${nombre}"?`)) {
+                pausarEjecucion(detalleId, this);
+            }
+        });
+    });
+
+    // Manejar botones de reactivar ejecución
+    document.querySelectorAll('.reactivar-ejecucion').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const detalleId = this.dataset.detalleId;
+            const nombre = this.dataset.nombre;
+            
+            if (confirm(`¿Estás seguro de que quieres reactivar la ejecución "${nombre}"?`)) {
+                reactivarEjecucion(detalleId, this);
+            }
+        });
+    });
+
+    // Función para pausar ejecución
+    function pausarEjecucion(detalleId, btn) {
+        // Deshabilitar botón mientras se procesa
+        btn.disabled = true;
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Pausando...';
+
+        fetch(`/ejecucion/detalle/${detalleId}/pausar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Recargar la página para reflejar el cambio
+                window.location.reload();
+            } else {
+                alert(`Error al pausar la ejecución: ${data.error || data.message}`);
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al pausar la ejecución');
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        });
+    }
+
+    // Función para reactivar ejecución
+    function reactivarEjecucion(detalleId, btn) {
+        // Deshabilitar botón mientras se procesa
+        btn.disabled = true;
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Reactivando...';
+
+        fetch(`/ejecucion/detalle/${detalleId}/reactivar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Recargar la página para reflejar el cambio
+                window.location.reload();
+            } else {
+                alert(`Error al reactivar la ejecución: ${data.error || data.message}`);
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al reactivar la ejecución');
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
         });
     }
     

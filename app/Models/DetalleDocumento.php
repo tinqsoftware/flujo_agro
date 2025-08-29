@@ -13,6 +13,7 @@ class DetalleDocumento extends Model
 
     protected $fillable = [
         'id_documento',
+        'id_detalle_etapa',
         'estado',
         'id_user_create',
         'ruta_doc'
@@ -26,6 +27,11 @@ class DetalleDocumento extends Model
     public function documento()
     {
         return $this->belongsTo(Documento::class, 'id_documento');
+    }
+
+    public function detalleEtapa()
+    {
+        return $this->belongsTo(DetalleEtapa::class, 'id_detalle_etapa');
     }
 
     public function userCreate()
