@@ -64,14 +64,14 @@ class Ejecucion extends Controller
         if (!$isSuper) {
             $ejecucionesActivas = DetalleFlujo::with(['flujo.empresa', 'flujo.tipo', 'flujo.etapas'])
                 ->where('id_emp', $user->id_emp)
-                ->whereIn('estado', [2, 3, 4]) // 2 = En ejecución, 3 = Terminado, 4 = Pausado
-                ->orderBy('estado') // Primero en ejecución, luego pausados, luego terminados
+                ->whereIn('estado', [2, 3, 4, 99]) // 2 = En ejecución, 3 = Terminado, 4 = Pausado, 99 = Cancelado
+                ->orderBy('estado') // Primero en ejecución, luego pausados, luego terminados, luego cancelados
                 ->orderBy('updated_at', 'desc')
                 ->get();
         } else {
             // Para SUPERADMIN, mostrar todas las ejecuciones
             $ejecucionesActivas = DetalleFlujo::with(['flujo.empresa', 'flujo.tipo', 'flujo.etapas'])
-                ->whereIn('estado', [2, 3, 4])
+                ->whereIn('estado', [2, 3, 4, 99])
                 ->orderBy('estado')
                 ->orderBy('updated_at', 'desc')
                 ->get();
@@ -1130,6 +1130,76 @@ class Ejecucion extends Controller
 
         } catch (\Exception $e) {
             Log::error('Error al reactivar ejecución', [
+                'detalle_flujo_id' => $detalleFlujo->id ?? null,
+                'error' => $e->getMessage(),
+                'user_id' => $user->id ?? null
+            ]);
+
+            return response()->json(['error' => 'Error interno del servidor'], 500);
+        }
+    }
+
+    /**
+     * Cancelar una ejecución activa o pausada
+     */
+    public function cancelarEjecucion(Request $request, DetalleFlujo $detalleFlujo)
+    {
+        try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+            // SUPERADMIN no puede cancelar ejecuciones
+            if ($isSuper) {
+                return response()->json(['error' => 'SUPERADMIN no puede cancelar ejecuciones'], 403);
+            }
+
+            // Verificar permisos de empresa
+            if ($detalleFlujo->id_emp != $user->id_emp) {
+                return response()->json(['error' => 'Sin permisos para esta ejecución'], 403);
+            }
+
+            // Verificar que la ejecución esté activa (estado 2) o pausada (estado 4)
+            if (!in_array($detalleFlujo->estado, [2, 4])) {
+                return response()->json(['error' => 'Solo se pueden cancelar ejecuciones activas o pausadas'], 400);
+            }
+
+            // Validar que se proporcione un motivo
+            $request->validate([
+                'motivo' => 'required|string|min:5|max:500'
+            ], [
+                'motivo.required' => 'El motivo de cancelación es obligatorio',
+                'motivo.min' => 'El motivo debe tener al menos 5 caracteres',
+                'motivo.max' => 'El motivo no puede exceder 500 caracteres'
+            ]);
+
+            // Cancelar la ejecución (estado 99 = cancelado)
+            $detalleFlujo->update([
+                'estado' => 99,
+                'motivo' => $request->motivo
+            ]);
+
+            Log::info('Ejecución cancelada', [
+                'detalle_flujo_id' => $detalleFlujo->id,
+                'usuario_id' => $user->id,
+                'motivo' => $request->motivo,
+                'fecha_cancelacion' => now()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Ejecución cancelada correctamente',
+                'nuevo_estado' => $detalleFlujo->estado,
+                'motivo' => $detalleFlujo->motivo,
+                'fecha_cancelacion' => $detalleFlujo->updated_at->format('d/m/Y H:i:s')
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'error' => 'Error de validación',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Error al cancelar ejecución', [
                 'detalle_flujo_id' => $detalleFlujo->id ?? null,
                 'error' => $e->getMessage(),
                 'user_id' => $user->id ?? null

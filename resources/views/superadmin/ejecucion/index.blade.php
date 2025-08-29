@@ -81,6 +81,7 @@
 @php
     $ejecucionesEnProceso = $ejecucionesActivas->where('estado', 2);
     $ejecucionesPausadas = $ejecucionesActivas->where('estado', 4);
+    $ejecucionesCanceladas = $ejecucionesActivas->where('estado', 99);
     $ejecucionesTerminadas = $ejecucionesActivas->where('estado', 3);
 @endphp
 
@@ -176,16 +177,27 @@
                                         <i class="fas fa-eye me-2"></i>Ver Estado de Ejecución
                                     </a>
                                 @else
-                                    <!-- Usuarios de empresa pueden continuar y pausar -->
+                                    <!-- Usuarios de empresa pueden continuar, pausar y cancelar -->
                                     <div class="d-grid gap-2">
                                         <a href="/ejecucion/detalle/{{ $detalleEjecucion->id }}/ejecutar" class="btn btn-warning btn-sm">
                                             <i class="fas fa-play me-2"></i>Continuar Ejecución
                                         </a>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm pausar-ejecucion" 
-                                                data-detalle-id="{{ $detalleEjecucion->id }}"
-                                                data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
-                                            <i class="fas fa-pause me-2"></i>Pausar Ejecución
-                                        </button>
+                                        <div class="row g-1">
+                                            <div class="col-6">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm w-100 pausar-ejecucion" 
+                                                        data-detalle-id="{{ $detalleEjecucion->id }}"
+                                                        data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                                    <i class="fas fa-pause me-1"></i>Pausar
+                                                </button>
+                                            </div>
+                                            <div class="col-6">
+                                                <button type="button" class="btn btn-outline-danger btn-sm w-100 cancelar-ejecucion" 
+                                                        data-detalle-id="{{ $detalleEjecucion->id }}"
+                                                        data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                                    <i class="fas fa-times me-1"></i>Cancelar
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 @endif
                             </div>
@@ -198,15 +210,15 @@
     </div>
 @endif
 
-<!-- Sección de Ejecuciones Pausadas -->
-@if($ejecucionesPausadas->count() > 0)
+<!-- Sección de Ejecuciones Pausadas y Canceladas -->
+@if($ejecucionesPausadas->count() > 0 || $ejecucionesCanceladas->count() > 0)
     <div class="mt-5">
         <div class="d-flex align-items-center mb-4">
             <h4 class="mb-0">
                 <i class="fas fa-pause-circle text-secondary me-2"></i>
-                Ejecuciones Pausadas
+                Ejecuciones Pausadas y Canceladas
             </h4>
-            <span class="badge bg-secondary ms-2">{{ $ejecucionesPausadas->count() }}</span>
+            <span class="badge bg-secondary ms-2">{{ $ejecucionesPausadas->count() + $ejecucionesCanceladas->count() }}</span>
         </div>
 
         <div class="row g-4">
@@ -296,13 +308,119 @@
                                         <i class="fas fa-eye me-2"></i>Ver Estado
                                     </a>
                                 @else
-                                    <!-- Usuarios de empresa pueden reactivar -->
-                                    <button type="button" class="btn btn-success btn-sm w-100 reactivar-ejecucion" 
-                                            data-detalle-id="{{ $detalleEjecucion->id }}"
-                                            data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
-                                        <i class="fas fa-play me-2"></i>Reactivar Ejecución
-                                    </button>
+                                    <!-- Usuarios de empresa pueden reactivar y cancelar -->
+                                    <div class="d-grid gap-2">
+                                        <button type="button" class="btn btn-success btn-sm reactivar-ejecucion" 
+                                                data-detalle-id="{{ $detalleEjecucion->id }}"
+                                                data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                            <i class="fas fa-play me-2"></i>Reactivar Ejecución
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger btn-sm cancelar-ejecucion" 
+                                                data-detalle-id="{{ $detalleEjecucion->id }}"
+                                                data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                            <i class="fas fa-times me-2"></i>Cancelar Ejecución
+                                        </button>
+                                    </div>
                                 @endif
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                @endif
+            @endforeach
+            
+            @foreach($ejecucionesCanceladas as $detalleEjecucion)
+                @if($detalleEjecucion->flujo)
+                <div class="col-12 col-lg-6 col-xl-4">
+                    <div class="card h-100 shadow-sm border-danger">
+                        <div class="card-body p-4">
+                            <!-- Header del flujo -->
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div class="flex-grow-1">
+                                    <h5 class="card-title mb-1 text-primary fw-bold">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h5>
+                                    <div class="text-muted small">
+                                        <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
+                                        @if($isSuper)
+                                            <span class="badge bg-secondary ms-1">{{ $detalleEjecucion->flujo->empresa->nombre ?? 'Sin empresa' }}</span>
+                                        @endif
+                                        <span class="badge bg-danger ms-1">Ejecución #{{ $detalleEjecucion->id }}</span>
+                                    </div>
+                                </div>
+                                <div class="status-indicator">
+                                    <span class="badge bg-danger">
+                                        <i class="fas fa-times me-1"></i>Cancelada
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Descripción del flujo -->
+                            @if($detalleEjecucion->flujo->descripcion)
+                                <p class="text-muted small mb-3">
+                                    {{ \Illuminate\Support\Str::limit($detalleEjecucion->flujo->descripcion, 120) }}
+                                </p>
+                            @endif
+
+                            <!-- Contadores -->
+                            <div class="row text-center mb-3">
+                                <div class="col-6">
+                                    <div class="p-2 bg-light rounded">
+                                        <i class="fas fa-list-ol text-primary d-block mb-1"></i>
+                                        <div class="fw-bold">{{ $detalleEjecucion->flujo->total_etapas }}</div>
+                                        <small class="text-muted">etapas</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="p-2 bg-light rounded">
+                                        <i class="fas fa-file-alt text-info d-block mb-1"></i>
+                                        <div class="fw-bold">{{ $detalleEjecucion->flujo->total_documentos }}</div>
+                                        <small class="text-muted">documentos</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Información de cancelación -->
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted">Estado</small>
+                                    <small class="text-danger fw-bold">Cancelada</small>
+                                </div>
+                                <div class="progress" style="height: 6px;">
+                                    <div class="progress-bar bg-danger" role="progressbar" style="width: 100%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Motivo de cancelación -->
+                            @if($detalleEjecucion->motivo)
+                                <div class="mb-3">
+                                    <small class="text-muted d-block">Motivo de cancelación:</small>
+                                    <small class="text-danger">{{ $detalleEjecucion->motivo }}</small>
+                                </div>
+                            @endif
+
+                            <!-- Información de fecha -->
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-times me-1"></i>
+                                    Cancelada: {{ $detalleEjecucion->updated_at->diffForHumans() }}
+                                </small>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    Iniciada: {{ $detalleEjecucion->created_at->diffForHumans() }}
+                                </small>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="fas fa-user me-1"></i>
+                                    Por: {{ $detalleEjecucion->userCreate->name ?? 'Usuario desconocido' }}
+                                </small>
+                            </div>
+
+                            <!-- Botones de acción -->
+                            <div class="text-center">
+                                <!-- Ejecución cancelada - solo se puede ver -->
+                                <button class="btn btn-outline-secondary btn-sm w-100" disabled>
+                                    <i class="fas fa-ban me-2"></i>Ejecución Cancelada
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -475,6 +593,52 @@
         </div>
     </div>
 </div>
+
+<!-- Modal para Cancelar Ejecución -->
+<div class="modal fade" id="modalCancelarEjecucion" tabindex="-1" aria-labelledby="modalCancelarEjecucionLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalCancelarEjecucionLabel">
+                    <i class="fas fa-times me-2"></i>Cancelar Ejecución
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="formCancelarEjecucion">
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>¿Estás seguro de que quieres cancelar esta ejecución?</strong>
+                        <br>Esta acción no se puede deshacer.
+                    </div>
+                    
+                    <div class="mb-3">
+                        <p class="mb-2">Ejecución a cancelar:</p>
+                        <p class="fw-bold text-primary" id="nombre-ejecucion-cancelar"></p>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="motivo-cancelacion" class="form-label fw-bold">
+                            <i class="fas fa-comment me-1"></i>Motivo de cancelación *
+                        </label>
+                        <textarea class="form-control" id="motivo-cancelacion" name="motivo" rows="4" 
+                                  placeholder="Describe el motivo por el cual se cancela esta ejecución..." 
+                                  required minlength="5" maxlength="500"></textarea>
+                        <div class="form-text">Mínimo 5 caracteres, máximo 500. Este motivo quedará registrado en el sistema.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-arrow-left me-1"></i>Volver
+                    </button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-times me-1"></i>Confirmar Cancelación
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endif
 
 @endsection
@@ -545,6 +709,10 @@
     border: 2px solid #6c757d !important;
 }
 
+.border-danger {
+    border: 2px solid #dc3545 !important;
+}
+
 .border-success {
     border: 2px solid #198754 !important;
 }
@@ -568,6 +736,10 @@
 
 .card.border-secondary:hover {
     box-shadow: 0 8px 25px rgba(108, 117, 125, 0.2) !important;
+}
+
+.card.border-danger:hover {
+    box-shadow: 0 8px 25px rgba(220, 53, 69, 0.2) !important;
 }
 
 .card.border-success:hover {
@@ -975,6 +1147,93 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Error al reactivar la ejecución');
             btn.disabled = false;
             btn.innerHTML = originalHtml;
+        });
+    }
+    
+    // Manejar botones de cancelar ejecución
+    document.querySelectorAll('.cancelar-ejecucion').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const detalleId = this.dataset.detalleId;
+            const nombre = this.dataset.nombre;
+            
+            // Configurar modal
+            document.getElementById('nombre-ejecucion-cancelar').textContent = nombre;
+            document.getElementById('motivo-cancelacion').value = '';
+            
+            // Guardar datos en el modal para su uso posterior
+            const modal = document.getElementById('modalCancelarEjecucion');
+            modal.dataset.detalleId = detalleId;
+            modal.dataset.nombre = nombre;
+            
+            // Mostrar modal
+            const modalCancelar = new bootstrap.Modal(modal);
+            modalCancelar.show();
+        });
+    });
+
+    // Manejar envío del formulario de cancelación
+    const formCancelarEjecucion = document.getElementById('formCancelarEjecucion');
+    if (formCancelarEjecucion) {
+        formCancelarEjecucion.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const modal = document.getElementById('modalCancelarEjecucion');
+            const detalleId = modal.dataset.detalleId;
+            const motivo = document.getElementById('motivo-cancelacion').value.trim();
+            
+            if (motivo.length < 5) {
+                alert('El motivo debe tener al menos 5 caracteres');
+                return;
+            }
+            
+            if (motivo.length > 500) {
+                alert('El motivo no puede exceder 500 caracteres');
+                return;
+            }
+            
+            cancelarEjecucion(detalleId, motivo);
+        });
+    }
+
+    // Función para cancelar ejecución
+    function cancelarEjecucion(detalleId, motivo) {
+        const submitBtn = formCancelarEjecucion.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        const originalHtml = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Cancelando...';
+
+        fetch(`/ejecucion/detalle/${detalleId}/cancelar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({
+                motivo: motivo
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Cerrar modal
+                bootstrap.Modal.getInstance(document.getElementById('modalCancelarEjecucion')).hide();
+                // Recargar la página para reflejar el cambio
+                window.location.reload();
+            } else {
+                if (data.errors && data.errors.motivo) {
+                    alert(`Error de validación: ${data.errors.motivo[0]}`);
+                } else {
+                    alert(`Error al cancelar la ejecución: ${data.error || data.message}`);
+                }
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHtml;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al cancelar la ejecución');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalHtml;
         });
     }
     

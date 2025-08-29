@@ -14,6 +14,7 @@ class DetalleFlujo extends Model
         'id_emp',
         'id_user_create',
         'estado',
+        'motivo'
     ];
 
     protected $casts = [
@@ -25,6 +26,7 @@ class DetalleFlujo extends Model
         'estado' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'motivo' => 'string',
     ];
 
     // Relaciones

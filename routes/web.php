@@ -122,9 +122,10 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::post('ejecucion/detalle/documento/subir', [Ejecucion::class, 'subirDocumento'])->name('ejecucion.detalle.documento.subir');
         Route::get('ejecucion/detalle/{detalleFlujo}/progreso', [Ejecucion::class, 'progreso'])->name('ejecucion.detalle.progreso');
         
-        // Rutas para pausar y reactivar ejecuciones
+        // Rutas para pausar, reactivar y cancelar ejecuciones
         Route::post('ejecucion/detalle/{detalleFlujo}/pausar', [Ejecucion::class, 'pausarEjecucion'])->name('ejecucion.detalle.pausar');
         Route::post('ejecucion/detalle/{detalleFlujo}/reactivar', [Ejecucion::class, 'reactivarEjecucion'])->name('ejecucion.detalle.reactivar');
+        Route::post('ejecucion/detalle/{detalleFlujo}/cancelar', [Ejecucion::class, 'cancelarEjecucion'])->name('ejecucion.detalle.cancelar');
 
     
     // Gestión de Usuarios (SUPERADMIN y ADMINISTRADOR)
