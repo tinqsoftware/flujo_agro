@@ -568,11 +568,18 @@ class Ejecucion extends Controller
             abort(403, 'No tienes permisos para ejecutar esta ejecución.');
         }
 
-        // Verificar que la ejecución esté activa (estado 2)
+        // Verificar que la ejecución esté activa (estado 2) o permita visualización
         if ($detalleFlujo->estado != 2) {
+            // Para ejecuciones canceladas, mostrar vista de solo lectura
+            if ($detalleFlujo->estado == 99) {
+                return redirect()->route('ejecucion.index')
+                    ->with('warning', 'Esta ejecución ha sido cancelada. Motivo: ' . 
+                        ($detalleFlujo->motivo ?? 'No especificado'));
+            }
+            
             return redirect()->route('ejecucion.index')
                 ->with('warning', 'Esta ejecución no está activa. Estado actual: ' . 
-                    ($detalleFlujo->estado == 1 ? 'Creada' : ($detalleFlujo->estado == 3 ? 'Completada' : 'Desconocido')));
+                    ($detalleFlujo->estado == 1 ? 'Creada' : ($detalleFlujo->estado == 3 ? 'Completada' : ($detalleFlujo->estado == 4 ? 'Pausada' : 'Desconocido'))));
         }
 
         Log::info('Accediendo a ejecución específica', [
@@ -617,6 +624,7 @@ class Ejecucion extends Controller
                 if ($detalleEtapa) {
                     $detalleTarea = DetalleTarea::with('userCreate')->where('id_tarea', $tarea->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
+                        ->whereNotIn('estado', [99]) // Excluir tareas canceladas
                         ->first();
                 }
                 
@@ -633,6 +641,7 @@ class Ejecucion extends Controller
                 if ($detalleEtapa) {
                     $detalleDocumento = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
+                        ->whereNotIn('estado', [99]) // Excluir documentos cancelados
                         ->first();
                 }
                 
@@ -704,6 +713,11 @@ class Ejecucion extends Controller
             $detalleFlujo = DetalleFlujo::where('id', $detalleFlujoId)
                 ->where('id_emp', $user->id_emp)
                 ->firstOrFail();
+
+            // Verificar que la ejecución no esté cancelada
+            if ($detalleFlujo->estado == 99) {
+                return response()->json(['error' => 'No se pueden modificar tareas de una ejecución cancelada'], 400);
+            }
 
             // Buscar la tarea para obtener su etapa
             $tarea = \App\Models\Tarea::findOrFail($tareaId);
@@ -804,6 +818,11 @@ class Ejecucion extends Controller
             $detalleFlujo = DetalleFlujo::where('id', $detalleFlujoId)
                 ->where('id_emp', $user->id_emp)
                 ->firstOrFail();
+
+            // Verificar que la ejecución no esté cancelada
+            if ($detalleFlujo->estado == 99) {
+                return response()->json(['error' => 'No se pueden modificar etapas de una ejecución cancelada'], 400);
+            }
 
             // Verificar que la etapa pertenece al flujo
             $etapa = \App\Models\Etapa::where('id', $etapaId)
@@ -970,6 +989,11 @@ class Ejecucion extends Controller
                 ->where('id_emp', $user->id_emp)
                 ->firstOrFail();
 
+            // Verificar que la ejecución no esté cancelada
+            if ($detalleFlujo->estado == 99) {
+                return response()->json(['error' => 'No se pueden subir documentos a una ejecución cancelada'], 400);
+            }
+
             // Crear directorio si no existe
             $directorio = 'documentos/ejecucion/' . $detalleFlujoId . '/' . date('Y/m');
             
@@ -1065,12 +1089,14 @@ class Ejecucion extends Controller
         $itemsCompletados = 0;
 
         foreach ($flujo->etapas as $etapa) {
-            $tareasCompletadas = DetalleTarea::where('estado', true)
+            $tareasCompletadas = DetalleTarea::where('estado', 3) // Solo estado 3 es completado
                 ->whereIn('id_tarea', $etapa->tareas->pluck('id'))
+                ->whereNotIn('estado', [99]) // Excluir tareas canceladas
                 ->count();
             
-            $documentosSubidos = DetalleDocumento::where('estado', true)
+            $documentosSubidos = DetalleDocumento::where('estado', 3) // Solo estado 3 es subido
                 ->whereIn('id_documento', $etapa->documentos->pluck('id'))
+                ->whereNotIn('estado', [99]) // Excluir documentos cancelados
                 ->count();
             
             $totalEtapa = $etapa->tareas->count() + $etapa->documentos->count();
@@ -1127,20 +1153,22 @@ class Ejecucion extends Controller
 
             if (!$detalleEtapa) return false;
 
-            // Verificar si todas las tareas de la etapa están completadas para esta ejecución
+            // Verificar si todas las tareas de la etapa están completadas para esta ejecución (excluyendo canceladas)
             $totalTareas = $etapa->tareas()->where('estado', 1)->count();
             $tareasCompletadas = DetalleTarea::where('estado', 3) // Solo estado 3 es completado
                 ->where('id_detalle_etapa', $detalleEtapa->id)
                 ->whereIn('id_tarea', $etapa->tareas()->where('estado', 1)->pluck('id'))
+                ->whereNotIn('estado', [99]) // Excluir tareas canceladas
                 ->count();
 
-            // Verificar si todos los documentos de la etapa están subidos para esta ejecución
+            // Verificar si todos los documentos de la etapa están subidos para esta ejecución (excluyendo cancelados)
             $totalDocumentos = $etapa->documentos()->where('estado', 1)->count();
             $documentosSubidos = DetalleDocumento::where('estado', 3) // Solo estado 3 es subido
                 ->whereHas('detalleEtapa', function($query) use ($detalleFlujoId) {
                     $query->where('id_detalle_flujo', $detalleFlujoId);
                 })
                 ->whereIn('id_documento', $etapa->documentos()->where('estado', 1)->pluck('id'))
+                ->whereNotIn('estado', [99]) // Excluir documentos cancelados
                 ->count();
 
             Log::info("Verificando etapa {$etapa->id} para ejecución {$detalleFlujoId}", [
@@ -1161,9 +1189,13 @@ class Ejecucion extends Controller
                     // Verificar si todas las etapas de esta ejecución están completadas
                     $detalleFlujo = DetalleFlujo::find($detalleFlujoId);
                     if ($detalleFlujo) {
-                        $totalEtapasEjecucion = DetalleEtapa::where('id_detalle_flujo', $detalleFlujoId)->count();
+                        $totalEtapasEjecucion = DetalleEtapa::where('id_detalle_flujo', $detalleFlujoId)
+                            ->whereNotIn('estado', [99]) // Excluir etapas canceladas
+                            ->count();
                         $etapasCompletadasEjecucion = DetalleEtapa::where('id_detalle_flujo', $detalleFlujoId)
-                            ->where('estado', 3)->count();
+                            ->where('estado', 3)
+                            ->whereNotIn('estado', [99]) // Excluir etapas canceladas
+                            ->count();
 
                         Log::info("Verificando ejecución {$detalleFlujoId}", [
                             'total_etapas' => $totalEtapasEjecucion,
@@ -1233,6 +1265,11 @@ class Ejecucion extends Controller
             $detalleFlujo = DetalleFlujo::where('id', $detalleFlujoId)
                 ->where('id_emp', $user->id_emp)
                 ->firstOrFail();
+
+            // Verificar que la ejecución no esté cancelada
+            if ($detalleFlujo->estado == 99) {
+                return response()->json(['error' => 'No se pueden eliminar documentos de una ejecución cancelada'], 400);
+            }
 
             // Buscar el documento
             $documento = \App\Models\Documento::findOrFail($documentoId);
@@ -1358,6 +1395,7 @@ class Ejecucion extends Controller
                 if ($detalleEtapa) {
                     $detalle = DetalleTarea::where('id_tarea', $tarea->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
+                        ->whereNotIn('estado', [99]) // Excluir tareas canceladas
                         ->first();
                     if ($detalle && $detalle->estado == 3) { // Solo estado 3 es completado
                         $tareas_completadas++;
@@ -1374,6 +1412,7 @@ class Ejecucion extends Controller
                 foreach ($etapa->documentos as $documento) {
                     $detalle = DetalleDocumento::where('id_documento', $documento->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
+                        ->whereNotIn('estado', [99]) // Excluir documentos cancelados
                         ->first();
                     if ($detalle && $detalle->estado == 3) { // Solo estado 3 es subido
                         $documentos_subidos++;
@@ -1551,16 +1590,43 @@ class Ejecucion extends Controller
             ]);
 
             // Cancelar la ejecución (estado 99 = cancelado)
+            DB::beginTransaction();
+
+            // Actualizar el DetalleFlujo principal
             $detalleFlujo->update([
                 'estado' => 99,
                 'motivo' => $request->motivo
             ]);
 
-            Log::info('Ejecución cancelada', [
+            // Actualizar todos los DetalleEtapa relacionados a estado 99
+            DetalleEtapa::where('id_detalle_flujo', $detalleFlujo->id)
+                ->update(['estado' => 99]);
+
+            // Obtener todos los IDs de DetalleEtapa para actualizar sus detalles relacionados
+            $detalleEtapaIds = DetalleEtapa::where('id_detalle_flujo', $detalleFlujo->id)
+                ->pluck('id')
+                ->toArray();
+
+            // Actualizar todas las DetalleTarea relacionadas a estado 99
+            if (!empty($detalleEtapaIds)) {
+                DetalleTarea::whereIn('id_detalle_etapa', $detalleEtapaIds)
+                    ->update(['estado' => 99]);
+
+                // Actualizar todos los DetalleDocumento relacionados a estado 99
+                DetalleDocumento::whereIn('id_detalle_etapa', $detalleEtapaIds)
+                    ->update(['estado' => 99]);
+            }
+
+            DB::commit();
+
+            Log::info('Ejecución cancelada con actualización en cascada', [
                 'detalle_flujo_id' => $detalleFlujo->id,
                 'usuario_id' => $user->id,
                 'motivo' => $request->motivo,
-                'fecha_cancelacion' => now()
+                'fecha_cancelacion' => now(),
+                'detalle_etapas_actualizadas' => count($detalleEtapaIds),
+                'detalle_tareas_actualizadas' => !empty($detalleEtapaIds) ? DetalleTarea::whereIn('id_detalle_etapa', $detalleEtapaIds)->count() : 0,
+                'detalle_documentos_actualizados' => !empty($detalleEtapaIds) ? DetalleDocumento::whereIn('id_detalle_etapa', $detalleEtapaIds)->count() : 0
             ]);
 
             return response()->json([
@@ -1572,11 +1638,13 @@ class Ejecucion extends Controller
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollback();
             return response()->json([
                 'error' => 'Error de validación',
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {
+            DB::rollback();
             Log::error('Error al cancelar ejecución', [
                 'detalle_flujo_id' => $detalleFlujo->id ?? null,
                 'error' => $e->getMessage(),

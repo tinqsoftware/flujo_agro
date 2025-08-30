@@ -38,4 +38,14 @@ class DetalleEtapa extends Model
     {
         return $this->belongsTo(DetalleFlujo::class, 'id_detalle_flujo');
     }
+
+    public function detalleTareas()
+    {
+        return $this->hasMany(DetalleTarea::class, 'id_detalle_etapa');
+    }
+
+    public function detalleDocumentos()
+    {
+        return $this->hasMany(DetalleDocumento::class, 'id_detalle_etapa');
+    }
 }
