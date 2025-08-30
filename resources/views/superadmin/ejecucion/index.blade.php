@@ -77,492 +77,381 @@
 </div>
 @endif
 
-<!-- Sección de Ejecuciones Activas -->
+<!-- Sección de Ejecuciones en Layout de 3 Columnas -->
 @php
     $ejecucionesEnProceso = $ejecucionesActivas->where('estado', 2);
     $ejecucionesPausadas = $ejecucionesActivas->where('estado', 4);
     $ejecucionesCanceladas = $ejecucionesActivas->where('estado', 99);
     $ejecucionesTerminadas = $ejecucionesActivas->where('estado', 3);
+    $ejecucionesPausadasYCanceladas = $ejecucionesPausadas->merge($ejecucionesCanceladas);
 @endphp
 
-@if($ejecucionesEnProceso->count() > 0)
+@if($ejecucionesEnProceso->count() > 0 || $ejecucionesTerminadas->count() > 0 || $ejecucionesPausadasYCanceladas->count() > 0)
     <div class="mt-5">
         <div class="d-flex align-items-center mb-4">
             <h4 class="mb-0">
-                <i class="fas fa-play-circle text-warning me-2"></i>
-                Ejecuciones en Proceso
+                <i class="fas fa-tasks text-primary me-2"></i>
+                Estado de Ejecuciones
             </h4>
-            <span class="badge bg-warning ms-2">{{ $ejecucionesEnProceso->count() }}</span>
         </div>
 
         <div class="row g-4">
-            @foreach($ejecucionesEnProceso as $detalleEjecucion)
-                @if($detalleEjecucion->flujo)
-                <div class="col-12 col-lg-6 col-xl-4">
-                    <div class="card h-100 shadow-sm border-warning">
-                        <div class="card-body p-4">
-                            <!-- Header del flujo -->
-                            <div class="d-flex justify-content-between align-items-start mb-3">
-                                <div class="flex-grow-1">
-                                    <h5 class="card-title mb-1 text-primary fw-bold">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h5>
-                                    <div class="text-muted small">
-                                        <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
-                                        @if($isSuper)
-                                            <span class="badge bg-secondary ms-1">{{ $detalleEjecucion->flujo->empresa->nombre ?? 'Sin empresa' }}</span>
-                                        @endif
-                                        <span class="badge bg-info ms-1">Ejecución #{{ $detalleEjecucion->id }}</span>
+            <!-- Columna 1: Ejecuciones en Proceso -->
+            <div class="col-12 col-lg-4">
+                <div class="card h-100 border-warning">
+                    <div class="card-header bg-warning text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-play-circle me-2"></i>
+                            En Proceso
+                            <span class="badge bg-light text-warning ms-2">{{ $ejecucionesEnProceso->count() }}</span>
+                        </h5>
+                    </div>
+                    <div class="card-body p-2" style="max-height: 600px; overflow-y: auto;">
+                        @if($ejecucionesEnProceso->count() > 0)
+                            @foreach($ejecucionesEnProceso as $detalleEjecucion)
+                                @if($detalleEjecucion->flujo)
+                                <div class="card shadow-sm border-warning mb-3 mx-2">
+                                    <div class="card-body p-3">
+                                        <!-- Header del flujo -->
+                                        <div class="mb-3">
+                                            <h6 class="fw-bold text-primary mb-1">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h6>
+                                        <div class="text-muted small">
+                                            <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
+                                            @if($isSuper)
+                                                <span class="badge bg-secondary ms-1">{{ $detalleEjecucion->flujo->empresa->nombre ?? 'Sin empresa' }}</span>
+                                            @endif
+                                            <span class="badge bg-warning ms-1">#{{ $detalleEjecucion->id }}</span>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="status-indicator">
-                                    <span class="badge bg-warning">
-                                        <i class="fas fa-play me-1"></i>En Ejecución
-                                    </span>
-                                </div>
-                            </div>
 
-                            <!-- Descripción del flujo -->
-                            @if($detalleEjecucion->flujo->descripcion)
-                                <p class="text-muted small mb-3">
-                                    {{ \Illuminate\Support\Str::limit($detalleEjecucion->flujo->descripcion, 120) }}
-                                </p>
-                            @endif
-
-                            <!-- Contadores -->
-                            <div class="row text-center mb-3">
-                                <div class="col-6">
-                                    <div class="p-2 bg-light rounded">
-                                        <i class="fas fa-list-ol text-primary d-block mb-1"></i>
-                                        <div class="fw-bold">{{ $detalleEjecucion->flujo->total_etapas }}</div>
-                                        <small class="text-muted">etapas</small>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="p-2 bg-light rounded">
-                                        <i class="fas fa-file-alt text-info d-block mb-1"></i>
-                                        <div class="fw-bold">{{ $detalleEjecucion->flujo->total_documentos }}</div>
-                                        <small class="text-muted">documentos</small>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Progreso -->
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <small class="text-muted">Progreso</small>
-                                    <small class="text-muted">En desarrollo...</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div class="progress-bar bg-warning progress-bar-animated" role="progressbar" style="width: 45%"></div>
-                                </div>
-                            </div>
-
-                            <!-- Información de fecha -->
-                            <div class="mb-3">
-                                <small class="text-muted">
-                                    <i class="fas fa-clock me-1"></i>
-                                    Iniciado: {{ $detalleEjecucion->created_at->diffForHumans() }}
-                                </small>
-                                <br>
-                                <small class="text-muted">
-                                    <i class="fas fa-user me-1"></i>
-                                    Por: {{ $detalleEjecucion->userCreate->name ?? 'Usuario desconocido' }}
-                                </small>
-                            </div>
-
-                            <!-- Botones de acción -->
-                            <div class="text-center">
-                                @if($isSuper)
-                                    <!-- SUPERADMIN solo puede ver -->
-                                    <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-info btn-sm w-100 d-none">
-                                        <i class="fas fa-eye me-2"></i>Ver Estado de Ejecución
-                                    </a>
-                                @else
-                                    <!-- Usuarios de empresa pueden continuar, pausar y cancelar -->
-                                    <div class="d-grid gap-2">
-                                        <a href="/ejecucion/detalle/{{ $detalleEjecucion->id }}/ejecutar" class="btn btn-warning btn-sm">
-                                            <i class="fas fa-play me-2"></i>Continuar Ejecución
-                                        </a>
-                                        <div class="row g-1">
-                                            <div class="col-6">
-                                                <button type="button" class="btn btn-outline-secondary btn-sm w-100 pausar-ejecucion" 
-                                                        data-detalle-id="{{ $detalleEjecucion->id }}"
-                                                        data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
-                                                    <i class="fas fa-pause me-1"></i>Pausar
-                                                </button>
+                                    <!-- Información básica -->
+                                    <div class="row text-center mb-3">
+                                        <div class="col-6">
+                                            <div class="p-2 bg-light rounded">
+                                                <small class="text-muted d-block">Etapas</small>
+                                                <div class="fw-bold text-primary">{{ $detalleEjecucion->flujo->total_etapas }}</div>
                                             </div>
-                                            <div class="col-6">
-                                                <button type="button" class="btn btn-outline-danger btn-sm w-100 cancelar-ejecucion" 
-                                                        data-detalle-id="{{ $detalleEjecucion->id }}"
-                                                        data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
-                                                    <i class="fas fa-times me-1"></i>Cancelar
-                                                </button>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="p-2 bg-light rounded">
+                                                <small class="text-muted d-block">Docs</small>
+                                                <div class="fw-bold text-info">{{ $detalleEjecucion->flujo->total_documentos }}</div>
                                             </div>
                                         </div>
                                     </div>
-                                @endif
+
+                                    <!-- Progreso -->
+                                    <div class="mb-3">
+                                        <small class="text-muted d-block">Progreso</small>
+                                        <div class="progress" style="height: 6px;">
+                                            <div class="progress-bar bg-warning progress-bar-animated" role="progressbar" style="width: 45%"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Fechas -->
+                                    <div class="mb-3">
+                                        <small class="text-muted d-block">
+                                            <i class="fas fa-clock me-1"></i>{{ $detalleEjecucion->created_at->diffForHumans() }}
+                                        </small>
+                                        <small class="text-muted">
+                                            <i class="fas fa-user me-1"></i>{{ $detalleEjecucion->userCreate->name ?? 'Usuario desconocido' }}
+                                        </small>
+                                    </div>
+
+                                    <!-- Botones de acción -->
+                                    @if($isSuper)
+                                        <div class="d-grid">
+                                            <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-info btn-sm">
+                                                <i class="fas fa-eye me-1"></i>Ver Estado
+                                            </a>
+                                        </div>
+                                    @else
+                                        <div class="d-grid gap-2">
+                                            <a href="/ejecucion/detalle/{{ $detalleEjecucion->id }}/ejecutar" class="btn btn-warning btn-sm">
+                                                <i class="fas fa-play me-1"></i>Continuar
+                                            </a>
+                                            <div class="row g-1">
+                                                <div class="col-6">
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm w-100 pausar-ejecucion" 
+                                                            data-detalle-id="{{ $detalleEjecucion->id }}"
+                                                            data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                                        <i class="fas fa-pause"></i>
+                                                    </button>
+                                                </div>
+                                                <div class="col-6">
+                                                    <button type="button" class="btn btn-outline-danger btn-sm w-100 cancelar-ejecucion" 
+                                                            data-detalle-id="{{ $detalleEjecucion->id }}"
+                                                            data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endif
+                                </div>
                             </div>
-                        </div>
+                                @endif
+                            @endforeach
+                        @else
+                            <div class="p-4 text-center text-muted">
+                                <i class="fas fa-inbox fa-2x mb-2"></i>
+                                <p class="mb-0">No hay ejecuciones en proceso</p>
+                            </div>
+                        @endif
                     </div>
                 </div>
-                @endif
-            @endforeach
-        </div>
-    </div>
-@endif
+            </div>
 
-<!-- Sección de Ejecuciones Pausadas y Canceladas -->
-@if($ejecucionesPausadas->count() > 0 || $ejecucionesCanceladas->count() > 0)
-    <div class="mt-5">
-        <div class="d-flex align-items-center mb-4">
-            <h4 class="mb-0">
-                <i class="fas fa-pause-circle text-secondary me-2"></i>
-                Ejecuciones Pausadas y Canceladas
-            </h4>
-            <span class="badge bg-secondary ms-2">{{ $ejecucionesPausadas->count() + $ejecucionesCanceladas->count() }}</span>
-        </div>
+            <!-- Columna 2: Ejecuciones Completadas -->
+            <div class="col-12 col-lg-4">
+                <div class="card h-100 border-success">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-check-circle me-2"></i>
+                            Completadas
+                            <span class="badge bg-light text-success ms-2">{{ $ejecucionesTerminadas->count() }}</span>
+                        </h5>
+                    </div>
+                    <div class="card-body p-2" style="max-height: 600px; overflow-y: auto;">
+                        @if($ejecucionesTerminadas->count() > 0)
+                            @foreach($ejecucionesTerminadas as $detalleEjecucion)
+                                @if($detalleEjecucion->flujo)
+                                <div class="card shadow-sm border-success mb-3 mx-2">
+                                    <div class="card-body p-3">
+                                        <!-- Header del flujo -->
+                                        <div class="mb-3">
+                                            <h6 class="fw-bold text-primary mb-1">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h6>
+                                            <div class="text-muted small">
+                                                <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
+                                                @if($isSuper)
+                                                    <span class="badge bg-secondary ms-1">{{ $detalleEjecucion->flujo->empresa->nombre ?? 'Sin empresa' }}</span>
+                                                @endif
+                                                <span class="badge bg-success ms-1">#{{ $detalleEjecucion->id }}</span>
+                                            </div>
+                                        </div>
 
-        <div class="row g-4">
-            @foreach($ejecucionesPausadas as $detalleEjecucion)
-                @if($detalleEjecucion->flujo)
-                <div class="col-12 col-lg-6 col-xl-4">
-                    <div class="card h-100 shadow-sm border-secondary">
-                        <div class="card-body p-4">
-                            <!-- Header del flujo -->
-                            <div class="d-flex justify-content-between align-items-start mb-3">
-                                <div class="flex-grow-1">
-                                    <h5 class="card-title mb-1 text-primary fw-bold">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h5>
-                                    <div class="text-muted small">
-                                        <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
-                                        @if($isSuper)
-                                            <span class="badge bg-secondary ms-1">{{ $detalleEjecucion->flujo->empresa->nombre ?? 'Sin empresa' }}</span>
-                                        @endif
-                                        <span class="badge bg-secondary ms-1">Ejecución #{{ $detalleEjecucion->id }}</span>
-                                    </div>
-                                </div>
-                                <div class="status-indicator">
-                                    <span class="badge bg-secondary">
-                                        <i class="fas fa-pause me-1"></i>Pausada
-                                    </span>
-                                </div>
-                            </div>
-
-                            <!-- Descripción del flujo -->
-                            @if($detalleEjecucion->flujo->descripcion)
-                                <p class="text-muted small mb-3">
-                                    {{ \Illuminate\Support\Str::limit($detalleEjecucion->flujo->descripcion, 120) }}
-                                </p>
-                            @endif
-
-                            <!-- Contadores -->
-                            <div class="row text-center mb-3">
-                                <div class="col-6">
-                                    <div class="p-2 bg-light rounded">
-                                        <i class="fas fa-list-ol text-primary d-block mb-1"></i>
-                                        <div class="fw-bold">{{ $detalleEjecucion->flujo->total_etapas }}</div>
-                                        <small class="text-muted">etapas</small>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="p-2 bg-light rounded">
-                                        <i class="fas fa-file-alt text-info d-block mb-1"></i>
-                                        <div class="fw-bold">{{ $detalleEjecucion->flujo->total_documentos }}</div>
-                                        <small class="text-muted">documentos</small>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Información de pausa -->
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <small class="text-muted">Estado</small>
-                                    <small class="text-secondary fw-bold">Pausada</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div class="progress-bar bg-secondary" role="progressbar" style="width: 50%"></div>
-                                </div>
-                            </div>
-
-                            <!-- Información de fecha -->
-                            <div class="mb-3">
-                                <small class="text-muted">
-                                    <i class="fas fa-pause me-1"></i>
-                                    Pausada: {{ $detalleEjecucion->updated_at->diffForHumans() }}
-                                </small>
-                                <br>
-                                <small class="text-muted">
-                                    <i class="fas fa-clock me-1"></i>
-                                    Iniciada: {{ $detalleEjecucion->created_at->diffForHumans() }}
-                                </small>
-                                <br>
-                                <small class="text-muted">
-                                    <i class="fas fa-user me-1"></i>
-                                    Por: {{ $detalleEjecucion->userCreate->name ?? 'Usuario desconocido' }}
-                                </small>
-                            </div>
-
-                            <!-- Botones de acción -->
-                            <div class="text-center">
-                                @if($isSuper)
-                                    <!-- SUPERADMIN solo puede ver -->
-                                    <div class="d-grid gap-2">
-                                        <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-info btn-sm">
-                                            <i class="fas fa-eye me-2"></i>Ver Estado
-                                        </a>
-                                        <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
-                                                data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
-                                                data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
-                                            <i class="fas fa-search me-2"></i>Previsualizar Flujo
-                                        </button>
-                                    </div>
-                                @else
-                                    <!-- Usuarios de empresa pueden reactivar y cancelar -->
-                                    <div class="d-grid gap-2">
-                                        <button type="button" class="btn btn-success btn-sm reactivar-ejecucion" 
-                                                data-detalle-id="{{ $detalleEjecucion->id }}"
-                                                data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
-                                            <i class="fas fa-play me-2"></i>Reactivar Ejecución
-                                        </button>
-                                        <div class="row g-1">
+                                        <!-- Información básica -->
+                                        <div class="row text-center mb-3">
                                             <div class="col-6">
-                                                <button type="button" class="btn btn-outline-danger btn-sm cancelar-ejecucion" 
-                                                        data-detalle-id="{{ $detalleEjecucion->id }}"
-                                                        data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
-                                                    <i class="fas fa-times me-1"></i>Cancelar
-                                                </button>
+                                                <div class="p-2 bg-light rounded">
+                                                    <small class="text-muted d-block">Etapas</small>
+                                                    <div class="fw-bold text-primary">{{ $detalleEjecucion->flujo->total_etapas }}</div>
+                                                </div>
                                             </div>
                                             <div class="col-6">
+                                                <div class="p-2 bg-light rounded">
+                                                    <small class="text-muted d-block">Docs</small>
+                                                    <div class="fw-bold text-info">{{ $detalleEjecucion->flujo->total_documentos }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Estado completado -->
+                                        <div class="mb-3">
+                                            <small class="text-success fw-bold d-block">100% Completado</small>
+                                            <div class="progress" style="height: 6px;">
+                                                <div class="progress-bar bg-success" role="progressbar" style="width: 100%"></div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Fechas -->
+                                        <div class="mb-3">
+                                            <small class="text-muted d-block">
+                                                <i class="fas fa-check me-1"></i>{{ $detalleEjecucion->updated_at->diffForHumans() }}
+                                            </small>
+                                            <small class="text-muted">
+                                                <i class="fas fa-user me-1"></i>{{ $detalleEjecucion->userCreate->name ?? 'Usuario desconocido' }}
+                                            </small>
+                                        </div>
+
+                                        <!-- Botones de acción -->
+                                        <div class="d-grid gap-2">
+                                            <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-success btn-sm">
+                                                <i class="fas fa-eye me-1"></i>Ver Detalles
+                                            </a>
+                                            <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
+                                                    data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
+                                                    data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                                <i class="fas fa-search me-1"></i>Previsualizar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                @endif
+                            @endforeach
+                        @else
+                            <div class="p-4 text-center text-muted">
+                                <i class="fas fa-check-circle fa-2x mb-2"></i>
+                                <p class="mb-0">No hay ejecuciones completadas</p>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <!-- Columna 3: Ejecuciones Pausadas y Canceladas -->
+            <div class="col-12 col-lg-4">
+                <div class="card h-100 border-secondary">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-pause-circle me-2"></i>
+                            Pausadas y Canceladas
+                            <span class="badge bg-light text-secondary ms-2">{{ $ejecucionesPausadasYCanceladas->count() }}</span>
+                        </h5>
+                    </div>
+                    <div class="card-body p-2" style="max-height: 600px; overflow-y: auto;">
+                        @if($ejecucionesPausadasYCanceladas->count() > 0)
+                            @foreach($ejecucionesPausadasYCanceladas as $detalleEjecucion)
+                                @if($detalleEjecucion->flujo)
+                                <div class="card shadow-sm mb-3 mx-2 {{ $detalleEjecucion->estado == 4 ? 'border-secondary' : 'border-danger' }}">
+                                    <div class="card-body p-3">
+                                        <!-- Header del flujo -->
+                                        <div class="mb-3">
+                                            <h6 class="fw-bold text-primary mb-1">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h6>
+                                            <div class="text-muted small">
+                                                <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
+                                                @if($isSuper)
+                                                    <span class="badge bg-secondary ms-1">{{ $detalleEjecucion->flujo->empresa->nombre ?? 'Sin empresa' }}</span>
+                                                @endif
+                                                @if($detalleEjecucion->estado == 4)
+                                                    <span class="badge bg-secondary ms-1">#{{ $detalleEjecucion->id }}</span>
+                                                @else
+                                                    <span class="badge bg-danger ms-1">#{{ $detalleEjecucion->id }}</span>
+                                                @endif
+                                            </div>
+                                        </div>
+
+                                        <!-- Estado visual -->
+                                        <div class="mb-3">
+                                            @if($detalleEjecucion->estado == 4)
+                                                <span class="badge bg-secondary mb-2">
+                                                    <i class="fas fa-pause me-1"></i>Pausada
+                                                </span>
+                                            @else
+                                                <span class="badge bg-danger mb-2">
+                                                    <i class="fas fa-times me-1"></i>Cancelada
+                                                </span>
+                                            @endif
+                                        </div>
+
+                                        <!-- Información básica -->
+                                        <div class="row text-center mb-3">
+                                            <div class="col-6">
+                                                <div class="p-2 bg-light rounded">
+                                                    <small class="text-muted d-block">Etapas</small>
+                                                    <div class="fw-bold text-primary">{{ $detalleEjecucion->flujo->total_etapas }}</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <div class="p-2 bg-light rounded">
+                                                    <small class="text-muted d-block">Docs</small>
+                                                    <div class="fw-bold text-info">{{ $detalleEjecucion->flujo->total_documentos }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Progreso -->
+                                        <div class="mb-3">
+                                            <div class="progress" style="height: 6px;">
+                                                @if($detalleEjecucion->estado == 4)
+                                                    <div class="progress-bar bg-secondary" role="progressbar" style="width: 50%"></div>
+                                                @else
+                                                    <div class="progress-bar bg-danger" role="progressbar" style="width: 100%"></div>
+                                                @endif
+                                            </div>
+                                        </div>
+
+                                        <!-- Motivo de cancelación si aplica -->
+                                        @if($detalleEjecucion->estado == 99 && $detalleEjecucion->motivo)
+                                            <div class="mb-3">
+                                                <small class="text-muted d-block">Motivo:</small>
+                                                <small class="text-danger">{{ \Illuminate\Support\Str::limit($detalleEjecucion->motivo, 80) }}</small>
+                                            </div>
+                                        @endif
+
+                                        <!-- Fechas -->
+                                        <div class="mb-3">
+                                            <small class="text-muted d-block">
+                                                @if($detalleEjecucion->estado == 4)
+                                                    <i class="fas fa-pause me-1"></i>{{ $detalleEjecucion->updated_at->diffForHumans() }}
+                                                @else
+                                                    <i class="fas fa-times me-1"></i>{{ $detalleEjecucion->updated_at->diffForHumans() }}
+                                                @endif
+                                            </small>
+                                            <small class="text-muted">
+                                                <i class="fas fa-user me-1"></i>{{ $detalleEjecucion->userCreate->name ?? 'Usuario desconocido' }}
+                                            </small>
+                                        </div>
+
+                                        <!-- Botones de acción -->
+                                        @if($detalleEjecucion->estado == 4)
+                                            <!-- Ejecución pausada -->
+                                            @if($isSuper)
+                                                <div class="d-grid gap-2">
+                                                    <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-info btn-sm">
+                                                        <i class="fas fa-eye me-1"></i>Ver Estado
+                                                    </a>
+                                                    <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
+                                                            data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
+                                                            data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                                        <i class="fas fa-search me-1"></i>Ver
+                                                    </button>
+                                                </div>
+                                            @else
+                                                <div class="d-grid gap-2">
+                                                    <button type="button" class="btn btn-success btn-sm reactivar-ejecucion" 
+                                                            data-detalle-id="{{ $detalleEjecucion->id }}"
+                                                            data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                                        <i class="fas fa-play me-1"></i>Reactivar
+                                                    </button>
+                                                    <div class="row g-1">
+                                                        <div class="col-6">
+                                                            <button type="button" class="btn btn-outline-danger btn-sm cancelar-ejecucion" 
+                                                                    data-detalle-id="{{ $detalleEjecucion->id }}"
+                                                                    data-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                                                <i class="fas fa-times"></i>
+                                                            </button>
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
+                                                                    data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
+                                                                    data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
+                                                                <i class="fas fa-search"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            @endif
+                                        @else
+                                            <!-- Ejecución cancelada -->
+                                            <div class="d-grid gap-2">
+                                                <button class="btn btn-outline-secondary btn-sm" disabled>
+                                                    <i class="fas fa-ban me-1"></i>Cancelada
+                                                </button>
                                                 <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
                                                         data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
                                                         data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
-                                                    <i class="fas fa-search me-1"></i>Ver
+                                                    <i class="fas fa-search me-1"></i>Previsualizar
                                                 </button>
                                             </div>
-                                        </div>
+                                        @endif
                                     </div>
+                                </div>
                                 @endif
+                            @endforeach
+                        @else
+                            <div class="p-4 text-center text-muted">
+                                <i class="fas fa-pause-circle fa-2x mb-2"></i>
+                                <p class="mb-0">No hay ejecuciones pausadas o canceladas</p>
                             </div>
-                        </div>
+                        @endif
                     </div>
                 </div>
-                @endif
-            @endforeach
-            
-            @foreach($ejecucionesCanceladas as $detalleEjecucion)
-                @if($detalleEjecucion->flujo)
-                <div class="col-12 col-lg-6 col-xl-4">
-                    <div class="card h-100 shadow-sm border-danger">
-                        <div class="card-body p-4">
-                            <!-- Header del flujo -->
-                            <div class="d-flex justify-content-between align-items-start mb-3">
-                                <div class="flex-grow-1">
-                                    <h5 class="card-title mb-1 text-primary fw-bold">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h5>
-                                    <div class="text-muted small">
-                                        <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
-                                        @if($isSuper)
-                                            <span class="badge bg-secondary ms-1">{{ $detalleEjecucion->flujo->empresa->nombre ?? 'Sin empresa' }}</span>
-                                        @endif
-                                        <span class="badge bg-danger ms-1">Ejecución #{{ $detalleEjecucion->id }}</span>
-                                    </div>
-                                </div>
-                                <div class="status-indicator">
-                                    <span class="badge bg-danger">
-                                        <i class="fas fa-times me-1"></i>Cancelada
-                                    </span>
-                                </div>
-                            </div>
-
-                            <!-- Descripción del flujo -->
-                            @if($detalleEjecucion->flujo->descripcion)
-                                <p class="text-muted small mb-3">
-                                    {{ \Illuminate\Support\Str::limit($detalleEjecucion->flujo->descripcion, 120) }}
-                                </p>
-                            @endif
-
-                            <!-- Contadores -->
-                            <div class="row text-center mb-3">
-                                <div class="col-6">
-                                    <div class="p-2 bg-light rounded">
-                                        <i class="fas fa-list-ol text-primary d-block mb-1"></i>
-                                        <div class="fw-bold">{{ $detalleEjecucion->flujo->total_etapas }}</div>
-                                        <small class="text-muted">etapas</small>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="p-2 bg-light rounded">
-                                        <i class="fas fa-file-alt text-info d-block mb-1"></i>
-                                        <div class="fw-bold">{{ $detalleEjecucion->flujo->total_documentos }}</div>
-                                        <small class="text-muted">documentos</small>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Información de cancelación -->
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <small class="text-muted">Estado</small>
-                                    <small class="text-danger fw-bold">Cancelada</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div class="progress-bar bg-danger" role="progressbar" style="width: 100%"></div>
-                                </div>
-                            </div>
-
-                            <!-- Motivo de cancelación -->
-                            @if($detalleEjecucion->motivo)
-                                <div class="mb-3">
-                                    <small class="text-muted d-block">Motivo de cancelación:</small>
-                                    <small class="text-danger">{{ $detalleEjecucion->motivo }}</small>
-                                </div>
-                            @endif
-
-                            <!-- Información de fecha -->
-                            <div class="mb-3">
-                                <small class="text-muted">
-                                    <i class="fas fa-times me-1"></i>
-                                    Cancelada: {{ $detalleEjecucion->updated_at->diffForHumans() }}
-                                </small>
-                                <br>
-                                <small class="text-muted">
-                                    <i class="fas fa-clock me-1"></i>
-                                    Iniciada: {{ $detalleEjecucion->created_at->diffForHumans() }}
-                                </small>
-                                <br>
-                                <small class="text-muted">
-                                    <i class="fas fa-user me-1"></i>
-                                    Por: {{ $detalleEjecucion->userCreate->name ?? 'Usuario desconocido' }}
-                                </small>
-                            </div>
-
-                            <!-- Botones de acción -->
-                            <div class="text-center">
-                                <!-- Ejecución cancelada - solo se puede ver -->
-                                <div class="d-grid gap-2">
-                                    <button class="btn btn-outline-secondary btn-sm" disabled>
-                                        <i class="fas fa-ban me-2"></i>Ejecución Cancelada
-                                    </button>
-                                    <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
-                                            data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
-                                            data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
-                                        <i class="fas fa-search me-2"></i>Previsualizar Flujo
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                @endif
-            @endforeach
+            </div>
         </div>
     </div>
 @endif
 
-<!-- Sección de Ejecuciones Completadas -->
-@if($ejecucionesTerminadas->count() > 0)
-    <div class="mt-5">
-        <div class="d-flex align-items-center mb-4">
-            <h4 class="mb-0">
-                <i class="fas fa-check-circle text-success me-2"></i>
-                Ejecuciones Completadas
-            </h4>
-            <span class="badge bg-success ms-2">{{ $ejecucionesTerminadas->count() }}</span>
-        </div>
-
-        <div class="row g-4">
-            @foreach($ejecucionesTerminadas as $detalleEjecucion)
-                @if($detalleEjecucion->flujo)
-                <div class="col-12 col-lg-6 col-xl-4">
-                    <div class="card h-100 shadow-sm border-success">
-                        <div class="card-body p-4">
-                            <!-- Header del flujo -->
-                            <div class="d-flex justify-content-between align-items-start mb-3">
-                                <div class="flex-grow-1">
-                                    <h5 class="card-title mb-1 text-primary fw-bold">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h5>
-                                    <div class="text-muted small">
-                                        <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
-                                        @if($isSuper)
-                                            <span class="badge bg-secondary ms-1">{{ $detalleEjecucion->flujo->empresa->nombre ?? 'Sin empresa' }}</span>
-                                        @endif
-                                        <span class="badge bg-success ms-1">Ejecución #{{ $detalleEjecucion->id }}</span>
-                                    </div>
-                                </div>
-                                <div class="status-indicator">
-                                    <span class="badge bg-success">
-                                        <i class="fas fa-check-circle me-1"></i>Completado
-                                    </span>
-                                </div>
-                            </div>
-
-                            <!-- Descripción del flujo -->
-                            @if($detalleEjecucion->flujo->descripcion)
-                                <p class="text-muted small mb-3">
-                                    {{ \Illuminate\Support\Str::limit($detalleEjecucion->flujo->descripcion, 120) }}
-                                </p>
-                            @endif
-
-                            <!-- Contadores -->
-                            <div class="row text-center mb-3">
-                                <div class="col-6">
-                                    <div class="p-2 bg-light rounded">
-                                        <i class="fas fa-list-ol text-primary d-block mb-1"></i>
-                                        <div class="fw-bold">{{ $detalleEjecucion->flujo->total_etapas }}</div>
-                                        <small class="text-muted">etapas</small>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="p-2 bg-light rounded">
-                                        <i class="fas fa-file-alt text-info d-block mb-1"></i>
-                                        <div class="fw-bold">{{ $detalleEjecucion->flujo->total_documentos }}</div>
-                                        <small class="text-muted">documentos</small>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Indicador de completado -->
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <small class="text-muted">Estado</small>
-                                    <small class="text-success fw-bold">100% Completado</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div class="progress-bar bg-success" role="progressbar" style="width: 100%"></div>
-                                </div>
-                            </div>
-
-                            <!-- Información de fecha -->
-                            <div class="mb-3">
-                                <small class="text-muted">
-                                    <i class="fas fa-check me-1"></i>
-                                    Terminado: {{ $detalleEjecucion->updated_at->diffForHumans() }}
-                                </small>
-                                <br>
-                                <small class="text-muted">
-                                    <i class="fas fa-user me-1"></i>
-                                    Por: {{ $detalleEjecucion->userCreate->name ?? 'Usuario desconocido' }}
-                                </small>
-                            </div>
-
-                            <!-- Botones de acción -->
-                            <div class="text-center">
-                                <!-- Ejecución terminada - todos pueden ver detalles -->
-                                <div class="d-grid gap-2">
-                                    <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-success btn-sm">
-                                        <i class="fas fa-eye me-2"></i>Ver Detalles Completos
-                                    </a>
-                                    <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
-                                            data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
-                                            data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
-                                        <i class="fas fa-search me-2"></i>Previsualizar Flujo
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                @endif
-            @endforeach
-        </div>
-    </div>
-@endif
 
 @if(!$isSuper)
 <!-- Modal de Configuración de Ejecución -->
@@ -759,7 +648,7 @@
     box-shadow: 0 4px 15px rgba(23, 162, 184, 0.3);
 }
 
-/* Estilos para ejecuciones en proceso, pausadas y terminadas */
+/* Estilos mejorados para las columnas de ejecuciones */
 .border-warning {
     border: 2px solid #ffc107 !important;
 }
@@ -776,6 +665,46 @@
     border: 2px solid #198754 !important;
 }
 
+/* Estilos específicos para las tarjetas individuales */
+.card.shadow-sm {
+    border-radius: 0.5rem;
+    background: #fff;
+    transition: all 0.3s ease;
+}
+
+.card.shadow-sm:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important;
+}
+
+.card.border-warning:hover {
+    box-shadow: 0 10px 30px rgba(255, 193, 7, 0.3) !important;
+}
+
+.card.border-secondary:hover {
+    box-shadow: 0 10px 30px rgba(108, 117, 125, 0.3) !important;
+}
+
+.card.border-danger:hover {
+    box-shadow: 0 10px 30px rgba(220, 53, 69, 0.3) !important;
+}
+
+.card.border-success:hover {
+    box-shadow: 0 10px 30px rgba(25, 135, 84, 0.3) !important;
+}
+
+/* Mejoras para el contenedor de scroll */
+.card-body[style*="overflow-y: auto"] {
+    padding-right: 0.25rem;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* Internet Explorer 10+ */
+}
+
+/* Ocultar scrollbar en Webkit browsers (Chrome, Safari, Edge) */
+.card-body[style*="overflow-y: auto"]::-webkit-scrollbar {
+    display: none;
+}
+
 .progress-bar-animated {
     animation: progress-bar-stripes 1s linear infinite;
 }
@@ -789,20 +718,20 @@
     }
 }
 
-.card.border-warning:hover {
-    box-shadow: 0 8px 25px rgba(255, 193, 7, 0.2) !important;
+/* Mejoras para badges y elementos pequeños */
+.badge {
+    font-weight: 500;
+    letter-spacing: 0.025em;
 }
 
-.card.border-secondary:hover {
-    box-shadow: 0 8px 25px rgba(108, 117, 125, 0.2) !important;
+.btn-sm {
+    font-size: 0.8rem;
+    padding: 0.375rem 0.75rem;
 }
 
-.card.border-danger:hover {
-    box-shadow: 0 8px 25px rgba(220, 53, 69, 0.2) !important;
-}
-
-.card.border-success:hover {
-    box-shadow: 0 8px 25px rgba(25, 135, 84, 0.2) !important;
+/* Espaciado mejorado para información básica */
+.bg-light.rounded {
+    border: 1px solid rgba(0,0,0,0.05);
 }
 </style>
 @endpush
