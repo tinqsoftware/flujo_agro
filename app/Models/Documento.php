@@ -39,4 +39,9 @@ class Documento extends Model
     {
         return $this->hasMany(DetalleDocumento::class, 'id_documento');
     }
+
+    public function rol()
+    {
+        return $this->belongsTo(Rol::class, 'rol_cambios');
+    }
 }

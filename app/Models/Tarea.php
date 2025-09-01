@@ -39,4 +39,9 @@ class Tarea extends Model
     {
         return $this->hasMany(DetalleTarea::class, 'id_tarea');
     }
+
+    public function rol()
+    {
+        return $this->belongsTo(Rol::class, 'rol_cambios');
+    }
 }

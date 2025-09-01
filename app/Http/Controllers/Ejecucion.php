@@ -8,6 +8,7 @@ use App\Models\Etapa;
 use App\Models\Tarea;
 use App\Models\Documento;
 use App\Models\Empresa;
+use App\Models\Rol;
 use App\Models\DetalleTarea;
 use App\Models\DetalleDocumento;
 use App\Models\DetalleFlujo;
@@ -719,8 +720,16 @@ class Ejecucion extends Controller
                 return response()->json(['error' => 'No se pueden modificar tareas de una ejecución cancelada'], 400);
             }
 
-            // Buscar la tarea para obtener su etapa
+            // Buscar la tarea para obtener su etapa y validar el rol
             $tarea = \App\Models\Tarea::findOrFail($tareaId);
+            
+            // Validar permisos por rol
+            if ($tarea->rol_cambios && $tarea->rol_cambios != $user->id_rol) {
+                return response()->json([
+                    'error' => 'No tienes permisos para modificar esta tarea. Se requiere el rol: ' . 
+                              ($tarea->rol ? $tarea->rol->nombre : 'Rol específico')
+                ], 403);
+            }
             
             // Buscar el detalle_etapa correspondiente
             $detalleEtapa = DetalleEtapa::where('id_etapa', $tarea->id_etapa)
@@ -1058,6 +1067,20 @@ class Ejecucion extends Controller
                 return response()->json(['error' => 'No se pueden subir documentos a una ejecución cancelada'], 400);
             }
 
+            // Buscar el documento para validar permisos
+            $documento = \App\Models\Documento::find($documentoId);
+            if (!$documento) {
+                return response()->json(['error' => 'Documento no encontrado'], 404);
+            }
+
+            // Validar permisos por rol
+            if ($documento->rol_cambios && $documento->rol_cambios != $user->id_rol) {
+                return response()->json([
+                    'error' => 'No tienes permisos para subir este documento. Se requiere el rol: ' . 
+                              ($documento->rol ? $documento->rol->nombre : 'Rol específico')
+                ], 403);
+            }
+
             // Crear directorio si no existe
             $directorio = 'documentos/ejecucion/' . $detalleFlujoId . '/' . date('Y/m');
             
@@ -1066,12 +1089,6 @@ class Ejecucion extends Controller
             
             // Guardar archivo
             $rutaArchivo = $archivo->storeAs($directorio, $nombreArchivo, 'public');
-
-            // Buscar si ya existe un detalle para este documento en esta ejecución específica
-            $documento = \App\Models\Documento::find($documentoId);
-            if (!$documento) {
-                throw new \Exception('Documento no encontrado');
-            }
 
             // Buscar la etapa del documento
             $etapa = $documento->etapa;

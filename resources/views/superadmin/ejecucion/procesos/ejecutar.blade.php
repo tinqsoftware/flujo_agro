@@ -56,6 +56,29 @@
     background-color: #f8f9fa;
 }
 
+.tarea-bloqueada {
+    opacity: 0.7;
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+    padding-left: 8px;
+    border-radius: 4px;
+}
+
+.documento-bloqueado {
+    opacity: 0.7;
+    background-color: #fff3cd !important;
+    border-left: 4px solid #ffc107 !important;
+}
+
+.tarea-bloqueada input[disabled] {
+    cursor: not-allowed;
+}
+
+.documento-bloqueado .btn.disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
 .btn-group-vertical > .btn {
     margin-bottom: 2px;
 }
@@ -227,18 +250,28 @@
                         
                         <div class="tareas-list">
                             @foreach($etapa->tareas as $tarea)
-                            <div class="d-flex align-items-center mb-2 tarea-item" data-tarea-id="{{ $tarea->id }}">
+                            @php
+                                $puedeModificar = !$tarea->rol_cambios || $tarea->rol_cambios == Auth::user()->id_rol;
+                                $rolAsignado = $tarea->rol_cambios ? App\Models\Rol::find($tarea->rol_cambios) : null;
+                            @endphp
+                            <div class="d-flex align-items-center mb-2 tarea-item {{ !$puedeModificar ? 'tarea-bloqueada' : '' }}" data-tarea-id="{{ $tarea->id }}">
                                 <div class="form-check me-3">
                                     <input class="form-check-input tarea-checkbox" 
                                            type="checkbox" 
                                            id="tarea-{{ $tarea->id }}" 
                                            data-tarea-id="{{ $tarea->id }}"
-                                           {{ $tarea->completada ? 'checked' : '' }}>
+                                           {{ $tarea->completada ? 'checked' : '' }}
+                                           {{ !$puedeModificar ? 'disabled' : '' }}>
                                 </div>
                                 <div class="flex-grow-1">
                                     <label class="form-check-label {{ $tarea->completada ? 'text-decoration-line-through text-muted' : '' }}" 
                                            for="tarea-{{ $tarea->id }}">
                                         {{ $tarea->nombre }}
+                                        @if(!$puedeModificar)
+                                            <span class="badge bg-warning ms-2" title="Requiere rol: {{ $rolAsignado ? $rolAsignado->nombre : 'Rol específico' }}">
+                                                <i class="fas fa-lock"></i> {{ $rolAsignado ? $rolAsignado->nombre : 'Rol específico' }}
+                                            </span>
+                                        @endif
                                     </label>
                                     @if($tarea->descripcion)
                                         <div class="small text-muted">{{ $tarea->descripcion }}</div>
@@ -270,10 +303,21 @@
                         
                         <div class="documentos-list">
                             @foreach($etapa->documentos as $documento)
-                            <div class="documento-item mb-3 p-3 border rounded" data-documento-id="{{ $documento->id }}">
+                            @php
+                                $puedeSubir = !$documento->rol_cambios || $documento->rol_cambios == Auth::user()->id_rol;
+                                $rolAsignado = $documento->rol_cambios ? App\Models\Rol::find($documento->rol_cambios) : null;
+                            @endphp
+                            <div class="documento-item mb-3 p-3 border rounded {{ !$puedeSubir ? 'documento-bloqueado' : '' }}" data-documento-id="{{ $documento->id }}">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div class="flex-grow-1">
-                                        <h6 class="mb-1">{{ $documento->nombre }}</h6>
+                                        <h6 class="mb-1">
+                                            {{ $documento->nombre }}
+                                            @if(!$puedeSubir)
+                                                <span class="badge bg-warning ms-2" title="Requiere rol: {{ $rolAsignado ? $rolAsignado->nombre : 'Rol específico' }}">
+                                                    <i class="fas fa-lock"></i> {{ $rolAsignado ? $rolAsignado->nombre : 'Rol específico' }}
+                                                </span>
+                                            @endif
+                                        </h6>
                                         @if($documento->descripcion)
                                             <p class="text-muted small mb-2">{{ $documento->descripcion }}</p>
                                         @endif
@@ -339,9 +383,10 @@
                                         @endif
                                         
                                         <!-- Botón para subir/cambiar archivo -->
-                                        <button type="button" class="btn btn-outline-primary btn-sm subir-documento" 
+                                        <button type="button" class="btn btn-outline-primary btn-sm subir-documento {{ !$puedeSubir ? 'disabled' : '' }}" 
                                                 data-documento-id="{{ $documento->id }}"
-                                                title="{{ $documento->archivo_url ? 'Cambiar archivo' : 'Subir archivo' }}">
+                                                title="{{ $documento->archivo_url ? 'Cambiar archivo' : 'Subir archivo' }}"
+                                                {{ !$puedeSubir ? 'disabled' : '' }}>
                                             <i class="fas fa-upload"></i>
                                         </button>
                                     </div>
