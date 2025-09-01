@@ -641,6 +641,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             const etapaId = this.dataset.etapaId;
+            const etapaActual = this.closest('.etapa-card');
+            
+            // Validar que las etapas anteriores estén completadas
+            if (!validarEtapasAnteriores(etapaActual)) {
+                return;
+            }
             const submitBtn = this.querySelector('.grabar-etapa');
             
             // Recopilar datos de tareas
@@ -955,6 +961,92 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.addEventListener('click', verPDF);
     });
 
+    // Función para validar que las etapas anteriores estén completadas
+    function validarEtapasAnteriores(etapaActual) {
+        if (!etapaActual) return false;
+        
+        // Obtener todas las etapas
+        const todasLasEtapas = document.querySelectorAll('.etapa-card');
+        const indiceActual = Array.from(todasLasEtapas).indexOf(etapaActual);
+        
+        // La primera etapa siempre puede completarse
+        if (indiceActual === 0) {
+            return true;
+        }
+        
+        // Verificar que todas las etapas anteriores estén completadas
+        for (let i = 0; i < indiceActual; i++) {
+            const etapaAnterior = todasLasEtapas[i];
+            if (!etapaAnterior.classList.contains('completada')) {
+                // Obtener el nombre/número de la etapa anterior
+                const numeroEtapaAnterior = etapaAnterior.querySelector('h6').textContent.split('.')[0];
+                const nombreEtapaAnterior = etapaAnterior.querySelector('h6').textContent;
+                
+                // Mostrar modal de error personalizado
+                mostrarErrorEtapaAnterior(numeroEtapaAnterior, nombreEtapaAnterior);
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    // Función para mostrar error cuando se intenta completar una etapa sin completar las anteriores
+    function mostrarErrorEtapaAnterior(numeroEtapa, nombreEtapa) {
+        // Crear modal dinámico
+        const modalHtml = `
+            <div class="modal fade" id="errorEtapaAnterior" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header bg-warning text-dark">
+                            <h5 class="modal-title">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Etapa Anterior Pendiente
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="text-center mb-3">
+                                <i class="fas fa-lock text-warning" style="font-size: 3rem;"></i>
+                            </div>
+                            <h6 class="text-center mb-3">No puedes completar esta etapa</h6>
+                            <p class="text-center mb-3">
+                                Debes completar primero la <strong>Etapa ${numeroEtapa}</strong>:
+                            </p>
+                            <div class="alert alert-warning text-center">
+                                <strong>${nombreEtapa}</strong>
+                            </div>
+                            
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                <i class="fas fa-check me-2"></i>Entendido
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remover modal anterior si existe
+        const modalAnterior = document.getElementById('errorEtapaAnterior');
+        if (modalAnterior) {
+            modalAnterior.remove();
+        }
+        
+        // Agregar el nuevo modal al DOM
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        // Mostrar el modal
+        const modal = new bootstrap.Modal(document.getElementById('errorEtapaAnterior'));
+        modal.show();
+        
+        // Eliminar el modal del DOM cuando se cierre
+        document.getElementById('errorEtapaAnterior').addEventListener('hidden.bs.modal', function() {
+            this.remove();
+        });
+    }
+
     function actualizarProgresoEtapa(etapaCard) {
         if (!detalleFlujoId) {
             console.log('No hay detalleFlujoId, omitiendo actualización de progreso');
@@ -965,10 +1057,15 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch(`{{ route('ejecucion.detalle.progreso', ':detalleFlujoId') }}`.replace(':detalleFlujoId', detalleFlujoId))
         .then(response => response.json())
         .then(data => {
-            if (data.progreso_general !== undefined) {
-                document.getElementById('progreso-general').textContent = data.progreso_general + '%';
+            if (data && data.progreso_general !== undefined) {
+                const progresoGeneralElement = document.getElementById('progreso-general');
+                if (progresoGeneralElement) {
+                    progresoGeneralElement.textContent = data.progreso_general + '%';
+                }
                 
-                // Actualizar progreso de cada etapa
+                // Validar que existan etapas en la respuesta
+                if (data.etapas && Array.isArray(data.etapas)) {
+                    // Actualizar progreso de cada etapa
                 data.etapas.forEach(etapaData => {
                     const etapaElement = document.querySelector(`[data-etapa-id="${etapaData.id}"]`);
                     if (etapaElement) {
@@ -976,46 +1073,75 @@ document.addEventListener('DOMContentLoaded', function() {
                         const estadoIcon = etapaElement.querySelector('.estado-etapa i');
                         const statusText = etapaElement.querySelector('.card-header small');
                         
-                        progresoElement.textContent = etapaData.progreso + '%';
-                        
-                        // Actualizar contadores de tareas y documentos
-                        const tareasHeader = etapaElement.querySelector('.tareas-list')?.parentElement.querySelector('h6');
-                        const documentosHeader = etapaElement.querySelector('.documentos-list')?.parentElement.querySelector('h6');
-                        
-                        if (tareasHeader) {
-                            tareasHeader.textContent = `Tareas (${etapaData.tareas_completadas}/${etapaData.total_tareas})`;
+                        // Validar que los elementos existan antes de usarlos
+                        if (progresoElement) {
+                            progresoElement.textContent = etapaData.progreso + '%';
                         }
-                        if (documentosHeader) {
-                            documentosHeader.textContent = `Documentos (${etapaData.documentos_subidos}/${etapaData.total_documentos})`;
+                        
+                        // Actualizar contadores de tareas y documentos con validaciones
+                        const tareasListElement = etapaElement.querySelector('.tareas-list');
+                        const documentosListElement = etapaElement.querySelector('.documentos-list');
+                        
+                        if (tareasListElement) {
+                            const tareasHeader = tareasListElement.parentElement.querySelector('h6');
+                            if (tareasHeader) {
+                                tareasHeader.textContent = `Tareas (${etapaData.tareas_completadas}/${etapaData.total_tareas})`;
+                            }
+                        }
+                        
+                        if (documentosListElement) {
+                            const documentosHeader = documentosListElement.parentElement.querySelector('h6');
+                            if (documentosHeader) {
+                                documentosHeader.textContent = `Documentos (${etapaData.documentos_subidos}/${etapaData.total_documentos})`;
+                            }
                         }
                         
                         // Actualizar estado visual de la etapa
                         if (etapaData.progreso === 100) {
                             etapaElement.classList.remove('activa');
                             etapaElement.classList.add('completada');
-                            estadoIcon.classList.remove('text-primary', 'text-warning');
-                            estadoIcon.classList.add('text-success');
-                            statusText.innerHTML = `Completada • Progreso: <span class="progreso-etapa">${etapaData.progreso}%</span>`;
+                            if (estadoIcon) {
+                                estadoIcon.classList.remove('text-primary', 'text-warning');
+                                estadoIcon.classList.add('text-success');
+                            }
+                            if (statusText) {
+                                statusText.innerHTML = `Completada • Progreso: <span class="progreso-etapa">${etapaData.progreso}%</span>`;
+                            }
                             
                             // Activar siguiente etapa
                             const siguienteEtapa = etapaElement.nextElementSibling;
                             if (siguienteEtapa && siguienteEtapa.classList.contains('etapa-card') && !siguienteEtapa.classList.contains('activa') && !siguienteEtapa.classList.contains('completada')) {
                                 siguienteEtapa.classList.add('activa');
                                 const siguienteIcon = siguienteEtapa.querySelector('.estado-etapa i');
-                                siguienteIcon.classList.remove('text-secondary');
-                                siguienteIcon.classList.add('text-primary');
+                                if (siguienteIcon) {
+                                    siguienteIcon.classList.remove('text-secondary');
+                                    siguienteIcon.classList.add('text-primary');
+                                }
                             }
                         } else if (etapaData.progreso > 0) {
-                            estadoIcon.classList.remove('text-secondary');
-                            estadoIcon.classList.add('text-warning');
-                            statusText.innerHTML = `En progreso • Progreso: <span class="progreso-etapa">${etapaData.progreso}%</span>`;
+                            if (estadoIcon) {
+                                estadoIcon.classList.remove('text-secondary');
+                                estadoIcon.classList.add('text-warning');
+                            }
+                            if (statusText) {
+                                statusText.innerHTML = `En progreso • Progreso: <span class="progreso-etapa">${etapaData.progreso}%</span>`;
+                            }
                         }
+                    } else {
+                        console.warn(`No se encontró elemento para etapa ID: ${etapaData.id}`);
                     }
                 });
+                } else {
+                    console.warn('No se recibieron datos de etapas en la respuesta del servidor');
+                }
+            } else {
+                console.warn('Respuesta del servidor inválida para actualización de progreso');
             }
         })
         .catch(error => {
             console.error('Error al obtener progreso:', error);
+            // Mostrar mensaje de error menos intrusivo
+            console.warn('No se pudo actualizar el progreso automáticamente. La página se recargará para mostrar los cambios.');
         });
     }
 
