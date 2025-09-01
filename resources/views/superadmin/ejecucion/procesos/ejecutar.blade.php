@@ -85,6 +85,54 @@
 .progress-ring__circle.active {
     stroke: #007bff;
 }
+
+/* Estilos para el botón de collapse personalizado */
+.collapse-toggle {
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.collapse-toggle i {
+    transition: transform 0.3s ease-in-out;
+    display: inline-block;
+}
+
+.collapse-toggle.collapsed i {
+    transform: rotate(0deg);
+}
+
+.collapse-toggle.expanded i {
+    transform: rotate(180deg);
+}
+
+.collapse-toggle:hover {
+    background-color: #007bff !important;
+    border-color: #007bff !important;
+    color: white !important;
+}
+
+/* Estilos para el contenido colapsable */
+.etapa-content {
+    overflow: hidden;
+    transition: all 0.3s ease-in-out;
+    max-height: 0;
+    opacity: 0;
+}
+
+.etapa-content.show {
+    max-height: 2000px; /* Altura máxima generosa */
+    opacity: 1;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.etapa-content .card-body {
+    transition: padding 0.3s ease-in-out;
+}
+
+.etapa-content.show .card-body {
+    padding: 1.25rem;
+}
 </style>
 @endpush
 
@@ -157,17 +205,15 @@
                 </div>
             </div>
             <div>
-                <button class="btn btn-sm btn-outline-primary" type="button" 
-                        data-bs-toggle="collapse" 
-                        data-bs-target="#etapa-content-{{ $etapa->id }}" 
-                        aria-expanded="false">
+                <button class="btn btn-sm btn-outline-primary collapse-toggle collapsed" type="button" 
+                        data-target="etapa-content-{{ $etapa->id }}">
                     <i class="fas fa-chevron-down"></i>
                 </button>
             </div>
         </div>
     </div>
     
-    <div class="collapse" id="etapa-content-{{ $etapa->id }}">
+    <div class="etapa-content" id="etapa-content-{{ $etapa->id }}">
         <div class="card-body">
             <form class="etapa-form" data-etapa-id="{{ $etapa->id }}">
                 <div class="row">
@@ -489,6 +535,37 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Inicializar progreso de las etapas al cargar la página
     actualizarProgreso();
+
+    // Función personalizada para manejar collapse/expand
+    function initializeCustomCollapse() {
+        document.querySelectorAll('.collapse-toggle').forEach(function(button) {
+            button.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-target');
+                const targetElement = document.getElementById(targetId);
+                
+                if (!targetElement) return;
+                
+                const isExpanded = this.classList.contains('expanded');
+                
+                if (isExpanded) {
+                    // Cerrar
+                    console.log('Cerrando:', targetId);
+                    this.classList.remove('expanded');
+                    this.classList.add('collapsed');
+                    targetElement.classList.remove('show');
+                } else {
+                    // Abrir
+                    console.log('Abriendo:', targetId);
+                    this.classList.remove('collapsed');
+                    this.classList.add('expanded');
+                    targetElement.classList.add('show');
+                }
+            });
+        });
+    }
+
+    // Inicializar el sistema de collapse personalizado
+    initializeCustomCollapse();
 
     // Iniciar ejecución
     document.getElementById('iniciar-ejecucion')?.addEventListener('click', function() {
@@ -971,9 +1048,12 @@ document.addEventListener('DOMContentLoaded', function() {
             siguienteIcon.classList.add('text-primary');
             
             // Expandir automáticamente la siguiente etapa
-            const collapseElement = siguienteEtapa.querySelector('.collapse');
-            if (collapseElement && !collapseElement.classList.contains('show')) {
+            const collapseElement = siguienteEtapa.querySelector('.etapa-content');
+            const collapseButton = siguienteEtapa.querySelector('.collapse-toggle');
+            if (collapseElement && collapseButton && !collapseElement.classList.contains('show')) {
                 collapseElement.classList.add('show');
+                collapseButton.classList.remove('collapsed');
+                collapseButton.classList.add('expanded');
             }
         }
     }
