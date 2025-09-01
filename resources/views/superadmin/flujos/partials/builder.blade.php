@@ -52,6 +52,7 @@
                   <div class="task-item list-group-item border rounded p-2 {{ isset($t['estado']) && !$t['estado'] ? 'disabled-item' : '' }} {{ isset($t['has_details']) && $t['has_details'] ? 'has-details' : '' }}" 
                        data-task-id="{{ $t['id'] ?? uniqid('tsk_') }}"
                        data-task-db-id="{{ isset($t['id']) && is_numeric($t['id']) ? $t['id'] : '' }}" 
+                       data-task-rol-cambios="{{ $t['rol_cambios'] ?? '' }}"
                        data-has-details="{{ isset($t['has_details']) && $t['has_details'] ? 'true' : 'false' }}"
                        tabindex="0">
                     <div class="d-flex justify-content-between align-items-center">
@@ -62,6 +63,18 @@
                         @if(isset($t['estado']))
                           <span class="badge {{ $t['estado'] ? 'bg-success' : 'bg-secondary' }} badge-sm">
                             {{ $t['estado'] ? 'Activo' : 'Inactivo' }}
+                          </span>
+                        @endif
+                        @if(isset($t['rol_cambios']) && $t['rol_cambios'])
+                          @php
+                            $rolNombre = isset($roles) ? $roles->firstWhere('id', $t['rol_cambios'])?->nombre : 'Rol ID: '.$t['rol_cambios'];
+                          @endphp
+                          <span class="badge bg-primary badge-sm badge-rol">
+                            <i class="fas fa-user-tag"></i> {{ $rolNombre }}
+                          </span>
+                        @else
+                          <span class="badge bg-warning badge-sm badge-rol">
+                            <i class="fas fa-users"></i> Todos los roles
                           </span>
                         @endif
                         @if(isset($t['has_details']) && $t['has_details'])
@@ -105,6 +118,7 @@
                   <div class="doc-item list-group-item border rounded p-2 {{ isset($d['estado']) && !$d['estado'] ? 'disabled-item' : '' }} {{ isset($d['has_details']) && $d['has_details'] ? 'has-details' : '' }}" 
                        data-doc-id="{{ $d['id'] ?? uniqid('doc_') }}"
                        data-doc-db-id="{{ isset($d['id']) && is_numeric($d['id']) ? $d['id'] : '' }}" 
+                       data-doc-rol-cambios="{{ $d['rol_cambios'] ?? '' }}"
                        data-has-details="{{ isset($d['has_details']) && $d['has_details'] ? 'true' : 'false' }}"
                        tabindex="0">
                     <div class="d-flex justify-content-between align-items-center">
@@ -115,6 +129,18 @@
                         @if(isset($d['estado']))
                           <span class="badge {{ $d['estado'] ? 'bg-success' : 'bg-secondary' }} badge-sm">
                             {{ $d['estado'] ? 'Activo' : 'Inactivo' }}
+                          </span>
+                        @endif
+                        @if(isset($d['rol_cambios']) && $d['rol_cambios'])
+                          @php
+                            $rolNombre = isset($roles) ? $roles->firstWhere('id', $d['rol_cambios'])?->nombre : 'Rol ID: '.$d['rol_cambios'];
+                          @endphp
+                          <span class="badge bg-primary badge-sm badge-rol">
+                            <i class="fas fa-user-tag"></i> {{ $rolNombre }}
+                          </span>
+                        @else
+                          <span class="badge bg-warning badge-sm badge-rol">
+                            <i class="fas fa-users"></i> Todos los roles
                           </span>
                         @endif
                         @if(isset($d['has_details']) && $d['has_details'])
@@ -173,6 +199,18 @@
             <div class="mb-3">
               <label class="form-label">Descripción</label>
               <textarea class="form-control" id="bm-desc" rows="3"></textarea>
+            </div>
+            <div class="mb-3 d-none" id="bm-rol-wrap">
+              <label class="form-label">Rol para completar tarea</label>
+              <select class="form-select" id="bm-rol">
+                <option value="">Todos los roles</option>
+                @if(isset($roles))
+                  @foreach($roles as $rol)
+                    <option value="{{ $rol->id }}">{{ $rol->nombre }}</option>
+                  @endforeach
+                @endif
+              </select>
+              <div class="form-text">Si selecciona "Todos los roles", cualquier usuario con rol diferente a SUPERADMIN podrá completar esta tarea.</div>
             </div>
             <div class="mb-3 d-none" id="bm-paralelo-wrap">
               <label class="form-label">Paralelo</label>

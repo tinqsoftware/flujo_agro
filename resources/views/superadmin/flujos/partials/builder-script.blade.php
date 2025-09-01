@@ -8,6 +8,62 @@
   const isEditMode = builderRoot?.getAttribute('data-edit-mode') === 'true';
   const uid = (p) => p + '_' + Math.random().toString(36).slice(2,8);
 
+  // Roles disponibles
+  @php
+    $rolesJson = isset($roles) ? json_encode($roles) : '[]';
+  @endphp
+  const rolesData = {!! $rolesJson !!};
+
+  function getRoleName(rolId) {
+    if (!rolId) return 'Todos los roles';
+    const rol = rolesData.find(r => r.id == rolId);
+    return rol ? rol.nombre : `Rol ID: ${rolId}`;
+  }
+
+  function updateTaskRolBadge(task, rolId) {
+    const flexGrow = task.querySelector('.flex-grow-1');
+    // Remover badge de rol existente
+    const existingRolBadge = flexGrow.querySelector('.badge-rol');
+    if (existingRolBadge) {
+      existingRolBadge.remove();
+    }
+    
+    // Crear nuevo badge
+    const badgeClass = rolId ? 'bg-primary' : 'bg-warning';
+    const badgeIcon = rolId ? 'fa-user-tag' : 'fa-users';
+    const badgeText = getRoleName(rolId);
+    
+    const badge = document.createElement('span');
+    badge.className = `badge ${badgeClass} badge-sm badge-rol`;
+    badge.innerHTML = `<i class="fas ${badgeIcon}"></i> ${badgeText}`;
+    
+    // Insertar después de la descripción
+    const desc = flexGrow.querySelector('.task-desc');
+    desc.parentNode.insertBefore(badge, desc.nextSibling);
+  }
+
+  function updateDocRolBadge(doc, rolId) {
+    const flexGrow = doc.querySelector('.flex-grow-1');
+    // Remover badge de rol existente
+    const existingRolBadge = flexGrow.querySelector('.badge-rol');
+    if (existingRolBadge) {
+      existingRolBadge.remove();
+    }
+    
+    // Crear nuevo badge
+    const badgeClass = rolId ? 'bg-primary' : 'bg-warning';
+    const badgeIcon = rolId ? 'fa-user-tag' : 'fa-users';
+    const badgeText = getRoleName(rolId);
+    
+    const badge = document.createElement('span');
+    badge.className = `badge ${badgeClass} badge-sm badge-rol`;
+    badge.innerHTML = `<i class="fas ${badgeIcon}"></i> ${badgeText}`;
+    
+    // Insertar después de la descripción
+    const desc = flexGrow.querySelector('.doc-desc');
+    desc.parentNode.insertBefore(badge, desc.nextSibling);
+  }
+
   function clearSiblingsSelected(el, selector){
     el.parentElement.querySelectorAll(selector + '.is-selected')
       .forEach(n => n.classList.remove('is-selected'));
@@ -110,11 +166,13 @@
       st.querySelectorAll('.tasks-list .task-item').forEach((ti) => {
         const taskEstado = isEditMode && ti.getAttribute('data-task-db-id') ? 
           (ti.querySelector('.task-estado-switch')?.checked ? 1 : 0) : 1;
+        const taskRolCambios = ti.getAttribute('data-task-rol-cambios') || null;
         tasks.push({
           id: ti.getAttribute('data-task-id') || uid('tsk'),
           name: ti.querySelector('.task-title')?.textContent?.trim() || 'Tarea',
           description: ti.querySelector('.task-desc')?.textContent?.trim() || '',
-          estado: taskEstado
+          estado: taskEstado,
+          rol_cambios: taskRolCambios
         });
       });
 
@@ -122,11 +180,13 @@
       st.querySelectorAll('.docs-list .doc-item').forEach((di) => {
         const docEstado = isEditMode && di.getAttribute('data-doc-db-id') ? 
           (di.querySelector('.doc-estado-switch')?.checked ? 1 : 0) : 1;
+        const docRolCambios = di.getAttribute('data-doc-rol-cambios') || null;
         documents.push({
           id: di.getAttribute('data-doc-id') || uid('doc'),
           name: di.querySelector('.doc-title')?.textContent?.trim() || 'Documento',
           description: di.querySelector('.doc-desc')?.textContent?.trim() || '',
-          estado: docEstado
+          estado: docEstado,
+          rol_cambios: docRolCambios
         });
       });
 
@@ -138,7 +198,7 @@
     builderInput.value = JSON.stringify(out);
   }
 
-  function openModal({title, showParalelo=false, values={}, onSave}) {
+  function openModal({title, showParalelo=false, showRol=false, values={}, onSave}) {
     const modalEl = document.getElementById('builderModal');
     const modal = new bootstrap.Modal(modalEl);
     modalEl.querySelector('.modal-title').textContent = title;
@@ -147,11 +207,15 @@
     const descI = document.getElementById('bm-desc');
     const parW  = document.getElementById('bm-paralelo-wrap');
     const parI  = document.getElementById('bm-paralelo');
+    const rolW  = document.getElementById('bm-rol-wrap');
+    const rolI  = document.getElementById('bm-rol');
 
     nameI.value = values.name || '';
     descI.value = values.description || '';
     parW.classList.toggle('d-none', !showParalelo);
     parI.value = String(values.paralelo ?? 0);
+    rolW.classList.toggle('d-none', !showRol);
+    rolI.value = String(values.rol_cambios ?? '');
 
     const saveBtn = document.getElementById('bm-save');
     const handler = () => {
@@ -159,6 +223,7 @@
         name: nameI.value.trim(),
         description: descI.value.trim(),
         paralelo: Number(parI.value || 0),
+        rol_cambios: rolI.value || null,
       });
       modal.hide();
       saveBtn.removeEventListener('click', handler);
@@ -244,12 +309,15 @@
       const tl = stage.querySelector('.tasks-list');
       const id = uid('tsk');
       tl.insertAdjacentHTML('beforeend', `
-        <div class="task-item list-group-item border rounded p-2" data-task-id="${id}" tabindex="0">
+        <div class="task-item list-group-item border rounded p-2" data-task-id="${id}" data-task-rol-cambios="" tabindex="0">
           <div class="d-flex justify-content-between align-items-center">
             <div class="task-drag text-muted" style="cursor:grab"><i class="fas fa-grip-vertical me-2"></i></div>
             <div class="flex-grow-1">
               <div class="task-title fw-semibold">Nueva tarea</div>
               <div class="small text-muted task-desc"></div>
+              <span class="badge bg-warning badge-sm badge-rol">
+                <i class="fas fa-users"></i> Todos los roles
+              </span>
             </div>
             <div class="ms-2 d-flex align-items-center gap-1">
               <button type="button" class="btn btn-sm btn-light btnEditTask">✎</button>
@@ -264,12 +332,15 @@
       const dl = stage.querySelector('.docs-list');
       const id = uid('doc');
       dl.insertAdjacentHTML('beforeend', `
-        <div class="doc-item list-group-item border rounded p-2" data-doc-id="${id}" tabindex="0">
+        <div class="doc-item list-group-item border rounded p-2" data-doc-id="${id}" data-doc-rol-cambios="" tabindex="0">
           <div class="d-flex justify-content-between align-items-center">
             <div class="doc-drag text-muted" style="cursor:grab"><i class="fas fa-grip-vertical me-2"></i></div>
             <div class="flex-grow-1">
               <div class="doc-title fw-semibold">Nuevo documento</div>
               <div class="small text-muted doc-desc"></div>
+              <span class="badge bg-warning badge-sm badge-rol">
+                <i class="fas fa-users"></i> Todos los roles
+              </span>
             </div>
             <div class="ms-2 d-flex align-items-center gap-1">
               <button type="button" class="btn btn-sm btn-light btnEditDoc">✎</button>
@@ -284,13 +355,20 @@
     if (btn?.classList.contains('btnEditTask') && task) {
       openModal({
         title: 'Editar tarea',
+        showRol: true,
         values: {
           name: task.querySelector('.task-title').textContent.trim(),
           description: task.querySelector('.task-desc').textContent.trim(),
+          rol_cambios: task.getAttribute('data-task-rol-cambios') || '',
         },
-        onSave: ({name, description}) => {
+        onSave: ({name, description, rol_cambios}) => {
           task.querySelector('.task-title').textContent = name || 'Tarea';
           task.querySelector('.task-desc').textContent  = description || '';
+          task.setAttribute('data-task-rol-cambios', rol_cambios || '');
+          
+          // Actualizar badge de rol
+          updateTaskRolBadge(task, rol_cambios);
+          
           rebuildJSON();
         }
       });
@@ -301,13 +379,20 @@
     if (btn?.classList.contains('btnEditDoc') && doc) {
       openModal({
         title: 'Editar documento',
+        showRol: true,
         values: {
           name: doc.querySelector('.doc-title').textContent.trim(),
           description: doc.querySelector('.doc-desc').textContent.trim(),
+          rol_cambios: doc.getAttribute('data-doc-rol-cambios') || '',
         },
-        onSave: ({name, description}) => {
+        onSave: ({name, description, rol_cambios}) => {
           doc.querySelector('.doc-title').textContent = name || 'Documento';
           doc.querySelector('.doc-desc').textContent  = description || '';
+          doc.setAttribute('data-doc-rol-cambios', rol_cambios || '');
+          
+          // Actualizar badge de rol
+          updateDocRolBadge(doc, rol_cambios);
+          
           rebuildJSON();
         }
       });

@@ -72,10 +72,13 @@ class FlujoController extends Controller
             ? TipoFlujo::orderBy('nombre')->get(['id','nombre','id_emp'])
             : TipoFlujo::where('id_emp',$user->id_emp)->orderBy('nombre')->get(['id','nombre','id_emp']);
 
+        // Obtener roles (excluyendo SUPERADMIN)
+        $roles = Rol::where('id', '!=', 1)->where('estado', 1)->orderBy('nombre')->get(['id', 'nombre']);
+
         $treeJson = json_encode(['stages'=>[]]); // builder vacío
         $isEditMode = false;
 
-        return view('superadmin.flujos.create', compact('empresas','tipos','isSuper','treeJson','isEditMode'));
+        return view('superadmin.flujos.create', compact('empresas','tipos','isSuper','treeJson','isEditMode','roles'));
     }
 
     /** STORE: crea flujo + (opcional) etapas/tareas/docs del builder */
@@ -123,6 +126,7 @@ class FlujoController extends Controller
                         $ta->nombre        = $t['name'] ?? 'Tarea';
                         $ta->descripcion   = $t['description'] ?? null;
                         $ta->id_user_create= $user->id;
+                        $ta->rol_cambios   = $t['rol_cambios'] ?? null;
                         $ta->estado        = 1;
                         $ta->save();
                     }
@@ -131,6 +135,7 @@ class FlujoController extends Controller
                         $doc->id_etapa      = $et->id;
                         $doc->nombre        = $d['name'] ?? 'Documento';
                         $doc->descripcion   = $d['description'] ?? null;
+                        $doc->rol_cambios   = $d['rol_cambios'] ?? null;
                         $doc->id_user_create= $user->id;
                         $doc->estado        = 1;
                         $doc->save();
@@ -168,6 +173,7 @@ class FlujoController extends Controller
                     'name' => $tarea->nombre,
                     'description' => $tarea->descripcion,
                     'estado' => (int)$tarea->estado,
+                    'rol_cambios' => $tarea->rol_cambios,
                     'has_details' => $tarea->detalles()->exists()
                 ];
             })->toArray();
@@ -179,6 +185,7 @@ class FlujoController extends Controller
                     'name' => $doc->nombre,
                     'description' => $doc->descripcion,
                     'estado' => (int)$doc->estado,
+                    'rol_cambios' => $doc->rol_cambios,
                     'has_details' => $doc->detalles()->exists()
                 ];
             })->toArray();
@@ -197,7 +204,10 @@ class FlujoController extends Controller
         $treeJson = json_encode($tree);
         $isEditMode = true;
 
-        return view('superadmin.flujos.edit', compact('flujo','empresas','tipos','isSuper','treeJson','isEditMode'));
+        // Obtener roles (excluyendo SUPERADMIN)
+        $roles = Rol::where('id', '!=', 1)->where('estado', 1)->orderBy('nombre')->get(['id', 'nombre']);
+
+        return view('superadmin.flujos.edit', compact('flujo','empresas','tipos','isSuper','treeJson','isEditMode','roles'));
     }
 
     /** UPDATE: actualiza flujo y gestiona árbol manteniendo estados */
@@ -272,6 +282,7 @@ class FlujoController extends Controller
                                 $tarea = $existingTareas[$tareaId];
                                 $tarea->nombre      = $tData['name'] ?? 'Tarea';
                                 $tarea->descripcion = $tData['description'] ?? null;
+                                $tarea->rol_cambios = $tData['rol_cambios'] ?? null;
                                 $tarea->estado      = isset($tData['estado']) ? (int)$tData['estado'] : 1;
                                 $tarea->save();
                                 $processedTareas[] = $tarea->id;
@@ -281,6 +292,7 @@ class FlujoController extends Controller
                                 $tarea->id_etapa       = $etapa->id;
                                 $tarea->nombre         = $tData['name'] ?? 'Tarea';
                                 $tarea->descripcion    = $tData['description'] ?? null;
+                                $tarea->rol_cambios    = $tData['rol_cambios'] ?? null;
                                 $tarea->estado         = 1;
                                 $tarea->id_user_create = $flujo->id_user_create;
                                 $tarea->save();
@@ -310,6 +322,7 @@ class FlujoController extends Controller
                                 $doc = $existingDocs[$docId];
                                 $doc->nombre      = $dData['name'] ?? 'Documento';
                                 $doc->descripcion = $dData['description'] ?? null;
+                                $doc->rol_cambios = $dData['rol_cambios'] ?? null;
                                 $doc->estado      = isset($dData['estado']) ? (int)$dData['estado'] : 1;
                                 $doc->save();
                                 $processedDocs[] = $doc->id;
@@ -319,6 +332,7 @@ class FlujoController extends Controller
                                 $doc->id_etapa       = $etapa->id;
                                 $doc->nombre         = $dData['name'] ?? 'Documento';
                                 $doc->descripcion    = $dData['description'] ?? null;
+                                $doc->rol_cambios    = $dData['rol_cambios'] ?? null;
                                 $doc->estado         = 1;
                                 $doc->id_user_create = $flujo->id_user_create;
                                 $doc->save();

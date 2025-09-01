@@ -16,7 +16,8 @@ class Tarea extends Model
         'descripcion',
         'id_user_create',
         'id_etapa',
-        'estado'
+        'estado',
+        'rol_cambios'
     ];
 
     protected $casts = [
