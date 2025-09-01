@@ -16,7 +16,9 @@ class DetalleDocumento extends Model
         'id_detalle_etapa',
         'estado',
         'id_user_create',
-        'ruta_doc'
+        'ruta_doc',
+        'created_at',
+        'updated_at'
     ];
 
     protected $casts = [

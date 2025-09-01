@@ -736,18 +736,21 @@ class Ejecucion extends Controller
                 // Actualizar el existente
                 $detalle->update([
                     'estado' => $completada ? 3 : 2, // 3 = completado, 2 = en ejecución
-                    'id_user_create' => $user->id
+                    'id_user_create' => $user->id,
+                    'updated_at' => now()
                 ]);
-                Log::info('Detalle actualizado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado]);
+                Log::info('Detalle actualizado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado, 'updated_by' => $user->id]);
             } else {
                 // Crear nuevo detalle para esta ejecución específica
                 $detalle = DetalleTarea::create([
                     'id_tarea' => $tareaId,
                     'id_detalle_etapa' => $detalleEtapa->id,
                     'estado' => $completada ? 3 : 2, // 3 = completado, 2 = en ejecución (activado desde estado 0)
-                    'id_user_create' => $user->id
+                    'id_user_create' => $user->id,
+                    'created_at' => now(),
+                    'updated_at' => now()
                 ]);
-                Log::info('Detalle creado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado]);
+                Log::info('Detalle creado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado, 'created_by' => $user->id]);
             }
 
             return response()->json([
@@ -800,17 +803,22 @@ class Ejecucion extends Controller
                 'detalle_flujo_id' => 'required|exists:detalle_flujo,id',
                 'tareas' => 'nullable|array',
                 'tareas.*.tarea_id' => 'required|exists:tareas,id',
-                'tareas.*.completada' => 'required|boolean'
+                'tareas.*.completada' => 'required|boolean',
+                'documentos' => 'nullable|array',
+                'documentos.*.documento_id' => 'required|exists:documentos,id',
+                'documentos.*.validado' => 'required|boolean'
             ]);
             
             $etapaId = $request->etapa_id;
             $detalleFlujoId = $request->detalle_flujo_id;
-            $tareas = $request->tareas;
+            $tareas = $request->tareas ?? [];
+            $documentos = $request->documentos ?? [];
 
             Log::info('Datos validados para grabar etapa', [
                 'etapa_id' => $etapaId,
                 'detalle_flujo_id' => $detalleFlujoId,
                 'tareas_count' => count($tareas),
+                'documentos_count' => count($documentos),
                 'user_id' => $user->id
             ]);
 
@@ -837,6 +845,7 @@ class Ejecucion extends Controller
             DB::beginTransaction();
 
             $tareasActualizadas = 0;
+            $documentosActualizados = 0;
             $etapaCompletada = false;
             $flujoCompletado = false;
 
@@ -865,7 +874,8 @@ class Ejecucion extends Controller
                         // Actualizar el existente
                         $detalle->update([
                             'estado' => $completada ? 3 : 2, // 3 = completado, 2 = en ejecución
-                            'id_user_create' => $user->id
+                            'id_user_create' => $user->id,
+                            'updated_at' => now()
                         ]);
                     } else {
                         // Crear nuevo detalle
@@ -873,7 +883,9 @@ class Ejecucion extends Controller
                         'id_tarea' => $tareaId,
                         'id_detalle_etapa' => $detalleEtapa->id,
                         'estado' => $completada ? 3 : 2,
-                        'id_user_create' => $user->id
+                        'id_user_create' => $user->id,
+                        'created_at' => now(),
+                        'updated_at' => now()
                     ]);
                 }
 
@@ -882,25 +894,75 @@ class Ejecucion extends Controller
                 }
             }
 
-            // Verificar estados después de procesar todas las tareas
-            if ($tareasActualizadas > 0) {
-                // Usar la primera tarea para verificar estados (todas pertenecen a la misma etapa)
-                $primeraTaskaId = $tareas[0]['tarea_id'];
-                $estadosResult = $this->verificarYActualizarEstados($primeraTaskaId, 'tarea', $detalleFlujoId);
+            // Procesar cada documento (si existen)
+            if (!empty($documentos)) {
+                foreach ($documentos as $documentoData) {
+                    $documentoId = $documentoData['documento_id'];
+                    $validado = $documentoData['validado'];
+
+                    // Verificar que el documento pertenece a la etapa
+                    $documento = \App\Models\Documento::where('id', $documentoId)
+                        ->where('id_etapa', $etapaId)
+                        ->first();
+                    
+                    if (!$documento) {
+                        Log::warning('Documento no pertenece a la etapa', ['documento_id' => $documentoId, 'etapa_id' => $etapaId]);
+                        continue;
+                    }
+
+                    // Buscar si ya existe un detalle para este documento
+                    $detalle = DetalleDocumento::where('id_documento', $documentoId)
+                        ->where('id_detalle_etapa', $detalleEtapa->id)
+                        ->first();
+                    
+                    if ($detalle) {
+                        // Solo actualizar si tiene archivo y se está validando
+                        if ($detalle->ruta_doc && $validado) {
+                            $detalle->update([
+                                'estado' => 3, // 3 = validado/completado
+                                'id_user_create' => $user->id,
+                                'updated_at' => now()
+                            ]);
+                            $documentosActualizados++;
+                            Log::info('Documento validado', ['documento_id' => $documentoId, 'detalle_id' => $detalle->id]);
+                        } elseif (!$validado && $detalle->estado == 3) {
+                            // Si se desmarca un documento previamente validado
+                            $detalle->update([
+                                'estado' => 2, // 2 = archivo subido pero no validado
+                                'id_user_create' => $user->id,
+                                'updated_at' => now()
+                            ]);
+                            $documentosActualizados++;
+                            Log::info('Documento desvalidado', ['documento_id' => $documentoId, 'detalle_id' => $detalle->id]);
+                        }
+                    }
+                }
+            }
+
+            // Verificar estados después de procesar tareas y documentos
+            if ($tareasActualizadas > 0 || $documentosActualizados > 0) {
+                // Usar la primera tarea o documento para verificar estados
+                if ($tareasActualizadas > 0) {
+                    $primeraTaskaId = $tareas[0]['tarea_id'];
+                    $estadosResult = $this->verificarYActualizarEstados($primeraTaskaId, 'tarea', $detalleFlujoId);
+                } elseif ($documentosActualizados > 0) {
+                    $primerDocumentoId = $documentos[0]['documento_id'];
+                    $estadosResult = $this->verificarYActualizarEstados($primerDocumentoId, 'documento', $detalleFlujoId);
+                }
                 
-                if (is_array($estadosResult) && isset($estadosResult['flujo_completado'])) {
+                if (isset($estadosResult) && is_array($estadosResult) && isset($estadosResult['flujo_completado'])) {
                     $flujoCompletado = $estadosResult;
-                } elseif ($estadosResult === true) {
+                } elseif (isset($estadosResult) && $estadosResult === true) {
                     $etapaCompletada = true;
                 }
             } else {
-                // Si no hay tareas, verificar si solo hay documentos y están completos
+                // Si no hay tareas ni documentos, verificar si solo hay documentos y están completos
                 $totalDocumentos = $etapa->documentos()->where('estado', 1)->count();
                 $documentosCompletos = DetalleDocumento::whereHas('documento', function($q) use ($etapaId) {
                         $q->where('id_etapa', $etapaId)->where('estado', 1);
                     })
                     ->where('id_detalle_etapa', $detalleEtapa->id)
-                    ->whereNotNull('archivo_url')
+                    ->where('estado', 3) // Solo documentos validados
                     ->count();
                 
                 if ($totalDocumentos > 0 && $documentosCompletos == $totalDocumentos) {
@@ -923,16 +985,18 @@ class Ejecucion extends Controller
             Log::info('Etapa grabada exitosamente', [
                 'etapa_id' => $etapaId,
                 'tareas_actualizadas' => $tareasActualizadas,
+                'documentos_actualizados' => $documentosActualizados,
                 'etapa_completada' => $etapaCompletada,
                 'flujo_completado' => $flujoCompletado
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => $tareasActualizadas > 0 
-                    ? "Etapa grabada correctamente. {$tareasActualizadas} tareas actualizadas."
+                'message' => ($tareasActualizadas > 0 || $documentosActualizados > 0) 
+                    ? "Etapa grabada correctamente. {$tareasActualizadas} tareas y {$documentosActualizados} documentos actualizados."
                     : "Etapa grabada correctamente.",
                 'tareas_actualizadas' => $tareasActualizadas,
+                'documentos_actualizados' => $documentosActualizados,
                 'estados' => $flujoCompletado ?: $etapaCompletada
             ]);
 
@@ -1029,26 +1093,34 @@ class Ejecucion extends Controller
                 ->first();
 
             if ($detalle) {
-                // Actualizar el existente
+                // Actualizar el existente - solo guardar el archivo, no cambiar estado hasta que se grabe la etapa
                 $detalle->update([
-                    'estado' => 3, // 3 = subido/completado
                     'ruta_doc' => $rutaArchivo,
-                    'id_user_create' => $user->id
+                    'archivo_url' => Storage::url($rutaArchivo),
+                    'nombre_archivo' => $archivo->getClientOriginalName(),
+                    'comentarios' => $request->comentarios,
+                    'id_user_create' => $user->id,
+                    'updated_at' => now()
                 ]);
             } else {
-                // Crear nuevo detalle para esta ejecución específica
+                // Crear nuevo detalle para esta ejecución específica - estado 2 (pendiente de validación)
                 $detalle = DetalleDocumento::create([
                     'id_documento' => $documentoId,
                     'id_detalle_etapa' => $detalleEtapa->id,
-                    'estado' => 3, // 3 = subido/completado
+                    'estado' => 2, // 2 = archivo subido, pendiente de validación con "Grabar"
                     'ruta_doc' => $rutaArchivo,
-                    'id_user_create' => $user->id
+                    'archivo_url' => Storage::url($rutaArchivo),
+                    'nombre_archivo' => $archivo->getClientOriginalName(),
+                    'comentarios' => $request->comentarios,
+                    'id_user_create' => $user->id,
+                    'created_at' => now(),
+                    'updated_at' => now()
                 ]);
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Documento subido correctamente',
+                'message' => 'Documento subido correctamente. Presiona "Grabar Cambios" para validar.',
                 'archivo_url' => Storage::url($rutaArchivo),
                 'nombre_archivo' => $archivo->getClientOriginalName(),
                 'detalle_id' => $detalle->id,
@@ -1057,7 +1129,7 @@ class Ejecucion extends Controller
                     'id' => $user->id
                 ],
                 'fecha_subida' => $detalle->updated_at->format('d/m/Y H:i'),
-                'estados' => $this->verificarYActualizarEstados($documentoId, 'documento', $detalleFlujoId)
+                'estado_temporal' => true // Indica que está en estado temporal, necesita validación
             ]);
 
         } catch (\Exception $e) {
@@ -1311,9 +1383,11 @@ class Ejecucion extends Controller
             $detalleDocumento->update([
                 'archivo_url' => null,
                 'nombre_archivo' => null,
+                'ruta_doc' => null,
                 'comentarios' => $motivo ? "Eliminado: " . $motivo : "Documento eliminado",
                 'estado' => 0, // Volver a estado inicial/pendiente
-                'id_user_create' => $user->id
+                'id_user_create' => $user->id,
+                'updated_at' => now()
             ]);
 
             DB::commit();

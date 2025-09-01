@@ -203,7 +203,7 @@
                                             Completada por: <strong>{{ $tarea->detalle->userCreate->name }}</strong>
                                             <span class="text-muted ms-2">
                                                 <i class="fas fa-clock me-1"></i>
-                                                {{ $tarea->detalle->updated_at->format('d/m/Y H:i') }}
+                                                {{ $tarea->detalle->updated_at->format('d/m/Y') }}
                                             </span>
                                         </div>
                                     @endif
@@ -235,16 +235,26 @@
                                         <!-- Estado del documento -->
                                         <div class="document-status" id="status-{{ $documento->id }}">
                                             @if($documento->archivo_url)
-                                                <span class="badge bg-success">
-                                                    <i class="fas fa-check me-1"></i>Subido
-                                                </span>
+                                                <div class="d-flex align-items-center mb-2">
+                                                    <div class="form-check me-3">
+                                                        <input class="form-check-input documento-checkbox" 
+                                                               type="checkbox" 
+                                                               id="documento-{{ $documento->id }}" 
+                                                               data-documento-id="{{ $documento->id }}"
+                                                               {{ $documento->subido ? 'checked' : '' }}>
+                                                    </div>
+                                                    <span class="badge {{ $documento->subido ? 'bg-success' : 'bg-warning' }}">
+                                                        <i class="fas fa-{{ $documento->subido ? 'check' : 'clock' }} me-1"></i>
+                                                        {{ $documento->subido ? 'Validado' : 'Pendiente Validación' }}
+                                                    </span>
+                                                </div>
                                                 @if($documento->detalle && $documento->detalle->userCreate)
                                                     <div class="small text-success mt-1">
                                                         <i class="fas fa-user me-1"></i>
-                                                        Subido por: <strong>{{ $documento->detalle->userCreate->name }}</strong>
+                                                        {{ $documento->subido ? 'Validado' : 'Subido' }} por: <strong>{{ $documento->detalle->userCreate->name }}</strong>
                                                         <span class="text-muted ms-2">
                                                             <i class="fas fa-clock me-1"></i>
-                                                            {{ $documento->detalle->updated_at->format('d/m/Y H:i') }}
+                                                            {{ $documento->detalle->updated_at->format('d/m/Y') }}
                                                         </span>
                                                     </div>
                                                 @endif
@@ -565,6 +575,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             });
             
+            // Recopilar datos de documentos
+            const documentos = [];
+            this.querySelectorAll('.documento-checkbox').forEach(checkbox => {
+                documentos.push({
+                    documento_id: checkbox.dataset.documentoId,
+                    validado: checkbox.checked
+                });
+            });
+            
             // Deshabilitar botón mientras se procesa
             submitBtn.disabled = true;
             const originalHtml = submitBtn.innerHTML;
@@ -580,7 +599,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify({
                     etapa_id: etapaId,
                     detalle_flujo_id: detalleFlujoId,
-                    tareas: tareas
+                    tareas: tareas,
+                    documentos: documentos
                 })
             })
             .then(response => response.json())
@@ -713,9 +733,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Actualizar estado
                 statusElement.innerHTML = `
-                    <span class="badge bg-success">
-                        <i class="fas fa-check me-1"></i>Subido
-                    </span>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="form-check me-3">
+                            <input class="form-check-input documento-checkbox" 
+                                   type="checkbox" 
+                                   id="documento-${documentoId}" 
+                                   data-documento-id="${documentoId}">
+                        </div>
+                        <span class="badge bg-warning">
+                            <i class="fas fa-clock me-1"></i>Pendiente Validación
+                        </span>
+                    </div>
                     <div class="small text-success mt-1">
                         <i class="fas fa-user me-1"></i>
                         Subido por: <strong>${data.usuario.name}</strong>
@@ -801,12 +829,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 const etapaCard = documentoItem.closest('.etapa-card');
                 marcarCambiosPendientes(etapaCard);
                 
+                // Agregar event listener al nuevo checkbox
+                const newCheckbox = statusElement.querySelector('.documento-checkbox');
+                if (newCheckbox) {
+                    newCheckbox.addEventListener('change', function() {
+                        const etapaCard = this.closest('.etapa-card');
+                        marcarCambiosPendientes(etapaCard);
+                    });
+                }
+                
                 // Cerrar modal
                 bootstrap.Modal.getInstance(document.getElementById('uploadModal')).hide();
                 document.getElementById('uploadForm').reset();
                 
                 // Mostrar mensaje de éxito
-                mostrarMensajeExito('Documento subido correctamente. Recuerda grabar los cambios de la etapa.');
+                mostrarMensajeExito('Documento subido correctamente. Marca el checkbox y presiona "Grabar Cambios" para validar.');
                 
                 console.log('Documento subido:', data);
             } else {
@@ -1118,6 +1155,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para agregar event listeners a los checkboxes para marcar cambios pendientes
     function agregarListenersCambiosPendientes() {
+        // Event listeners para checkboxes de tareas
         document.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', function(e) {
                 const wasChecked = e.target.checked;
@@ -1150,6 +1188,14 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Establecer estado inicial
             checkbox.dataset.previouslyChecked = checkbox.checked;
+        });
+        
+        // Event listeners para checkboxes de documentos
+        document.querySelectorAll('.documento-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const etapaCard = this.closest('.etapa-card');
+                marcarCambiosPendientes(etapaCard);
+            });
         });
     }
 

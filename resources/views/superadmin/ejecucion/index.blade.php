@@ -65,17 +65,7 @@
     </div>
 </div>
 
-@if(!$isSuper)
-<!-- Información sobre ejecuciones múltiples -->
-<div class="alert alert-success border-0 shadow-sm mb-4">
-    <div class="d-flex align-items-start">
-        <div class="flex-shrink-0">
-            <i class="fas fa-info-circle fa-lg mt-1"></i>
-        </div>
-        
-    </div>
-</div>
-@endif
+
 
 <!-- Sección de Ejecuciones en Layout de 3 Columnas -->
 @php
@@ -91,7 +81,7 @@
         <div class="d-flex align-items-center mb-4">
             <h4 class="mb-0">
                 <i class="fas fa-tasks text-primary me-2"></i>
-                Estado de Ejecuciones
+                Estados
             </h4>
         </div>
 
@@ -117,6 +107,8 @@
                                             <h6 class="fw-bold text-primary mb-1">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h6>
                                         <div class="text-muted small">
                                             <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
+                                            <br>
+                                            <span class="badge bg-light text-dark"> FLUJO: {{ $detalleEjecucion->flujo->nombre ?? 'Sin nombre' }}</span>
                                             @if($isSuper)
                                                 <span class="badge bg-secondary ms-1">{{ $detalleEjecucion->flujo->empresa->nombre ?? 'Sin empresa' }}</span>
                                             @endif
@@ -142,9 +134,18 @@
 
                                     <!-- Progreso -->
                                     <div class="mb-3">
-                                        <small class="text-muted d-block">Progreso</small>
+                                        @php
+                                            // Calcular progreso real basado en etapas completadas
+                                            $etapasCompletadas = $detalleEjecucion->detalleEtapas->where('estado', 3)->count();
+                                            $totalEtapas = $detalleEjecucion->flujo->total_etapas;
+                                            $porcentajeProgreso = $totalEtapas > 0 ? round(($etapasCompletadas / $totalEtapas) * 100) : 0;
+                                        @endphp
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="text-muted">Progreso</small>
+                                            <small class="text-warning fw-bold">{{ $porcentajeProgreso }}%</small>
+                                        </div>
                                         <div class="progress" style="height: 6px;">
-                                            <div class="progress-bar bg-warning progress-bar-animated" role="progressbar" style="width: 45%"></div>
+                                            <div class="progress-bar bg-warning progress-bar-animated" role="progressbar" style="width: {{ $porcentajeProgreso }}%"></div>
                                         </div>
                                     </div>
 
@@ -223,6 +224,8 @@
                                             <h6 class="fw-bold text-primary mb-1">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h6>
                                             <div class="text-muted small">
                                                 <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
+                                                <br>
+                                                <span class="badge bg-light text-dark"> FLUJO: {{ $detalleEjecucion->flujo->nombre ?? 'Sin nombre' }}</span>
                                                 @if($isSuper)
                                                     <span class="badge bg-secondary ms-1">{{ $detalleEjecucion->flujo->empresa->nombre ?? 'Sin empresa' }}</span>
                                                 @endif
@@ -248,7 +251,10 @@
 
                                         <!-- Estado completado -->
                                         <div class="mb-3">
-                                            <small class="text-success fw-bold d-block">100% Completado</small>
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <small class="text-muted">Estado</small>
+                                                <small class="text-success fw-bold">100%</small>
+                                            </div>
                                             <div class="progress" style="height: 6px;">
                                                 <div class="progress-bar bg-success" role="progressbar" style="width: 100%"></div>
                                             </div>
@@ -310,6 +316,8 @@
                                             <h6 class="fw-bold text-primary mb-1">{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}</h6>
                                             <div class="text-muted small">
                                                 <span class="badge bg-light text-dark">{{ $detalleEjecucion->flujo->tipo->nombre ?? 'Sin tipo' }}</span>
+                                                <br>
+                                                <span class="badge bg-light text-dark"> FLUJO: {{ $detalleEjecucion->flujo->nombre ?? 'Sin nombre' }}</span>
                                                 @if($isSuper)
                                                     <span class="badge bg-secondary ms-1">{{ $detalleEjecucion->flujo->empresa->nombre ?? 'Sin empresa' }}</span>
                                                 @endif
@@ -352,12 +360,30 @@
 
                                         <!-- Progreso -->
                                         <div class="mb-3">
+                                            @php
+                                                // Calcular progreso para pausadas/canceladas
+                                                if($detalleEjecucion->estado == 4) {
+                                                    // Pausada: calcular progreso real
+                                                    $etapasCompletadas = $detalleEjecucion->detalleEtapas->where('estado', 3)->count();
+                                                    $totalEtapas = $detalleEjecucion->flujo->total_etapas;
+                                                    $porcentajeProgreso = $totalEtapas > 0 ? round(($etapasCompletadas / $totalEtapas) * 100) : 0;
+                                                    $colorBarra = 'bg-secondary';
+                                                    $textoProgreso = $porcentajeProgreso . '% (Pausada)';
+                                                } else {
+                                                    // Cancelada: progreso final antes de cancelación
+                                                    $etapasCompletadas = $detalleEjecucion->detalleEtapas->where('estado', 3)->count();
+                                                    $totalEtapas = $detalleEjecucion->flujo->total_etapas;
+                                                    $porcentajeProgreso = $totalEtapas > 0 ? round(($etapasCompletadas / $totalEtapas) * 100) : 0;
+                                                    $colorBarra = 'bg-danger';
+                                                    $textoProgreso = $porcentajeProgreso . '% (Cancelada)';
+                                                }
+                                            @endphp
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <small class="text-muted">Progreso</small>
+                                                <small class="fw-bold {{ $detalleEjecucion->estado == 4 ? 'text-secondary' : 'text-danger' }}">{{ $textoProgreso }}</small>
+                                            </div>
                                             <div class="progress" style="height: 6px;">
-                                                @if($detalleEjecucion->estado == 4)
-                                                    <div class="progress-bar bg-secondary" role="progressbar" style="width: 50%"></div>
-                                                @else
-                                                    <div class="progress-bar bg-danger" role="progressbar" style="width: 100%"></div>
-                                                @endif
+                                                <div class="progress-bar {{ $colorBarra }}" role="progressbar" style="width: {{ $porcentajeProgreso }}%"></div>
                                             </div>
                                         </div>
 
