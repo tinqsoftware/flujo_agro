@@ -143,8 +143,13 @@ class Ejecucion extends Controller
                 // Cargar tareas completadas con información del usuario
                 foreach ($etapa->tareas as $tarea) {
                     $detalleTarea = DetalleTarea::with('userCreate')->where('id_tarea', $tarea->id)->first();
-                    $tarea->completada = $detalleTarea ? $detalleTarea->estado : false;
+                    $tarea->completada = $detalleTarea ? ($detalleTarea->estado == 3) : false;
                     $tarea->detalle = $detalleTarea;
+                    Log::info('Tarea cargada', [
+                        'tarea_id' => $tarea->id,
+                        'detalle_estado' => $detalleTarea ? $detalleTarea->estado : 'null',
+                        'completada' => $tarea->completada
+                    ]);
                 }
                 
                 // Cargar documentos subidos con información del usuario
@@ -743,19 +748,42 @@ class Ejecucion extends Controller
             
             if ($detalle) {
                 // Actualizar el existente
-                $detalle->update([
-                    'estado' => $completada ? 3 : 2, // 3 = completado, 2 = en ejecución
-                    'id_user_create' => $user->id,
-                    'updated_at' => now()
-                ]);
+                if ($completada) {
+                    // Marcar como completado
+                    $detalle->update([
+                        'estado' => 3, // 3 = completado
+                        'id_user_create' => $user->id,
+                        'updated_at' => now()
+                    ]);
+                    Log::info('Tarea marcada como completada', [
+                        'detalle_id' => $detalle->id,
+                        'estado_anterior' => $detalle->getOriginal('estado'),
+                        'estado_nuevo' => 3,
+                        'usuario' => $user->id
+                    ]);
+                } else {
+                    // Desmarcar: cambiar a estado 0 (inicial) y limpiar usuario
+                    $detalle->update([
+                        'estado' => 0, // 0 = inicial/sin completar
+                        'id_user_create' => null, // Limpiar usuario que completó
+                        'updated_at' => now()
+                    ]);
+                    Log::info('Tarea desmarcada a estado inicial', [
+                        'detalle_id' => $detalle->id,
+                        'estado_anterior' => $detalle->getOriginal('estado'),
+                        'estado_nuevo' => 0,
+                        'usuario_anterior' => $detalle->getOriginal('id_user_create'),
+                        'usuario_nuevo' => null
+                    ]);
+                }
                 Log::info('Detalle actualizado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado, 'updated_by' => $user->id]);
             } else {
                 // Crear nuevo detalle para esta ejecución específica
                 $detalle = DetalleTarea::create([
                     'id_tarea' => $tareaId,
                     'id_detalle_etapa' => $detalleEtapa->id,
-                    'estado' => $completada ? 3 : 2, // 3 = completado, 2 = en ejecución (activado desde estado 0)
-                    'id_user_create' => $user->id,
+                    'estado' => $completada ? 3 : 0, // 3 = completado, 0 = inicial
+                    'id_user_create' => $completada ? $user->id : null, // Solo asignar usuario si se completa
                     'created_at' => now(),
                     'updated_at' => now()
                 ]);
@@ -764,7 +792,7 @@ class Ejecucion extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => $completada ? 'Tarea marcada como completada' : 'Tarea marcada como pendiente',
+                'message' => $completada ? 'Tarea marcada como completada' : 'Tarea regresada a estado inicial',
                 'completada' => ($detalle->estado == 3), // Verificar que sea exactamente 3
                 'detalle_id' => $detalle->id,
                 'usuario' => [
@@ -1874,19 +1902,57 @@ class Ejecucion extends Controller
             
             if ($detalle) {
                 // Actualizar el existente
-                $detalle->update([
-                    'estado' => $validado ? 3 : 2, // 3 = validado, 2 = pendiente
-                    'id_user_create' => $user->id,
-                    'updated_at' => now()
-                ]);
+                if ($validado) {
+                    // Marcar como validado
+                    $detalle->update([
+                        'estado' => 3, // 3 = validado
+                        'id_user_create' => $user->id,
+                        'updated_at' => now()
+                    ]);
+                    Log::info('Documento marcado como validado', [
+                        'detalle_id' => $detalle->id,
+                        'estado_anterior' => $detalle->getOriginal('estado'),
+                        'estado_nuevo' => 3,
+                        'usuario' => $user->id
+                    ]);
+                } else {
+                    // Desmarcar: cambiar a estado 0, limpiar usuario y eliminar archivo
+                    $rutaAnterior = $detalle->ruta_doc;
+                    
+                    // Eliminar archivo físico si existe
+                    if ($rutaAnterior && Storage::exists($rutaAnterior)) {
+                        Storage::delete($rutaAnterior);
+                        Log::info('Archivo de documento eliminado', [
+                            'ruta_eliminada' => $rutaAnterior,
+                            'detalle_id' => $detalle->id
+                        ]);
+                    }
+                    
+                    $detalle->update([
+                        'estado' => 0, // 0 = inicial/sin validar
+                        'id_user_create' => null, // Limpiar usuario que validó
+                        'ruta_doc' => null, // Limpiar ruta del documento
+                        'updated_at' => now()
+                    ]);
+                    
+                    Log::info('Documento desmarcado a estado inicial', [
+                        'detalle_id' => $detalle->id,
+                        'estado_anterior' => $detalle->getOriginal('estado'),
+                        'estado_nuevo' => 0,
+                        'usuario_anterior' => $detalle->getOriginal('id_user_create'),
+                        'usuario_nuevo' => null,
+                        'ruta_anterior' => $rutaAnterior,
+                        'ruta_nueva' => null
+                    ]);
+                }
                 Log::info('Detalle de documento actualizado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado, 'updated_by' => $user->id]);
             } else {
                 // Crear nuevo detalle para esta ejecución específica
                 $detalle = DetalleDocumento::create([
                     'id_documento' => $documentoId,
                     'id_detalle_etapa' => $detalleEtapa->id,
-                    'estado' => $validado ? 3 : 2, // 3 = validado, 2 = pendiente
-                    'id_user_create' => $user->id,
+                    'estado' => $validado ? 3 : 0, // 3 = validado, 0 = inicial
+                    'id_user_create' => $validado ? $user->id : null, // Solo asignar usuario si se valida
                     'created_at' => now(),
                     'updated_at' => now()
                 ]);
@@ -1895,7 +1961,7 @@ class Ejecucion extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => $validado ? 'Documento marcado como validado' : 'Documento marcado como pendiente',
+                'message' => $validado ? 'Documento marcado como validado' : 'Documento regresado a estado inicial',
                 'validado' => ($detalle->estado == 3), // Verificar que sea exactamente 3
                 'detalle_id' => $detalle->id,
                 'usuario' => [

@@ -175,6 +175,85 @@
     background-color: #fff3cd !important;
     border: 1px solid #ffc107 !important;
 }
+
+/* Estilos para notificaciones toast personalizadas */
+.notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    max-width: 400px;
+}
+
+.notification {
+    margin-bottom: 10px;
+    padding: 16px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+    border-left: 4px solid;
+    backdrop-filter: blur(10px);
+}
+
+.notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.notification.hide {
+    opacity: 0;
+    transform: translateX(100%);
+}
+
+.notification.success {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    color: #155724;
+    border-left-color: #28a745;
+}
+
+.notification.error {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    color: #721c24;
+    border-left-color: #dc3545;
+}
+
+.notification.warning {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    color: #856404;
+    border-left-color: #ffc107;
+}
+
+.notification.info {
+    background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+    color: #0c5460;
+    border-left-color: #17a2b8;
+}
+
+.notification i {
+    margin-right: 10px;
+    font-size: 16px;
+}
+
+.notification .close-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    opacity: 0.7;
+    padding: 0;
+    margin-left: 15px;
+}
+
+.notification .close-btn:hover {
+    opacity: 1;
+}
 </style>
 @endpush
 
@@ -391,14 +470,7 @@
                                                title="Descargar">
                                                 <i class="fas fa-download"></i>
                                             </a>
-                                            <!-- Botón para eliminar documento -->
-                                            <button type="button" class="btn btn-outline-danger btn-sm eliminar-documento" 
-                                                    data-documento-id="{{ $documento->id }}"
-                                                    data-documento-nombre="{{ $documento->nombre }}"
-                                                    data-url="{{ $documento->archivo_url }}"
-                                                    title="Eliminar documento">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
+                                           
                                         @endif
                                         
                                         <!-- Botón para subir/cambiar archivo -->
@@ -577,6 +649,9 @@
 
 @endsection
 
+<!-- Contenedor para notificaciones -->
+<div id="notification-container" class="notification-container"></div>
+
 @push('scripts')
 <script>
 // Variables globales desde PHP
@@ -586,6 +661,62 @@ let procesoIniciado = {{ $flujo->proceso_iniciado ? 'true' : 'false' }};
 
 // Variables para el manejo de cambios pendientes por etapa
 let cambiosPendientesPorEtapa = {};
+
+// Función para mostrar notificaciones CSS elegantes
+function mostrarNotificacion(mensaje, tipo = 'info', duracion = 5000) {
+    const container = document.getElementById('notification-container');
+    if (!container) {
+        console.warn('Contenedor de notificaciones no encontrado');
+        return;
+    }
+    
+    // Crear el elemento de notificación
+    const notification = document.createElement('div');
+    notification.className = `notification ${tipo}`;
+    
+    // Definir iconos según el tipo
+    const iconos = {
+        success: 'fas fa-check-circle',
+        error: 'fas fa-exclamation-circle',
+        warning: 'fas fa-exclamation-triangle',
+        info: 'fas fa-info-circle'
+    };
+    
+    notification.innerHTML = `
+        <i class="${iconos[tipo] || iconos.info}"></i>
+        <span>${mensaje}</span>
+        <button class="close-btn" onclick="cerrarNotificacion(this.parentElement)">&times;</button>
+    `;
+    
+    // Agregar al contenedor
+    container.appendChild(notification);
+    
+    // Mostrar con animación
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+    
+    // Auto-remover después de la duración especificada
+    if (duracion > 0) {
+        setTimeout(() => {
+            cerrarNotificacion(notification);
+        }, duracion);
+    }
+    
+    return notification;
+}
+
+// Función para cerrar notificación
+function cerrarNotificacion(notification) {
+    notification.classList.remove('show');
+    notification.classList.add('hide');
+    
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.parentElement.removeChild(notification);
+        }
+    }, 300);
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Flujo ID:', flujoId);
@@ -683,14 +814,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     actualizarProgreso();
                 } else {
-                    alert('Error al iniciar el proceso: ' + data.message);
+                    mostrarNotificacion('Error al iniciar el proceso: ' + data.message, 'error');
                     btn.disabled = false;
                     btn.innerHTML = '<i class="fas fa-play me-2"></i>Iniciar Ejecución';
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('Error al iniciar el proceso');
+                mostrarNotificacion('Error al iniciar el proceso', 'error');
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-play me-2"></i>Iniciar Ejecución';
             });
@@ -704,11 +835,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const cambiosEtapa = cambiosPendientesPorEtapa[etapaId] || [];
             
             if (cambiosEtapa.length === 0) {
-                alert('No hay cambios pendientes para grabar en esta etapa');
-                return;
-            }
-
-            if (!confirm(`¿Estás seguro de que quieres grabar ${cambiosEtapa.length} cambio(s) de esta etapa?`)) {
+                mostrarNotificacion('No hay cambios pendientes para grabar en esta etapa', 'warning');
                 return;
             }
 
@@ -732,10 +859,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Actualizar progreso
                     actualizarProgreso();
+                    
+                    // Asegurar que la etapa se mantenga abierta después de actualizar
+                    setTimeout(() => {
+                        expandirEtapa(etapaId);
+                    }, 100); // Pequeño delay para que termine la actualización del progreso
                 })
                 .catch(error => {
                     console.error('Error al grabar cambios de etapa:', error);
-                    alert('Error al grabar algunos cambios. Revisa la consola para más detalles.');
+                    mostrarNotificacion('Error al grabar algunos cambios. Revisa la consola para más detalles.', 'error');
                     
                     // Restaurar botón
                     btn.disabled = false;
@@ -824,19 +956,50 @@ document.addEventListener('DOMContentLoaded', function() {
         const etapaCard = document.querySelector(`[data-etapa-id="${etapaId}"]`);
         
         if (etapaCard) {
-            // Limpiar estilos de tareas
+            // Limpiar estilos de tareas y actualizar estado interno
             etapaCard.querySelectorAll('.cambio-pendiente-tarea').forEach(elemento => {
                 elemento.classList.remove('cambio-pendiente-tarea');
                 elemento.style.backgroundColor = '';
                 elemento.style.border = '';
+                
+                // Actualizar estado interno del checkbox de la tarea
+                const checkbox = elemento.querySelector('.tarea-checkbox');
+                if (checkbox) {
+                    checkbox.dataset.previouslyChecked = checkbox.checked.toString();
+                }
             });
             
-            // Limpiar estilos de documentos
+            // Limpiar estilos de documentos y actualizar estado interno
             etapaCard.querySelectorAll('.cambio-pendiente-documento').forEach(elemento => {
                 elemento.classList.remove('cambio-pendiente-documento');
                 elemento.style.backgroundColor = '';
                 elemento.style.border = '';
+                
+                // Actualizar estado interno del checkbox del documento
+                const checkbox = elemento.querySelector('.documento-checkbox');
+                if (checkbox) {
+                    checkbox.dataset.previouslyChecked = checkbox.checked.toString();
+                }
             });
+        }
+    }
+
+    // Función para expandir una etapa específica
+    function expandirEtapa(etapaId) {
+        const etapaCard = document.querySelector(`[data-etapa-id="${etapaId}"]`);
+        if (!etapaCard) return;
+        
+        const targetId = `etapa-content-${etapaId}`;
+        const targetElement = document.getElementById(targetId);
+        const collapseButton = etapaCard.querySelector('.collapse-toggle');
+        
+        console.log('Expandiendo etapa:', targetId);
+        
+        if (targetElement && collapseButton) {
+            // Asegurar que la etapa esté expandida
+            targetElement.classList.add('show');
+            collapseButton.classList.remove('collapsed');
+            collapseButton.classList.add('expanded');
         }
     }
 
@@ -917,12 +1080,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Función para actualizar una tarea individual
     function actualizarTareaIndividual(tareaId, completada) {
         if (!procesoIniciado) {
-            alert('Debes iniciar la ejecución del flujo primero');
+            mostrarNotificacion('Debes iniciar la ejecución del flujo primero', 'warning');
             return false;
         }
 
         if (!detalleFlujoId) {
-            alert('Error: No se encontró ID de ejecución');
+            mostrarNotificacion('Error: No se encontró ID de ejecución', 'error');
             return false;
         }
 
@@ -974,6 +1137,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
+                // Actualizar checkbox con el estado real del servidor
+                checkbox.checked = data.completada; // Usar el estado real del servidor
+                
                 // Buscar el label de manera más flexible
                 let label = null;
                 
@@ -1005,19 +1171,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.warn('No se encontró label para la tarea:', tareaId, '. Estructura DOM:', checkbox.parentElement.parentElement);
                     // Continuar sin actualizar el label visual, pero la funcionalidad principal sigue funcionando
                 } else {
-                    // Actualizar visual del label
-                    if (completada) {
+                    // Actualizar visual del label según el estado real del servidor
+                    if (data.completada) {
                         label.classList.add('text-decoration-line-through', 'text-muted');
                     } else {
                         label.classList.remove('text-decoration-line-through', 'text-muted');
                     }
                 }
                 
-                // La información de completado se actualiza automáticamente desde el servidor
-                // cuando se recarga la página o se sincroniza el progreso
-                
                 // Actualizar visual del contenedor de la tarea
-                if (completada) {
+                if (data.completada) {
                     tareaItem.classList.add('border-success');
                     tareaItem.classList.remove('border-info');
                 } else {
@@ -1025,14 +1188,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
                 // Actualizar estado interno
-                checkbox.dataset.previouslyChecked = completada;
+                checkbox.dataset.previouslyChecked = data.completada;
                 checkbox.dataset.cambioLocal = 'false';
+                
+                console.log('Tarea actualizada:', {
+                    tareaId: tareaId,
+                    estadoSolicitado: completada,
+                    estadoReal: data.completada,
+                    checkboxChecked: checkbox.checked
+                });
                 
                 // Actualizar contadores y progreso
                 actualizarContadoresYProgreso();
                 
                 // Mostrar mensaje de éxito
-                mostrarMensajeExito(completada ? 'Tarea completada' : 'Tarea desmarcada');
+                mostrarMensajeExito(data.completada ? 'Tarea completada' : 'Tarea regresada a estado inicial');
                 
                 // Verificar si se completó etapa o flujo
                 if (data.estados) {
@@ -1050,7 +1220,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     checkbox.checked = !completada;
                 }
                 console.error('Server error:', data.message);
-                alert('Error al actualizar la tarea: ' + (data.message || 'Error desconocido'));
+                mostrarNotificacion('Error al actualizar la tarea: ' + (data.message || 'Error desconocido'), 'error');
             }
         })
         .catch(error => {
@@ -1065,11 +1235,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Mensaje de error más informativo
             if (error.message.includes('Invalid JSON')) {
-                alert('Error: El servidor devolvió una respuesta inválida. Revisa la consola para más detalles.');
+                mostrarNotificacion('Error: El servidor devolvió una respuesta inválida. Revisa la consola para más detalles.', 'error');
             } else if (error.message.includes('HTTP error')) {
-                alert('Error de conexión con el servidor: ' + error.message);
+                mostrarNotificacion('Error de conexión con el servidor: ' + error.message, 'error');
             } else {
-                alert('Error inesperado: ' + error.message);
+                mostrarNotificacion('Error inesperado: ' + error.message, 'error');
             }
         })
         .finally(() => {
@@ -1083,12 +1253,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Función para actualizar validación de documento individual
     function actualizarDocumentoIndividual(documentoId, validado) {
         if (!procesoIniciado) {
-            alert('Debes iniciar la ejecución del flujo primero');
+            mostrarNotificacion('Debes iniciar la ejecución del flujo primero', 'warning');
             return false;
         }
 
         if (!detalleFlujoId) {
-            alert('Error: No se encontró ID de ejecución');
+            mostrarNotificacion('Error: No se encontró ID de ejecución', 'error');
             return false;
         }
 
@@ -1132,8 +1302,15 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Documento parsed response:', data);
             
             if (data.success) {
-                // Actualizar visual del documento según la validación
-                if (validado) {
+                // Actualizar checkbox con el estado real del servidor
+                const checkbox = document.querySelector(`[data-documento-id="${documentoId}"]`);
+                if (checkbox) {
+                    checkbox.checked = data.validado; // Usar el estado real del servidor
+                    checkbox.dataset.cambioLocal = 'false';
+                }
+                
+                // Actualizar visual del documento según el estado real del servidor
+                if (data.validado) {
                     documentoItem.classList.add('border-success');
                     documentoItem.classList.remove('border-warning', 'border-info');
                 } else {
@@ -1141,20 +1318,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     documentoItem.classList.add('border-warning');
                 }
                 
-                // La información de validación se actualiza automáticamente desde el servidor
-                // cuando se recarga la página o se sincroniza el progreso
-                
-                // Actualizar estado interno
-                const checkbox = document.querySelector(`[data-documento-id="${documentoId}"]`);
-                if (checkbox) {
-                    checkbox.dataset.cambioLocal = 'false';
-                }
+                console.log('Documento actualizado:', {
+                    documentoId: documentoId,
+                    estadoSolicitado: validado,
+                    estadoReal: data.validado,
+                    checkboxChecked: checkbox ? checkbox.checked : 'not found'
+                });
                 
                 // Actualizar contadores y progreso
                 actualizarContadoresYProgreso();
                 
                 // Mostrar mensaje de éxito
-                mostrarMensajeExito(validado ? 'Documento validado' : 'Validación removida');
+                mostrarMensajeExito(data.validado ? 'Documento validado' : 'Documento regresado a estado inicial');
                 
                 // Verificar si se completó etapa o flujo
                 if (data.estados) {
@@ -1172,7 +1347,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     checkbox.checked = !validado;
                 }
                 console.error('Documento server error:', data.message);
-                alert('Error al actualizar el documento: ' + (data.message || 'Error desconocido'));
+                mostrarNotificacion('Error al actualizar el documento: ' + (data.message || 'Error desconocido'), 'error');
             }
         })
         .catch(error => {
@@ -1187,11 +1362,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Mensaje de error más informativo
             if (error.message.includes('Invalid JSON')) {
-                alert('Error: El servidor devolvió una respuesta inválida. Revisa la consola para más detalles.');
+                mostrarNotificacion('Error: El servidor devolvió una respuesta inválida. Revisa la consola para más detalles.', 'error');
             } else if (error.message.includes('HTTP error')) {
-                alert('Error de conexión con el servidor: ' + error.message);
+                mostrarNotificacion('Error de conexión con el servidor: ' + error.message, 'error');
             } else {
-                alert('Error inesperado al validar documento: ' + error.message);
+                mostrarNotificacion('Error inesperado al validar documento: ' + error.message, 'error');
             }
         })
         .finally(() => {
@@ -1206,12 +1381,12 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.subir-documento').forEach(btn => {
         btn.addEventListener('click', function() {
             if (!procesoIniciado) {
-                alert('Debes iniciar la ejecución del flujo primero');
+                mostrarNotificacion('Debes iniciar la ejecución del flujo primero', 'warning');
                 return;
             }
 
             if (!detalleFlujoId) {
-                alert('Error: No se encontró ID de ejecución');
+                mostrarNotificacion('Error: No se encontró ID de ejecución', 'error');
                 return;
             }
 
@@ -1235,17 +1410,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const comments = document.getElementById('documentComments').value;
 
         if (!file) {
-            alert('Por favor selecciona un archivo PDF');
+            mostrarNotificacion('Por favor selecciona un archivo PDF', 'warning');
             return;
         }
 
         if (file.type !== 'application/pdf') {
-            alert('Solo se permiten archivos PDF');
+            mostrarNotificacion('Solo se permiten archivos PDF', 'warning');
             return;
         }
 
         if (file.size > 10 * 1024 * 1024) { // 10MB
-            alert('El archivo es demasiado grande. Máximo 10MB');
+            mostrarNotificacion('El archivo es demasiado grande. Máximo 10MB', 'warning');
             return;
         }
 
@@ -1343,12 +1518,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 btnGroup.querySelector('.subir-documento').addEventListener('click', function() {
                     if (!procesoIniciado) {
-                        alert('Debes iniciar la ejecución del flujo primero');
+                        mostrarNotificacion('Debes iniciar la ejecución del flujo primero', 'warning');
                         return;
                     }
 
                     if (!detalleFlujoId) {
-                        alert('Error: No se encontró ID de ejecución');
+                        mostrarNotificacion('Error: No se encontró ID de ejecución', 'error');
                         return;
                     }
 
@@ -1372,7 +1547,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     newCheckbox.addEventListener('change', function() {
                         const documentoId = this.dataset.documentoId;
                         const validado = this.checked;
-                        actualizarDocumentoIndividual(documentoId, validado);
+                        
+                        // Encontrar la etapa padre
+                        const etapaCard = this.closest('.card');
+                        const etapaId = etapaCard ? etapaCard.querySelector('.grabar-cambios-etapa').dataset.etapaId : null;
+                        
+                        // Solo cambio visual
+                        actualizarVisualDocumento(this, validado);
+                        
+                        // Agregar a cambios pendientes por etapa
+                        if (etapaId) {
+                            agregarCambioPendienteEtapa(etapaId, 'documento', documentoId, validado);
+                        }
                     });
                 }
                 
@@ -1381,16 +1567,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('uploadForm').reset();
                 
                 // Mostrar mensaje de éxito
-                mostrarMensajeExito('Documento subido correctamente. Marca el checkbox para validarlo.');
+                mostrarMensajeExito('Documento subido correctamente. Presiona "Grabar Cambios" para validar.');
                 
                 console.log('Documento subido:', data);
             } else {
-                alert('Error al subir el documento: ' + data.message);
+                mostrarNotificacion('Error al subir el documento: ' + data.message, 'error');
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Error al subir el documento');
+            mostrarNotificacion('Error al subir el documento', 'error');
         })
         .finally(() => {
             this.disabled = false;
@@ -1417,91 +1603,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Función para validar que las etapas anteriores estén completadas
-    function validarEtapasAnteriores(etapaActual) {
-        if (!etapaActual) return false;
-        
-        // Obtener todas las etapas
-        const todasLasEtapas = document.querySelectorAll('.etapa-card');
-        const indiceActual = Array.from(todasLasEtapas).indexOf(etapaActual);
-        
-        // La primera etapa siempre puede completarse
-        if (indiceActual === 0) {
-            return true;
-        }
-        
-        // Verificar que todas las etapas anteriores estén completadas
-        for (let i = 0; i < indiceActual; i++) {
-            const etapaAnterior = todasLasEtapas[i];
-            if (!etapaAnterior.classList.contains('completada')) {
-                // Obtener el nombre/número de la etapa anterior
-                const numeroEtapaAnterior = etapaAnterior.querySelector('h6').textContent.split('.')[0];
-                const nombreEtapaAnterior = etapaAnterior.querySelector('h6').textContent;
-                
-                // Mostrar modal de error personalizado
-                mostrarErrorEtapaAnterior(numeroEtapaAnterior, nombreEtapaAnterior);
-                return false;
-            }
-        }
-        
-        return true;
-    }
-
-    // Función para mostrar error cuando se intenta completar una etapa sin completar las anteriores
-    function mostrarErrorEtapaAnterior(numeroEtapa, nombreEtapa) {
-        // Crear modal dinámico
-        const modalHtml = `
-            <div class="modal fade" id="errorEtapaAnterior" tabindex="-1">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header bg-warning text-dark">
-                            <h5 class="modal-title">
-                                <i class="fas fa-exclamation-triangle me-2"></i>
-                                Etapa Anterior Pendiente
-                            </h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="text-center mb-3">
-                                <i class="fas fa-lock text-warning" style="font-size: 3rem;"></i>
-                            </div>
-                            <h6 class="text-center mb-3">No puedes completar esta etapa</h6>
-                            <p class="text-center mb-3">
-                                Debes completar primero la <strong>Etapa ${numeroEtapa}</strong>:
-                            </p>
-                            <div class="alert alert-warning text-center">
-                                <strong>${nombreEtapa}</strong>
-                            </div>
-                            
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                                <i class="fas fa-check me-2"></i>Entendido
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // Remover modal anterior si existe
-        const modalAnterior = document.getElementById('errorEtapaAnterior');
-        if (modalAnterior) {
-            modalAnterior.remove();
-        }
-        
-        // Agregar el nuevo modal al DOM
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-        
-        // Mostrar el modal
-        const modal = new bootstrap.Modal(document.getElementById('errorEtapaAnterior'));
-        modal.show();
-        
-        // Eliminar el modal del DOM cuando se cierre
-        document.getElementById('errorEtapaAnterior').addEventListener('hidden.bs.modal', function() {
-            this.remove();
-        });
-    }
-
     function actualizarProgresoEtapa(etapaCard) {
         if (!detalleFlujoId) {
             console.log('No hay detalleFlujoId, omitiendo actualización de progreso');
@@ -1983,6 +2084,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('confirmar-desmarcar-tarea').dataset.tareaCheckbox = this.id;
                     document.getElementById('confirmar-desmarcar-tarea').dataset.tareaId = tareaId;
                     document.getElementById('confirmar-desmarcar-tarea').dataset.etapaId = etapaId;
+                    document.getElementById('confirmar-desmarcar-tarea').dataset.tipo = 'tarea';
                     
                     modal.show();
                 } else {
@@ -2005,41 +2107,160 @@ document.addEventListener('DOMContentLoaded', function() {
             checkbox.addEventListener('change', function() {
                 const documentoId = this.dataset.documentoId;
                 const validado = this.checked;
+                const previouslyChecked = this.dataset.previouslyChecked === 'true';
                 
                 // Encontrar la etapa padre
                 const etapaCard = this.closest('.card');
                 const etapaId = etapaCard ? etapaCard.querySelector('.grabar-cambios-etapa').dataset.etapaId : null;
                 
-                // Solo cambio visual
-                actualizarVisualDocumento(this, validado);
-                
-                // Agregar a cambios pendientes por etapa
-                if (etapaId) {
-                    agregarCambioPendienteEtapa(etapaId, 'documento', documentoId, validado);
+                // Si se está desmarcando un documento que estaba validado originalmente, mostrar modal de confirmación
+                if (!validado && previouslyChecked) {
+                    this.checked = true; // Revertir temporalmente
+                    
+                    const documentoItem = this.closest('.documento-item');
+                    const documentoLabel = documentoItem.querySelector('h6');
+                    const documentoNombre = documentoLabel.textContent.trim();
+                    
+                    // Configurar modal (reutilizamos el mismo modal)
+                    document.getElementById('nombre-tarea-desmarcar').textContent = documentoNombre;
+                    
+                    // Cambiar textos del modal para documentos
+                    const modalTitle = document.querySelector('#confirmarDesmarcarTarea .modal-title');
+                    const modalQuestion = document.querySelector('#confirmarDesmarcarTarea h6');
+                    const modalDescription = document.querySelector('#confirmarDesmarcarTarea p');
+                    
+                    modalTitle.textContent = 'Confirmar Acción';
+                    modalQuestion.textContent = '¿Desmarcar documento validado?';
+                    modalDescription.innerHTML = `
+                        Estás a punto de cambiar el estado del documento "<strong>${documentoNombre}</strong>" 
+                        de <span class="badge bg-success">Validado</span> a <span class="badge bg-secondary">Pendiente</span>.
+                    `;
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('confirmarDesmarcarTarea'));
+                    
+                    // Guardar referencia para la confirmación
+                    document.getElementById('confirmar-desmarcar-tarea').dataset.documentoCheckbox = this.id;
+                    document.getElementById('confirmar-desmarcar-tarea').dataset.documentoId = documentoId;
+                    document.getElementById('confirmar-desmarcar-tarea').dataset.etapaId = etapaId;
+                    document.getElementById('confirmar-desmarcar-tarea').dataset.tipo = 'documento';
+                    
+                    modal.show();
+                } else {
+                    // Solo cambio visual
+                    actualizarVisualDocumento(this, validado);
+                    
+                    // Agregar a cambios pendientes por etapa
+                    if (etapaId) {
+                        agregarCambioPendienteEtapa(etapaId, 'documento', documentoId, validado);
+                    }
                 }
             });
+            
+            // Establecer estado inicial
+            checkbox.dataset.previouslyChecked = checkbox.checked;
         });
     }
 
-    // Event listener para confirmar desmarcar tarea
+    // Event listener para confirmar desmarcar tarea o documento
     document.getElementById('confirmar-desmarcar-tarea').addEventListener('click', function() {
-        const checkboxId = this.dataset.tareaCheckbox;
-        const tareaId = this.dataset.tareaId;
+        const tipo = this.dataset.tipo || 'tarea';
         const etapaId = this.dataset.etapaId;
-        const checkbox = document.getElementById(checkboxId);
         
-        if (checkbox && tareaId) {
-            checkbox.checked = false;
-            actualizarVisualTarea(checkbox, false);
+        console.log('Confirmando desmarcar:', { tipo, etapaId });
+        
+        if (tipo === 'tarea') {
+            // Manejar desmarcar tarea
+            const checkboxId = this.dataset.tareaCheckbox;
+            const tareaId = this.dataset.tareaId;
+            const checkbox = document.getElementById(checkboxId);
             
-            // Agregar a cambios pendientes por etapa
-            if (etapaId) {
-                agregarCambioPendienteEtapa(etapaId, 'tarea', tareaId, false);
+            console.log('Desmarcando tarea:', { checkboxId, tareaId, checkbox: !!checkbox });
+            
+            if (checkbox && tareaId) {
+                // Cerrar modal primero
+                bootstrap.Modal.getInstance(document.getElementById('confirmarDesmarcarTarea')).hide();
+                
+                // Actualizar al servidor y luego recargar página
+                fetch('{{ route('ejecucion.detalle.tarea.actualizar') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: JSON.stringify({
+                        tarea_id: tareaId,
+                        completada: false,
+                        detalle_flujo_id: detalleFlujoId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        mostrarNotificacion('Tarea regresada a estado inicial', 'success');
+                        // Recargar página después de un breve delay
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else {
+                        mostrarNotificacion('Error: ' + (data.message || 'Error desconocido'), 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    mostrarNotificacion('Error al actualizar la tarea', 'error');
+                });
+            }
+        } else if (tipo === 'documento') {
+            // Manejar desmarcar documento
+            const checkboxId = this.dataset.documentoCheckbox;
+            const documentoId = this.dataset.documentoId;
+            const checkbox = document.getElementById(checkboxId);
+            
+            console.log('Desmarcando documento:', { checkboxId, documentoId, checkbox: !!checkbox });
+            
+            if (checkbox && documentoId) {
+                // Cerrar modal primero
+                bootstrap.Modal.getInstance(document.getElementById('confirmarDesmarcarTarea')).hide();
+                
+                // Actualizar al servidor y luego recargar página
+                fetch('{{ route('ejecucion.detalle.documento.validar') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: JSON.stringify({
+                        documento_id: documentoId,
+                        validado: false,
+                        detalle_flujo_id: detalleFlujoId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        mostrarNotificacion('Documento regresado a estado inicial', 'success');
+                        // Recargar página después de un breve delay
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else {
+                        mostrarNotificacion('Error: ' + (data.message || 'Error desconocido'), 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    mostrarNotificacion('Error al actualizar el documento', 'error');
+                });
             }
         }
         
-        // Cerrar modal
-        bootstrap.Modal.getInstance(document.getElementById('confirmarDesmarcarTarea')).hide();
+        // Limpiar datasets al final
+        delete this.dataset.tipo;
+        delete this.dataset.tareaCheckbox;
+        delete this.dataset.tareaId;
+        delete this.dataset.documentoCheckbox;
+        delete this.dataset.documentoId;
+        delete this.dataset.etapaId;
     });
 
     // Event listeners para eliminar documentos
@@ -2047,12 +2268,12 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.eliminar-documento').forEach(btn => {
             btn.addEventListener('click', function() {
                 if (!procesoIniciado) {
-                    alert('Debes iniciar la ejecución del flujo primero');
+                    mostrarNotificacion('Debes iniciar la ejecución del flujo primero', 'warning');
                     return;
                 }
 
                 if (!detalleFlujoId) {
-                    alert('Error: No se encontró ID de ejecución');
+                    mostrarNotificacion('Error: No se encontró ID de ejecución', 'error');
                     return;
                 }
 
@@ -2131,12 +2352,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Mostrar mensaje de éxito
                 mostrarMensajeExito('Documento eliminado correctamente.');
             } else {
-                alert('Error al eliminar el documento: ' + data.message);
+                mostrarNotificacion('Error al eliminar el documento: ' + data.message, 'error');
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Error al eliminar el documento');
+            mostrarNotificacion('Error al eliminar el documento', 'error');
         })
         .finally(() => {
             submitBtn.disabled = false;
@@ -2159,12 +2380,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Función auxiliar para mostrar modal de subir documento
     function mostrarModalSubirDocumento(documentoId) {
         if (!procesoIniciado) {
-            alert('Debes iniciar la ejecución del flujo primero');
+            mostrarNotificacion('Debes iniciar la ejecución del flujo primero', 'warning');
             return;
         }
 
         if (!detalleFlujoId) {
-            alert('Error: No se encontró ID de ejecución');
+            mostrarNotificacion('Error: No se encontró ID de ejecución', 'error');
             return;
         }
 
