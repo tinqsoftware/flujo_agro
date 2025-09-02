@@ -130,6 +130,9 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::post('ejecucion/detalle/{detalleFlujo}/pausar', [Ejecucion::class, 'pausarEjecucion'])->name('ejecucion.detalle.pausar');
         Route::post('ejecucion/detalle/{detalleFlujo}/reactivar', [Ejecucion::class, 'reactivarEjecucion'])->name('ejecucion.detalle.reactivar');
         Route::post('ejecucion/detalle/{detalleFlujo}/cancelar', [Ejecucion::class, 'cancelarEjecucion'])->name('ejecucion.detalle.cancelar');
+        
+        // Ruta para re-ejecutar flujo (crear nueva ejecución completa)
+        Route::post('ejecucion/{flujo}/re-ejecutar', [Ejecucion::class, 'reEjecutarFlujo'])->name('ejecucion.re-ejecutar');
 
     
     // Gestión de Usuarios (SUPERADMIN y ADMINISTRADOR)

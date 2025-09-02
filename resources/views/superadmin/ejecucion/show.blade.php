@@ -8,9 +8,9 @@
         <i class="fas fa-arrow-left me-1"></i> Volver a Flujos
     </a>
     @if(!$isSuper && $flujo->estado == 1)
-        <a href="{{ route('ejecucion.ejecutar', $flujo) }}" class="btn btn-success ms-2">
-            <i class="fas fa-play me-1"></i> Ejecutar Flujo
-        </a>
+        <button type="button" class="btn btn-success ms-2" onclick="reEjecutarFlujo({{ $flujo->id }})">
+            <i class="fas fa-play me-1"></i> Ejecutar Flujo Completo
+        </button>
     @elseif(!$isSuper && $flujo->estado == 2)
         <a href="{{ route('ejecucion.ejecutar', $flujo) }}" class="btn btn-warning ms-2">
             <i class="fas fa-play me-1"></i> Continuar Ejecución
@@ -599,5 +599,57 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+// Función para re-ejecutar flujo completo (crear nueva ejecución)
+function reEjecutarFlujo(flujoId) {
+    // Confirmar la acción
+    if (!confirm('¿Estás seguro de que deseas crear una nueva ejecución completa de este flujo?\n\nEsto creará un nuevo registro con todas las etapas, tareas y documentos en estado inicial.')) {
+        return;
+    }
+
+    // Mostrar indicador de carga
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creando ejecución...';
+
+    // Realizar petición AJAX
+    fetch(`/ejecucion/${flujoId}/re-ejecutar`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Mostrar mensaje de éxito
+            if (data.mensaje) {
+                alert(data.mensaje);
+            }
+            
+            // Redirigir a la nueva ejecución
+            if (data.redirect_url) {
+                window.location.href = data.redirect_url;
+            }
+        } else {
+            // Mostrar error
+            alert(data.error || 'Error al crear la nueva ejecución');
+            
+            // Restaurar botón
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error de conexión al crear la nueva ejecución');
+        
+        // Restaurar botón
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    });
+}
 </script>
 @endpush

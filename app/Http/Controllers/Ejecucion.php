@@ -2055,4 +2055,132 @@ class Ejecucion extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Re-ejecutar un flujo completo creando una nueva ejecución
+     */
+    public function reEjecutarFlujo(Request $request, Flujo $flujo)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+        // SUPERADMIN no puede ejecutar flujos
+        if ($isSuper) {
+            return response()->json(['error' => 'SUPERADMIN no puede ejecutar flujos'], 403);
+        }
+
+        // Verificar permisos de empresa
+        if ($flujo->id_emp != $user->id_emp) {
+            return response()->json(['error' => 'Sin permisos para este flujo'], 403);
+        }
+
+        // Verificar que el flujo esté configurado (estado 1)
+        if ($flujo->estado != 1) {
+            return response()->json(['error' => 'El flujo no está disponible para ejecución'], 400);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Crear nombre automático para la nueva ejecución
+            $ejecutorName = $user->name ?? 'Usuario';
+            $fechaActual = now()->format('d/m/Y H:i');
+            $nombreEjecucion = "Ejecución completa de {$flujo->nombre} - {$ejecutorName} - {$fechaActual}";
+
+            // Crear nuevo registro de ejecución completa
+            $nuevaEjecucion = DetalleFlujo::create([
+                'nombre' => $nombreEjecucion,
+                'id_flujo' => $flujo->id,
+                'id_emp' => $user->id_emp,
+                'id_user_create' => $user->id,
+                'estado' => 2 // En ejecución
+            ]);
+
+            Log::info('Nueva ejecución completa creada', [
+                'detalle_flujo_id' => $nuevaEjecucion->id,
+                'nombre_ejecucion' => $nombreEjecucion,
+                'flujo_original_id' => $flujo->id,
+                'user_id' => $user->id
+            ]);
+
+            // Crear registros de detalle_etapa para cada etapa activa del flujo
+            foreach ($flujo->etapas()->where('estado', 1)->orderBy('nro')->get() as $etapa) {
+                $detalleEtapa = DetalleEtapa::create([
+                    'id_etapa' => $etapa->id,
+                    'id_detalle_flujo' => $nuevaEjecucion->id,
+                    'estado' => 2 // En ejecución
+                ]);
+
+                Log::info('Etapa agregada a nueva ejecución', [
+                    'etapa_id' => $etapa->id,
+                    'detalle_etapa_id' => $detalleEtapa->id,
+                    'etapa_numero' => $etapa->nro
+                ]);
+
+                // Crear registros de detalle_tarea para TODAS las tareas activas de la etapa (estado = 0, incluidas en flujo)
+                foreach ($etapa->tareas()->where('estado', 1)->get() as $tarea) {
+                    DetalleTarea::create([
+                        'id_tarea' => $tarea->id,
+                        'id_detalle_etapa' => $detalleEtapa->id,
+                        'estado' => 0, // 0 = activa en flujo, pendiente de completar
+                        'id_user_create' => $user->id
+                    ]);
+                    
+                    Log::info('Tarea agregada a nueva ejecución', [
+                        'tarea_id' => $tarea->id,
+                        'tarea_nombre' => $tarea->nombre,
+                        'estado' => 0
+                    ]);
+                }
+
+                // Crear registros de detalle_documento para TODOS los documentos activos de la etapa (estado = 0, incluidos en flujo)
+                foreach ($etapa->documentos()->where('estado', 1)->get() as $documento) {
+                    DetalleDocumento::create([
+                        'id_documento' => $documento->id,
+                        'id_detalle_etapa' => $detalleEtapa->id,
+                        'estado' => 0, // 0 = activo en flujo, pendiente de subir
+                        'id_user_create' => $user->id
+                    ]);
+                    
+                    Log::info('Documento agregado a nueva ejecución', [
+                        'documento_id' => $documento->id,
+                        'documento_nombre' => $documento->nombre,
+                        'estado' => 0
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            Log::info('Re-ejecución de flujo completada exitosamente', [
+                'nueva_ejecucion_id' => $nuevaEjecucion->id,
+                'flujo_id' => $flujo->id,
+                'total_etapas' => $flujo->etapas()->where('estado', 1)->count(),
+                'total_tareas' => $flujo->etapas()->where('estado', 1)->get()->sum(function($etapa) {
+                    return $etapa->tareas()->where('estado', 1)->count();
+                }),
+                'total_documentos' => $flujo->etapas()->where('estado', 1)->get()->sum(function($etapa) {
+                    return $etapa->documentos()->where('estado', 1)->count();
+                })
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'redirect_url' => route('ejecucion.detalle.ejecutar', $nuevaEjecucion->id),
+                'detalle_flujo_id' => $nuevaEjecucion->id,
+                'mensaje' => 'Nueva ejecución completa creada exitosamente'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            Log::error('Error al re-ejecutar flujo completo', [
+                'error' => $e->getMessage(),
+                'flujo_id' => $flujo->id,
+                'user_id' => $user->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json(['error' => 'Error al crear la nueva ejecución'], 500);
+        }
+    }
 }
