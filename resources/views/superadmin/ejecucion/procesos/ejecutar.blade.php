@@ -156,6 +156,25 @@
 .etapa-content.show .card-body {
     padding: 1.25rem;
 }
+
+/* Estilos para cambios pendientes */
+.cambio-pendiente {
+    background-color: #fff3cd !important;
+    border-left: 4px solid #ffc107 !important;
+    transition: all 0.3s ease;
+}
+
+.cambio-pendiente-tarea {
+    background-color: #fff3cd !important;
+    border: 1px solid #ffc107 !important;
+    border-radius: 0.25rem;
+    padding: 0.25rem !important;
+}
+
+.cambio-pendiente-documento {
+    background-color: #fff3cd !important;
+    border: 1px solid #ffc107 !important;
+}
 </style>
 @endpush
 
@@ -397,6 +416,22 @@
                     </div>
                     @endif
                 </div>
+                
+                <!-- Botón para grabar cambios de esta etapa -->
+                @if($flujo->proceso_iniciado)
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="d-flex justify-content-center">
+                            <button class="btn btn-primary grabar-cambios-etapa" 
+                                    data-etapa-id="{{ $etapa->id }}" 
+                                    style="display: none;">
+                                <i class="fas fa-save me-2"></i>Grabar Cambios de esta Etapa
+                                <span class="badge bg-light text-primary ms-1 contador-cambios-etapa">0</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                @endif
             </form>
         </div>
     </div>
@@ -549,6 +584,9 @@ const flujoId = {{ $flujo->id }};
 let detalleFlujoId = {{ $flujo->detalle_flujo_id ?? 'null' }};
 let procesoIniciado = {{ $flujo->proceso_iniciado ? 'true' : 'false' }};
 
+// Variables para el manejo de cambios pendientes por etapa
+let cambiosPendientesPorEtapa = {};
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Flujo ID:', flujoId);
     console.log('Proceso iniciado:', procesoIniciado);
@@ -658,6 +696,223 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     });
+
+    // Event listeners para los botones "Grabar Cambios" de cada etapa
+    document.querySelectorAll('.grabar-cambios-etapa').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const etapaId = this.dataset.etapaId;
+            const cambiosEtapa = cambiosPendientesPorEtapa[etapaId] || [];
+            
+            if (cambiosEtapa.length === 0) {
+                alert('No hay cambios pendientes para grabar en esta etapa');
+                return;
+            }
+
+            if (!confirm(`¿Estás seguro de que quieres grabar ${cambiosEtapa.length} cambio(s) de esta etapa?`)) {
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Grabando...';
+            
+            grabarCambiosDeEtapa(etapaId)
+                .then(() => {
+                    // Limpiar cambios pendientes de esta etapa
+                    cambiosPendientesPorEtapa[etapaId] = [];
+                    actualizarContadorCambiosEtapa(etapaId);
+                    
+                    // Limpiar estilos visuales de cambios pendientes en esta etapa
+                    limpiarEstilosVisualesEtapa(etapaId);
+                    
+                    // Restaurar botón
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-save me-2"></i>Grabar Cambios de esta Etapa <span class="badge bg-light text-primary ms-1 contador-cambios-etapa">0</span>';
+                    
+                    mostrarMensajeExito('Todos los cambios de esta etapa han sido grabados correctamente');
+                    
+                    // Actualizar progreso
+                    actualizarProgreso();
+                })
+                .catch(error => {
+                    console.error('Error al grabar cambios de etapa:', error);
+                    alert('Error al grabar algunos cambios. Revisa la consola para más detalles.');
+                    
+                    // Restaurar botón
+                    btn.disabled = false;
+                    const cambiosCount = cambiosPendientesPorEtapa[etapaId]?.length || 0;
+                    btn.innerHTML = `<i class="fas fa-save me-2"></i>Grabar Cambios de esta Etapa <span class="badge bg-light text-primary ms-1 contador-cambios-etapa">${cambiosCount}</span>`;
+                });
+        });
+    });
+
+    // Función para grabar cambios de una etapa específica
+    async function grabarCambiosDeEtapa(etapaId) {
+        const cambiosEtapa = cambiosPendientesPorEtapa[etapaId] || [];
+        const promesas = [];
+        
+        for (const cambio of cambiosEtapa) {
+            if (cambio.tipo === 'tarea') {
+                promesas.push(actualizarTareaIndividual(cambio.id, cambio.completada));
+            } else if (cambio.tipo === 'documento') {
+                promesas.push(actualizarDocumentoIndividual(cambio.id, cambio.validado));
+            }
+        }
+        
+        return Promise.all(promesas);
+    }
+
+    // Función para actualizar el contador de cambios pendientes de una etapa
+    function actualizarContadorCambiosEtapa(etapaId) {
+        const cambiosEtapa = cambiosPendientesPorEtapa[etapaId] || [];
+        const etapaCard = document.querySelector(`[data-etapa-id="${etapaId}"]`);
+        
+        if (etapaCard) {
+            const contador = etapaCard.querySelector('.contador-cambios-etapa');
+            const boton = etapaCard.querySelector('.grabar-cambios-etapa');
+            
+            if (contador) {
+                contador.textContent = cambiosEtapa.length;
+            }
+            
+            if (boton) {
+                if (cambiosEtapa.length > 0) {
+                    boton.style.display = 'inline-block';
+                } else {
+                    boton.style.display = 'none';
+                }
+            }
+        }
+    }
+
+    // Función para agregar un cambio pendiente a una etapa específica
+    function agregarCambioPendienteEtapa(etapaId, tipo, id, estado) {
+        // Inicializar array para la etapa si no existe
+        if (!cambiosPendientesPorEtapa[etapaId]) {
+            cambiosPendientesPorEtapa[etapaId] = [];
+        }
+        
+        const cambiosEtapa = cambiosPendientesPorEtapa[etapaId];
+        
+        // Buscar si ya existe un cambio para este elemento
+        const indiceExistente = cambiosEtapa.findIndex(cambio => 
+            cambio.tipo === tipo && cambio.id === id
+        );
+        
+        if (indiceExistente !== -1) {
+            // Actualizar el cambio existente
+            if (tipo === 'tarea') {
+                cambiosEtapa[indiceExistente].completada = estado;
+            } else if (tipo === 'documento') {
+                cambiosEtapa[indiceExistente].validado = estado;
+            }
+        } else {
+            // Agregar nuevo cambio
+            const nuevoCambio = { tipo, id };
+            if (tipo === 'tarea') {
+                nuevoCambio.completada = estado;
+            } else if (tipo === 'documento') {
+                nuevoCambio.validado = estado;
+            }
+            cambiosEtapa.push(nuevoCambio);
+        }
+        
+        actualizarContadorCambiosEtapa(etapaId);
+    }
+
+    // Función para limpiar estilos visuales de cambios pendientes de una etapa
+    function limpiarEstilosVisualesEtapa(etapaId) {
+        const etapaCard = document.querySelector(`[data-etapa-id="${etapaId}"]`);
+        
+        if (etapaCard) {
+            // Limpiar estilos de tareas
+            etapaCard.querySelectorAll('.cambio-pendiente-tarea').forEach(elemento => {
+                elemento.classList.remove('cambio-pendiente-tarea');
+                elemento.style.backgroundColor = '';
+                elemento.style.border = '';
+            });
+            
+            // Limpiar estilos de documentos
+            etapaCard.querySelectorAll('.cambio-pendiente-documento').forEach(elemento => {
+                elemento.classList.remove('cambio-pendiente-documento');
+                elemento.style.backgroundColor = '';
+                elemento.style.border = '';
+            });
+        }
+    }
+
+    // Función para limpiar estilos visuales de cambios pendientes
+    function limpiarEstilosVisuales() {
+        // Limpiar estilos de tareas
+        document.querySelectorAll('.cambio-pendiente-tarea').forEach(elemento => {
+            elemento.classList.remove('cambio-pendiente-tarea');
+            elemento.style.backgroundColor = '';
+            elemento.style.border = '';
+        });
+        
+        // Limpiar estilos de documentos
+        document.querySelectorAll('.cambio-pendiente-documento').forEach(elemento => {
+            elemento.classList.remove('cambio-pendiente-documento');
+            elemento.style.backgroundColor = '';
+            elemento.style.border = '';
+        });
+    }
+
+    // Función para actualizar visual de la tarea sin enviar al servidor
+    function actualizarVisualTarea(checkbox, completada) {
+        // Buscar el label
+        let label = null;
+        
+        // Opción 1: label como hermano siguiente
+        label = checkbox.parentElement.nextElementSibling?.querySelector('label');
+        
+        // Opción 2: label dentro del mismo contenedor padre
+        if (!label) {
+            const tareaContainer = checkbox.closest('.tarea-item, .form-check, .task-item');
+            if (tareaContainer) {
+                label = tareaContainer.querySelector('label');
+            }
+        }
+        
+        // Opción 3: label asociado por ID (for attribute)
+        if (!label && checkbox.id) {
+            label = document.querySelector(`label[for="${checkbox.id}"]`);
+        }
+        
+        if (label) {
+            // Actualizar visual del label
+            if (completada) {
+                label.classList.add('text-decoration-line-through', 'text-muted');
+            } else {
+                label.classList.remove('text-decoration-line-through', 'text-muted');
+            }
+        }
+        
+        // Actualizar visual del contenedor
+        const tareaItem = checkbox.closest('.tarea-item');
+        if (tareaItem) {
+            // Remover clases anteriores
+            tareaItem.classList.remove('cambio-pendiente-tarea');
+            tareaItem.style.backgroundColor = '';
+            tareaItem.style.border = '';
+            
+            // Agregar clase de cambio pendiente
+            tareaItem.classList.add('cambio-pendiente-tarea');
+        }
+    }
+
+    // Función para actualizar visual del documento sin enviar al servidor
+    function actualizarVisualDocumento(checkbox, validado) {
+        const documentoItem = checkbox.closest('.documento-item');
+        if (documentoItem) {
+            // Remover clases anteriores
+            documentoItem.classList.remove('cambio-pendiente-documento');
+            documentoItem.style.backgroundColor = '';
+            documentoItem.style.border = '';
+            
+            // Agregar clase de cambio pendiente
+            documentoItem.classList.add('cambio-pendiente-documento');
+        }
+    }
 
     // Función para actualizar una tarea individual
     function actualizarTareaIndividual(tareaId, completada) {
@@ -1698,8 +1953,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Función para agregar event listeners a los checkboxes para actualizaciones individuales
-    function agregarListenersCambiosPendientes() {
+    // Función para agregar event listeners a los checkboxes para cambios visuales
+    function agregarListenersCambiosVisuales() {
         // Event listeners para checkboxes de tareas
         document.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', function(e) {
@@ -1707,7 +1962,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 const previouslyChecked = this.dataset.previouslyChecked === 'true';
                 const tareaId = this.dataset.tareaId;
                 
-                // Si se está desmarcando una tarea que estaba marcada, mostrar modal de confirmación
+                // Encontrar la etapa padre
+                const etapaCard = this.closest('.card');
+                const etapaId = etapaCard ? etapaCard.querySelector('.grabar-cambios-etapa').dataset.etapaId : null;
+                
+                // Si se está desmarcando una tarea que estaba marcada originalmente, mostrar modal de confirmación
                 if (!wasChecked && previouslyChecked) {
                     e.preventDefault();
                     this.checked = true; // Revertir temporalmente
@@ -1723,11 +1982,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Guardar referencia para la confirmación
                     document.getElementById('confirmar-desmarcar-tarea').dataset.tareaCheckbox = this.id;
                     document.getElementById('confirmar-desmarcar-tarea').dataset.tareaId = tareaId;
+                    document.getElementById('confirmar-desmarcar-tarea').dataset.etapaId = etapaId;
                     
                     modal.show();
                 } else {
-                    // Actualizar inmediatamente
-                    actualizarTareaIndividual(tareaId, wasChecked);
+                    // Solo cambio visual
+                    actualizarVisualTarea(this, wasChecked);
+                    
+                    // Agregar a cambios pendientes por etapa
+                    if (etapaId) {
+                        agregarCambioPendienteEtapa(etapaId, 'tarea', tareaId, wasChecked);
+                    }
                 }
             });
             
@@ -1741,8 +2006,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 const documentoId = this.dataset.documentoId;
                 const validado = this.checked;
                 
-                // Actualizar inmediatamente
-                actualizarDocumentoIndividual(documentoId, validado);
+                // Encontrar la etapa padre
+                const etapaCard = this.closest('.card');
+                const etapaId = etapaCard ? etapaCard.querySelector('.grabar-cambios-etapa').dataset.etapaId : null;
+                
+                // Solo cambio visual
+                actualizarVisualDocumento(this, validado);
+                
+                // Agregar a cambios pendientes por etapa
+                if (etapaId) {
+                    agregarCambioPendienteEtapa(etapaId, 'documento', documentoId, validado);
+                }
             });
         });
     }
@@ -1751,11 +2025,17 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('confirmar-desmarcar-tarea').addEventListener('click', function() {
         const checkboxId = this.dataset.tareaCheckbox;
         const tareaId = this.dataset.tareaId;
+        const etapaId = this.dataset.etapaId;
         const checkbox = document.getElementById(checkboxId);
         
         if (checkbox && tareaId) {
             checkbox.checked = false;
-            actualizarTareaIndividual(tareaId, false);
+            actualizarVisualTarea(checkbox, false);
+            
+            // Agregar a cambios pendientes por etapa
+            if (etapaId) {
+                agregarCambioPendienteEtapa(etapaId, 'tarea', tareaId, false);
+            }
         }
         
         // Cerrar modal
@@ -1864,9 +2144,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Inicializar listeners de cambios pendientes y eliminación de documentos
-    agregarListenersCambiosPendientes();
+    // Inicializar listeners de cambios visuales y eliminación de documentos
+    agregarListenersCambiosVisuales();
     agregarListenersEliminarDocumento();
+    
+    // Inicializar event listeners de botones "Grabar Cambios" por etapa
+    document.querySelectorAll('.grabar-cambios-etapa').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const etapaId = this.dataset.etapaId;
+            grabarCambiosDeEtapa(etapaId);
+        });
+    });
 
     // Función auxiliar para mostrar modal de subir documento
     function mostrarModalSubirDocumento(documentoId) {
