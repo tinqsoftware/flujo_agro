@@ -2079,13 +2079,16 @@ class Ejecucion extends Controller
             return response()->json(['error' => 'El flujo no está disponible para ejecución'], 400);
         }
 
+        // Validar datos del formulario
+        $request->validate([
+            'nombre' => 'required|string|max:255'
+        ]);
+
         try {
             DB::beginTransaction();
 
-            // Crear nombre automático para la nueva ejecución
-            $ejecutorName = $user->name ?? 'Usuario';
-            $fechaActual = now()->format('d/m/Y H:i');
-            $nombreEjecucion = "Ejecución completa de {$flujo->nombre} - {$ejecutorName} - {$fechaActual}";
+            // Usar el nombre proporcionado por el usuario
+            $nombreEjecucion = trim($request->nombre);
 
             // Crear nuevo registro de ejecución completa
             $nuevaEjecucion = DetalleFlujo::create([
@@ -2155,6 +2158,7 @@ class Ejecucion extends Controller
             Log::info('Re-ejecución de flujo completada exitosamente', [
                 'nueva_ejecucion_id' => $nuevaEjecucion->id,
                 'flujo_id' => $flujo->id,
+                'nombre_personalizado' => $nombreEjecucion,
                 'total_etapas' => $flujo->etapas()->where('estado', 1)->count(),
                 'total_tareas' => $flujo->etapas()->where('estado', 1)->get()->sum(function($etapa) {
                     return $etapa->tareas()->where('estado', 1)->count();
@@ -2168,9 +2172,14 @@ class Ejecucion extends Controller
                 'success' => true,
                 'redirect_url' => route('ejecucion.detalle.ejecutar', $nuevaEjecucion->id),
                 'detalle_flujo_id' => $nuevaEjecucion->id,
-                'mensaje' => 'Nueva ejecución completa creada exitosamente'
+                'mensaje' => "Ejecución '{$nombreEjecucion}' creada exitosamente"
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollback();
+            return response()->json([
+                'error' => 'Datos inválidos: ' . implode(', ', collect($e->errors())->flatten()->toArray())
+            ], 422);
         } catch (\Exception $e) {
             DB::rollback();
             Log::error('Error al re-ejecutar flujo completo', [

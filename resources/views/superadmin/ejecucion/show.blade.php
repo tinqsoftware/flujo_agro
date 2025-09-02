@@ -451,6 +451,171 @@
     </div>
 </div>
 
+<!-- Modal para confirmar re-ejecución del flujo -->
+<div class="modal fade" id="reEjecutarModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-play-circle me-2"></i>
+                    Crear Nueva Ejecución Completa
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info border-0 mb-4">
+                    <div class="d-flex align-items-start">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-info-circle fa-lg mt-1"></i>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="alert-heading mb-2">¿Qué sucederá?</h6>
+                            <ul class="mb-0 ps-3">
+                                <li>Se creará una nueva ejecución con <strong>todas las etapas, tareas y documentos</strong> del flujo</li>
+                                <li>Todos los elementos empezarán en estado <strong>inicial/pendiente</strong></li>
+                                <li>Podrás completar las tareas y subir documentos desde cero</li>
+                                <li>Esta ejecución será independiente de cualquier ejecución anterior</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <form id="formReEjecutar">
+                    <div class="row">
+                        <div class="col-md-12 mb-4">
+                            <label for="nombreEjecucion" class="form-label fw-bold">
+                                <i class="fas fa-tag text-primary me-1"></i>
+                                Nombre para la nueva ejecución
+                            </label>
+                            <input type="text" 
+                                   class="form-control form-control-lg" 
+                                   id="nombreEjecucion" 
+                                   name="nombre"
+                                   placeholder="Ej: Ejecución para cliente ABC - Enero 2025"
+                                   maxlength="255"
+                                   required>
+                            <div class="form-text">
+                                <i class="fas fa-lightbulb text-warning me-1"></i>
+                                Usa un nombre descriptivo que te ayude a identificar esta ejecución
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card border-primary">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-list-ol fa-2x text-primary mb-2"></i>
+                                    <h5 class="card-title">{{ $flujo->etapas->count() }}</h5>
+                                    <p class="card-text text-muted">Etapas</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card border-warning">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-tasks fa-2x text-warning mb-2"></i>
+                                    <h5 class="card-title">{{ $flujo->etapas->sum(function($etapa) { return $etapa->tareas->count(); }) }}</h5>
+                                    <p class="card-text text-muted">Tareas Totales</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mt-3">
+                            <div class="card border-danger">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-file-pdf fa-2x text-danger mb-2"></i>
+                                    <h5 class="card-title">{{ $flujo->etapas->sum(function($etapa) { return $etapa->documentos->count(); }) }}</h5>
+                                    <p class="card-text text-muted">Documentos Totales</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mt-3">
+                            <div class="card border-success">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-user fa-2x text-success mb-2"></i>
+                                    <h5 class="card-title">{{ Auth::user()->name }}</h5>
+                                    <p class="card-text text-muted">Ejecutor</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Cancelar
+                </button>
+                <button type="button" class="btn btn-success btn-lg" onclick="confirmarReEjecucion()">
+                    <i class="fas fa-rocket me-2"></i>Crear y Ejecutar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de progreso -->
+<div class="modal fade" id="progresoModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center p-4">
+                <div class="mb-3">
+                    <div class="spinner-border spinner-border-lg text-primary" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                </div>
+                <h5 class="mb-2">Creando nueva ejecución...</h5>
+                <p class="text-muted mb-0">Por favor espera mientras configuramos todo para ti</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de éxito -->
+<div class="modal fade" id="exitoModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-check-circle me-2"></i>
+                    ¡Ejecución Creada!
+                </h5>
+            </div>
+            <div class="modal-body text-center p-4">
+                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                <h5 class="mb-3">Nueva ejecución creada exitosamente</h5>
+                <p class="text-muted mb-4" id="mensajeExito">Tu nueva ejecución está lista para comenzar</p>
+                <button type="button" class="btn btn-success btn-lg" id="irAEjecucion">
+                    <i class="fas fa-arrow-right me-2"></i>Ir a la Ejecución
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de error -->
+<div class="modal fade" id="errorModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Error al Crear Ejecución
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-4">
+                <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                <h5 class="mb-3">No se pudo crear la ejecución</h5>
+                <p class="text-muted mb-4" id="mensajeError">Ha ocurrido un error inesperado</p>
+                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -602,53 +767,120 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Función para re-ejecutar flujo completo (crear nueva ejecución)
 function reEjecutarFlujo(flujoId) {
-    // Confirmar la acción
-    if (!confirm('¿Estás seguro de que deseas crear una nueva ejecución completa de este flujo?\n\nEsto creará un nuevo registro con todas las etapas, tareas y documentos en estado inicial.')) {
+    // Generar nombre sugerido
+    const fechaActual = new Date().toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: '2-digit', 
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    const nombreSugerido = `Ejecución completa - ${fechaActual}`;
+    
+    // Llenar el formulario con datos sugeridos
+    document.getElementById('nombreEjecucion').value = nombreSugerido;
+    
+    // Almacenar el flujoId para uso posterior
+    window.currentFlujoId = flujoId;
+    
+    // Mostrar modal de confirmación
+    const modal = new bootstrap.Modal(document.getElementById('reEjecutarModal'));
+    modal.show();
+    
+    // Enfocar el campo de nombre después de que se muestre el modal
+    document.getElementById('reEjecutarModal').addEventListener('shown.bs.modal', function() {
+        document.getElementById('nombreEjecucion').select();
+    }, { once: true });
+}
+
+// Función para confirmar y procesar la re-ejecución
+function confirmarReEjecucion() {
+    const nombreEjecucion = document.getElementById('nombreEjecucion').value.trim();
+    
+    // Validar que el nombre no esté vacío
+    if (!nombreEjecucion) {
+        // Mostrar error en el campo
+        const nombreInput = document.getElementById('nombreEjecucion');
+        nombreInput.classList.add('is-invalid');
+        
+        // Crear o actualizar mensaje de error
+        let errorDiv = nombreInput.nextElementSibling;
+        if (!errorDiv || !errorDiv.classList.contains('invalid-feedback')) {
+            errorDiv = document.createElement('div');
+            errorDiv.className = 'invalid-feedback';
+            nombreInput.parentNode.insertBefore(errorDiv, nombreInput.nextSibling);
+        }
+        errorDiv.textContent = 'El nombre de la ejecución es obligatorio';
+        
+        // Remover error después de escribir
+        nombreInput.addEventListener('input', function() {
+            this.classList.remove('is-invalid');
+            if (errorDiv) errorDiv.remove();
+        }, { once: true });
+        
         return;
     }
-
-    // Mostrar indicador de carga
-    const btn = event.target;
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creando ejecución...';
-
+    
+    // Cerrar modal de confirmación
+    const confirmModal = bootstrap.Modal.getInstance(document.getElementById('reEjecutarModal'));
+    confirmModal.hide();
+    
+    // Mostrar modal de progreso
+    const progresoModal = new bootstrap.Modal(document.getElementById('progresoModal'));
+    progresoModal.show();
+    
     // Realizar petición AJAX
-    fetch(`/ejecucion/${flujoId}/re-ejecutar`, {
+    fetch(`/ejecucion/${window.currentFlujoId}/re-ejecutar`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        }
+        },
+        body: JSON.stringify({
+            nombre: nombreEjecucion
+        })
     })
     .then(response => response.json())
     .then(data => {
+        // Cerrar modal de progreso
+        progresoModal.hide();
+        
         if (data.success) {
-            // Mostrar mensaje de éxito
-            if (data.mensaje) {
-                alert(data.mensaje);
-            }
+            // Mostrar modal de éxito
+            document.getElementById('mensajeExito').textContent = data.mensaje || 'Nueva ejecución creada exitosamente';
             
-            // Redirigir a la nueva ejecución
-            if (data.redirect_url) {
+            // Configurar botón para ir a la ejecución
+            document.getElementById('irAEjecucion').onclick = function() {
                 window.location.href = data.redirect_url;
-            }
-        } else {
-            // Mostrar error
-            alert(data.error || 'Error al crear la nueva ejecución');
+            };
             
-            // Restaurar botón
-            btn.disabled = false;
-            btn.innerHTML = originalText;
+            const exitoModal = new bootstrap.Modal(document.getElementById('exitoModal'));
+            exitoModal.show();
+            
+            // Auto-redirigir después de 3 segundos
+            setTimeout(() => {
+                window.location.href = data.redirect_url;
+            }, 3000);
+            
+        } else {
+            // Mostrar modal de error
+            document.getElementById('mensajeError').textContent = data.error || 'Ha ocurrido un error inesperado';
+            
+            const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
+            errorModal.show();
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Error de conexión al crear la nueva ejecución');
         
-        // Restaurar botón
-        btn.disabled = false;
-        btn.innerHTML = originalText;
+        // Cerrar modal de progreso
+        progresoModal.hide();
+        
+        // Mostrar modal de error
+        document.getElementById('mensajeError').textContent = 'Error de conexión. Verifica tu conexión a internet e intenta nuevamente.';
+        
+        const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
+        errorModal.show();
     });
 }
 </script>
