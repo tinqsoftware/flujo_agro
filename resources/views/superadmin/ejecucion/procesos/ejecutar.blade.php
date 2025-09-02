@@ -689,19 +689,80 @@ document.addEventListener('DOMContentLoaded', function() {
                 detalle_flujo_id: detalleFlujoId
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('Response status:', response.status);
+            console.log('Response headers:', response.headers);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            return response.text().then(text => {
+                console.log('Raw response text:', text);
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('JSON parse error:', e);
+                    console.error('Response text that failed to parse:', text);
+                    throw new Error('Invalid JSON response from server');
+                }
+            });
+        })
         .then(data => {
+            console.log('Parsed response data:', data);
+            
             if (data.success) {
                 // Actualizar UI de la tarea
                 const checkbox = document.querySelector(`[data-tarea-id="${tareaId}"]`);
-                const label = checkbox.parentElement.nextElementSibling.querySelector('label');
+                if (!checkbox) {
+                    console.error('No se encontró checkbox con tarea-id:', tareaId);
+                    return;
+                }
                 
+                // Buscar el label de manera más flexible
+                let label = null;
+                
+                // Opción 1: label como hermano siguiente
+                label = checkbox.parentElement.nextElementSibling?.querySelector('label');
+                
+                // Opción 2: label dentro del mismo contenedor padre
+                if (!label) {
+                    const tareaContainer = checkbox.closest('.tarea-item, .form-check, .task-item');
+                    if (tareaContainer) {
+                        label = tareaContainer.querySelector('label');
+                    }
+                }
+                
+                // Opción 3: label asociado por ID (for attribute)
+                if (!label && checkbox.id) {
+                    label = document.querySelector(`label[for="${checkbox.id}"]`);
+                }
+                
+                // Opción 4: buscar cualquier label en el contenedor padre más amplio
+                if (!label) {
+                    const parentContainer = checkbox.closest('.tarea-item, .task-container, .form-group, .mb-2, .mb-3');
+                    if (parentContainer) {
+                        label = parentContainer.querySelector('label');
+                    }
+                }
+                
+                if (!label) {
+                    console.warn('No se encontró label para la tarea:', tareaId, '. Estructura DOM:', checkbox.parentElement.parentElement);
+                    // Continuar sin actualizar el label visual, pero la funcionalidad principal sigue funcionando
+                } else {
+                    // Actualizar visual del label
+                    if (completada) {
+                        label.classList.add('text-decoration-line-through', 'text-muted');
+                    } else {
+                        label.classList.remove('text-decoration-line-through', 'text-muted');
+                    }
+                }
+                
+                // Actualizar visual del contenedor de la tarea
                 if (completada) {
-                    label.classList.add('text-decoration-line-through', 'text-muted');
                     tareaItem.classList.add('border-success');
                     tareaItem.classList.remove('border-info');
                 } else {
-                    label.classList.remove('text-decoration-line-through', 'text-muted');
                     tareaItem.classList.remove('border-success', 'border-info');
                 }
                 
@@ -725,17 +786,33 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             } else {
-                // Revertir checkbox si hubo error
-                checkbox.checked = !completada;
-                alert('Error al actualizar la tarea: ' + data.message);
+                // Revertir checkbox si hubo error del servidor
+                const checkbox = document.querySelector(`[data-tarea-id="${tareaId}"]`);
+                if (checkbox) {
+                    checkbox.checked = !completada;
+                }
+                console.error('Server error:', data.message);
+                alert('Error al actualizar la tarea: ' + (data.message || 'Error desconocido'));
             }
         })
         .catch(error => {
-            console.error('Error:', error);
+            console.error('Error completo:', error);
+            console.error('Error stack:', error.stack);
+            
             // Revertir checkbox si hubo error
             const checkbox = document.querySelector(`[data-tarea-id="${tareaId}"]`);
-            checkbox.checked = !completada;
-            alert('Error al actualizar la tarea');
+            if (checkbox) {
+                checkbox.checked = !completada;
+            }
+            
+            // Mensaje de error más informativo
+            if (error.message.includes('Invalid JSON')) {
+                alert('Error: El servidor devolvió una respuesta inválida. Revisa la consola para más detalles.');
+            } else if (error.message.includes('HTTP error')) {
+                alert('Error de conexión con el servidor: ' + error.message);
+            } else {
+                alert('Error inesperado: ' + error.message);
+            }
         })
         .finally(() => {
             // Restaurar estado visual original
@@ -775,8 +852,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 detalle_flujo_id: detalleFlujoId
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('Documento response status:', response.status);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            return response.text().then(text => {
+                console.log('Documento raw response:', text);
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('Documento JSON parse error:', e);
+                    console.error('Documento response text that failed to parse:', text);
+                    throw new Error('Invalid JSON response from server');
+                }
+            });
+        })
         .then(data => {
+            console.log('Documento parsed response:', data);
+            
             if (data.success) {
                 // Actualizar visual del documento según la validación
                 if (validado) {
@@ -789,7 +885,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Actualizar estado interno
                 const checkbox = document.querySelector(`[data-documento-id="${documentoId}"]`);
-                checkbox.dataset.cambioLocal = 'false';
+                if (checkbox) {
+                    checkbox.dataset.cambioLocal = 'false';
+                }
                 
                 // Actualizar contadores y progreso
                 actualizarContadoresYProgreso();
@@ -807,18 +905,33 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             } else {
-                // Revertir checkbox si hubo error
+                // Revertir checkbox si hubo error del servidor
                 const checkbox = document.querySelector(`[data-documento-id="${documentoId}"]`);
-                checkbox.checked = !validado;
-                alert('Error al actualizar el documento: ' + data.message);
+                if (checkbox) {
+                    checkbox.checked = !validado;
+                }
+                console.error('Documento server error:', data.message);
+                alert('Error al actualizar el documento: ' + (data.message || 'Error desconocido'));
             }
         })
         .catch(error => {
-            console.error('Error:', error);
+            console.error('Documento error completo:', error);
+            console.error('Documento error stack:', error.stack);
+            
             // Revertir checkbox si hubo error
             const checkbox = document.querySelector(`[data-documento-id="${documentoId}"]`);
-            checkbox.checked = !validado;
-            alert('Error al actualizar el documento');
+            if (checkbox) {
+                checkbox.checked = !validado;
+            }
+            
+            // Mensaje de error más informativo
+            if (error.message.includes('Invalid JSON')) {
+                alert('Error: El servidor devolvió una respuesta inválida. Revisa la consola para más detalles.');
+            } else if (error.message.includes('HTTP error')) {
+                alert('Error de conexión con el servidor: ' + error.message);
+            } else {
+                alert('Error inesperado al validar documento: ' + error.message);
+            }
         })
         .finally(() => {
             // Restaurar estado visual original
@@ -1278,7 +1391,29 @@ document.addEventListener('DOMContentLoaded', function() {
                                             checkbox.dataset.previouslyChecked = tareaServer.completada;
                                             
                                             // Actualizar visual del label
-                                            const label = checkbox.parentElement.nextElementSibling.querySelector('label');
+                                            let label = null;
+                                            
+                                            // Buscar el label de manera flexible (mismo código que arriba)
+                                            label = checkbox.parentElement.nextElementSibling?.querySelector('label');
+                                            
+                                            if (!label) {
+                                                const tareaContainer = checkbox.closest('.tarea-item, .form-check, .task-item');
+                                                if (tareaContainer) {
+                                                    label = tareaContainer.querySelector('label');
+                                                }
+                                            }
+                                            
+                                            if (!label && checkbox.id) {
+                                                label = document.querySelector(`label[for="${checkbox.id}"]`);
+                                            }
+                                            
+                                            if (!label) {
+                                                const parentContainer = checkbox.closest('.tarea-item, .task-container, .form-group, .mb-2, .mb-3');
+                                                if (parentContainer) {
+                                                    label = parentContainer.querySelector('label');
+                                                }
+                                            }
+                                            
                                             if (label) {
                                                 if (tareaServer.completada) {
                                                     label.classList.add('text-decoration-line-through', 'text-muted');

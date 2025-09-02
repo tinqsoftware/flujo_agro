@@ -1282,8 +1282,7 @@ class Ejecucion extends Controller
                             ->whereNotIn('estado', [99]) // Excluir etapas canceladas
                             ->count();
                         $etapasCompletadasEjecucion = DetalleEtapa::where('id_detalle_flujo', $detalleFlujoId)
-                            ->where('estado', 3)
-                            ->whereNotIn('estado', [99]) // Excluir etapas canceladas
+                            ->where('estado', 3) // Solo etapas completadas (estado 3 no puede ser 99)
                             ->count();
 
                         Log::info("Verificando ejecución {$detalleFlujoId}", [
