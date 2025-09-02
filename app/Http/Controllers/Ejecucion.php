@@ -398,6 +398,22 @@ class Ejecucion extends Controller
             'documentos_seleccionados' => 'array'
         ]);
 
+        // Validar que al menos una tarea o documento esté seleccionado
+        $tareasSeleccionadas = $request->tareas_seleccionadas ?? [];
+        $documentosSeleccionados = $request->documentos_seleccionados ?? [];
+        
+        if (empty($tareasSeleccionadas) && empty($documentosSeleccionados)) {
+            return response()->json([
+                'error' => 'Debes seleccionar al menos una tarea o un documento para crear la ejecución'
+            ], 422);
+        }
+
+        Log::info('Validación de selección completada', [
+            'tareas_seleccionadas_count' => count($tareasSeleccionadas),
+            'documentos_seleccionados_count' => count($documentosSeleccionados),
+            'total_elementos_seleccionados' => count($tareasSeleccionadas) + count($documentosSeleccionados)
+        ]);
+
         try {
             DB::beginTransaction();
 
@@ -427,48 +443,58 @@ class Ejecucion extends Controller
                 ]);
             }
 
-            // Crear registros de detalle_tarea solo para las tareas seleccionadas
-            if (!empty($request->tareas_seleccionadas)) {
-                foreach ($request->tareas_seleccionadas as $tareaId) {
-                    // Buscar la tarea para obtener su etapa
-                    $tarea = \App\Models\Tarea::find($tareaId);
-                    if ($tarea && $tarea->etapa) {
-                        // Buscar el detalle_etapa correspondiente
-                        $detalleEtapa = DetalleEtapa::where('id_etapa', $tarea->etapa->id)
-                            ->where('id_detalle_flujo', $detalleFlujoActivo->id)
-                            ->first();
+            // Crear registros de detalle_tarea para TODAS las tareas del flujo
+            foreach ($flujo->etapas()->where('estado', 1)->get() as $etapa) {
+                // Buscar el detalle_etapa correspondiente
+                $detalleEtapa = DetalleEtapa::where('id_etapa', $etapa->id)
+                    ->where('id_detalle_flujo', $detalleFlujoActivo->id)
+                    ->first();
+                
+                if ($detalleEtapa) {
+                    // Procesar todas las tareas de la etapa
+                    foreach ($etapa->tareas()->where('estado', 1)->get() as $tarea) {
+                        $estadoTarea = in_array($tarea->id, $request->tareas_seleccionadas ?? []) ? 0 : 66;
                         
-                        if ($detalleEtapa) {
-                            DetalleTarea::create([
-                                'id_tarea' => $tareaId,
-                                'id_detalle_etapa' => $detalleEtapa->id,
-                                'estado' => 0, // Inicial/inactivo
-                                'id_user_create' => $user->id
-                            ]);
-                        }
+                        DetalleTarea::create([
+                            'id_tarea' => $tarea->id,
+                            'id_detalle_etapa' => $detalleEtapa->id,
+                            'estado' => $estadoTarea, // 0 = activa en flujo, 66 = no influye en flujo
+                            'id_user_create' => $user->id
+                        ]);
+                        
+                        Log::info('Tarea creada en ejecución', [
+                            'tarea_id' => $tarea->id,
+                            'estado' => $estadoTarea,
+                            'incluida_en_flujo' => $estadoTarea === 0
+                        ]);
                     }
                 }
             }
 
-            // Crear registros de detalle_documento solo para los documentos seleccionados
-            if (!empty($request->documentos_seleccionados)) {
-                foreach ($request->documentos_seleccionados as $documentoId) {
-                    // Buscar el documento para obtener su etapa
-                    $documento = \App\Models\Documento::find($documentoId);
-                    if ($documento && $documento->etapa) {
-                        // Buscar el detalle_etapa correspondiente
-                        $detalleEtapa = DetalleEtapa::where('id_etapa', $documento->etapa->id)
-                            ->where('id_detalle_flujo', $detalleFlujoActivo->id)
-                            ->first();
+            // Crear registros de detalle_documento para TODOS los documentos del flujo
+            foreach ($flujo->etapas()->where('estado', 1)->get() as $etapa) {
+                // Buscar el detalle_etapa correspondiente
+                $detalleEtapa = DetalleEtapa::where('id_etapa', $etapa->id)
+                    ->where('id_detalle_flujo', $detalleFlujoActivo->id)
+                    ->first();
+                
+                if ($detalleEtapa) {
+                    // Procesar todos los documentos de la etapa
+                    foreach ($etapa->documentos()->where('estado', 1)->get() as $documento) {
+                        $estadoDocumento = in_array($documento->id, $request->documentos_seleccionados ?? []) ? 0 : 66;
                         
-                        if ($detalleEtapa) {
-                            DetalleDocumento::create([
-                                'id_documento' => $documentoId,
-                                'id_detalle_etapa' => $detalleEtapa->id,
-                                'estado' => 0, // Inicial/inactivo
-                                'id_user_create' => $user->id
-                            ]);
-                        }
+                        DetalleDocumento::create([
+                            'id_documento' => $documento->id,
+                            'id_detalle_etapa' => $detalleEtapa->id,
+                            'estado' => $estadoDocumento, // 0 = activo en flujo, 66 = no influye en flujo
+                            'id_user_create' => $user->id
+                        ]);
+                        
+                        Log::info('Documento creado en ejecución', [
+                            'documento_id' => $documento->id,
+                            'estado' => $estadoDocumento,
+                            'incluido_en_flujo' => $estadoDocumento === 0
+                        ]);
                     }
                 }
             }
@@ -630,15 +656,23 @@ class Ejecucion extends Controller
                 if ($detalleEtapa) {
                     $detalleTarea = DetalleTarea::with('userCreate')->where('id_tarea', $tarea->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
-                        ->whereNotIn('estado', [99]) // Excluir tareas canceladas
+                        ->whereNotIn('estado', [66, 99]) // Excluir tareas que no influyen en flujo (66) y canceladas (99)
                         ->first();
                 }
                 
-                // Solo estado 3 significa completado (no estado 2 que es "en ejecución")
-                $tarea->completada = $detalleTarea ? ($detalleTarea->estado == 3) : false;
-                $tarea->detalle_id = $detalleTarea ? $detalleTarea->id : null;
-                $tarea->detalle_flujo_id = $detalleFlujo->id;
-                $tarea->detalle = $detalleTarea; // Agregar referencia al detalle completo
+                // Solo mostrar tareas que están incluidas en el flujo (no estado 66)
+                if ($detalleTarea) {
+                    // Solo estado 3 significa completado (no estado 2 que es "en ejecución")
+                    $tarea->completada = ($detalleTarea->estado == 3);
+                    $tarea->detalle_id = $detalleTarea->id;
+                    $tarea->detalle_flujo_id = $detalleFlujo->id;
+                    $tarea->detalle = $detalleTarea; // Agregar referencia al detalle completo
+                } else {
+                    // Si no tiene detalle o tiene estado 66, remover de la colección
+                    $etapa->tareas = $etapa->tareas->reject(function($t) use ($tarea) {
+                        return $t->id === $tarea->id;
+                    });
+                }
             }
             
             foreach ($etapa->documentos as $documento) {
@@ -647,17 +681,25 @@ class Ejecucion extends Controller
                 if ($detalleEtapa) {
                     $detalleDocumento = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
-                        ->whereNotIn('estado', [99]) // Excluir documentos cancelados
+                        ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo (66) y cancelados (99)
                         ->first();
                 }
                 
-                // Solo estado 3 significa subido/completado (no estado 2 que es "pendiente")
-                $documento->subido = $detalleDocumento ? ($detalleDocumento->estado == 3) : false;
-                $documento->archivo_url = ($detalleDocumento && $detalleDocumento->ruta_doc) ? 
-                    Storage::url($detalleDocumento->ruta_doc) : null;
-                $documento->detalle_id = $detalleDocumento ? $detalleDocumento->id : null;
-                $documento->detalle_flujo_id = $detalleFlujo->id;
-                $documento->detalle = $detalleDocumento; // Agregar referencia al detalle completo
+                // Solo mostrar documentos que están incluidos en el flujo (no estado 66)
+                if ($detalleDocumento) {
+                    // Solo estado 3 significa subido/completado (no estado 2 que es "pendiente")
+                    $documento->subido = ($detalleDocumento->estado == 3);
+                    $documento->archivo_url = ($detalleDocumento && $detalleDocumento->ruta_doc) ? 
+                        Storage::url($detalleDocumento->ruta_doc) : null;
+                    $documento->detalle_id = $detalleDocumento->id;
+                    $documento->detalle_flujo_id = $detalleFlujo->id;
+                    $documento->detalle = $detalleDocumento; // Agregar referencia al detalle completo
+                } else {
+                    // Si no tiene detalle o tiene estado 66, remover de la colección
+                    $etapa->documentos = $etapa->documentos->reject(function($d) use ($documento) {
+                        return $d->id === $documento->id;
+                    });
+                }
             }
         }
 
@@ -1277,22 +1319,22 @@ class Ejecucion extends Controller
 
             if (!$detalleEtapa) return false;
 
-            // Verificar si todas las tareas de la etapa están completadas para esta ejecución (excluyendo canceladas)
-            $totalTareas = $etapa->tareas()->where('estado', 1)->count();
+            // Verificar si todas las tareas de la etapa están completadas para esta ejecución (excluyendo las que no influyen en flujo y canceladas)
+            $totalTareas = DetalleTarea::where('id_detalle_etapa', $detalleEtapa->id)
+                ->whereNotIn('estado', [66, 99]) // Excluir tareas que no influyen en flujo (66) y canceladas (99)
+                ->count();
             $tareasCompletadas = DetalleTarea::where('estado', 3) // Solo estado 3 es completado
                 ->where('id_detalle_etapa', $detalleEtapa->id)
-                ->whereIn('id_tarea', $etapa->tareas()->where('estado', 1)->pluck('id'))
-                ->whereNotIn('estado', [99]) // Excluir tareas canceladas
+                ->whereNotIn('estado', [66, 99]) // Excluir tareas que no influyen en flujo (66) y canceladas (99)
                 ->count();
 
-            // Verificar si todos los documentos de la etapa están subidos para esta ejecución (excluyendo cancelados)
-            $totalDocumentos = $etapa->documentos()->where('estado', 1)->count();
+            // Verificar si todos los documentos de la etapa están subidos para esta ejecución (excluyendo los que no influyen en flujo y cancelados)
+            $totalDocumentos = DetalleDocumento::where('id_detalle_etapa', $detalleEtapa->id)
+                ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo (66) y cancelados (99)  
+                ->count();
             $documentosSubidos = DetalleDocumento::where('estado', 3) // Solo estado 3 es subido
-                ->whereHas('detalleEtapa', function($query) use ($detalleFlujoId) {
-                    $query->where('id_detalle_flujo', $detalleFlujoId);
-                })
-                ->whereIn('id_documento', $etapa->documentos()->where('estado', 1)->pluck('id'))
-                ->whereNotIn('estado', [99]) // Excluir documentos cancelados
+                ->where('id_detalle_etapa', $detalleEtapa->id)
+                ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo (66) y cancelados (99)
                 ->count();
 
             Log::info("Verificando etapa {$etapa->id} para ejecución {$detalleFlujoId}", [
@@ -1509,7 +1551,6 @@ class Ejecucion extends Controller
 
         foreach ($flujo->etapas as $etapa) {
             $tareas_completadas = 0;
-            $total_tareas = $etapa->tareas->count();
             $tareas_data = [];
             
             // Buscar detalle_etapa para esta ejecución
@@ -1517,7 +1558,22 @@ class Ejecucion extends Controller
                 ->where('id_detalle_flujo', $detalleFlujo->id)
                 ->first();
             
+            // Obtener solo las tareas que influyen en el flujo (excluir estado 66)
+            $tareasActivasIds = [];
+            if ($detalleEtapa) {
+                $tareasActivasIds = DetalleTarea::where('id_detalle_etapa', $detalleEtapa->id)
+                    ->whereNotIn('estado', [66, 99]) // Excluir tareas que no influyen en flujo (66) y canceladas (99)
+                    ->pluck('id_tarea')
+                    ->toArray();
+            }
+            $total_tareas = count($tareasActivasIds);
+            
             foreach ($etapa->tareas as $tarea) {
+                // Solo procesar tareas que están activas en el flujo
+                if (!in_array($tarea->id, $tareasActivasIds)) {
+                    continue;
+                }
+                
                 $tarea_completada = false;
                 $usuario_completo = null;
                 $fecha_completada = null;
@@ -1525,7 +1581,7 @@ class Ejecucion extends Controller
                 if ($detalleEtapa) {
                     $detalle = DetalleTarea::with('userCreate')->where('id_tarea', $tarea->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
-                        ->whereNotIn('estado', [99]) // Excluir tareas canceladas
+                        ->whereNotIn('estado', [66, 99]) // Excluir tareas que no influyen en flujo (66) y canceladas (99)
                         ->first();
                     if ($detalle && $detalle->estado == 3) { // Solo estado 3 es completado
                         $tareas_completadas++;
@@ -1553,18 +1609,32 @@ class Ejecucion extends Controller
             }
 
             $documentos_subidos = 0;
-            $total_documentos = $etapa->documentos->count();
             $documentos_data = [];
+            
+            // Obtener solo los documentos que influyen en el flujo (excluir estado 66)
+            $documentosActivosIds = [];
+            if ($detalleEtapa) {
+                $documentosActivosIds = DetalleDocumento::where('id_detalle_etapa', $detalleEtapa->id)
+                    ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo (66) y cancelados (99)
+                    ->pluck('id_documento')
+                    ->toArray();
+            }
+            $total_documentos = count($documentosActivosIds);
             
             if ($detalleEtapa) {
                 foreach ($etapa->documentos as $documento) {
+                    // Solo procesar documentos que están activos en el flujo
+                    if (!in_array($documento->id, $documentosActivosIds)) {
+                        continue;
+                    }
+                    
                     $documento_subido = false;
                     $usuario_validado = null;
                     $fecha_validada = null;
                     
                     $detalle = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
-                        ->whereNotIn('estado', [99]) // Excluir documentos cancelados
+                        ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo (66) y cancelados (99)
                         ->first();
                     if ($detalle && $detalle->estado == 3) { // Solo estado 3 es subido
                         $documentos_subidos++;
@@ -1591,17 +1661,8 @@ class Ejecucion extends Controller
                     ];
                 }
             } else {
-                // Si no hay detalle_etapa, contar documentos como pendientes
-                $total_items += $total_documentos;
-                foreach ($etapa->documentos as $documento) {
-                    $documentos_data[] = [
-                        'id' => $documento->id,
-                        'subido' => false,
-                        'validado' => false,
-                        'usuario_validado' => null,
-                        'fecha_validada' => null
-                    ];
-                }
+                // Si no hay detalle_etapa, no hay documentos activos
+                // No agregar documentos al total porque no están incluidos en el flujo
             }
 
             $progreso_etapa = 0;

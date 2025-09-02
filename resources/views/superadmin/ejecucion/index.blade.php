@@ -507,6 +507,7 @@
                         <div class="col-md-6">
                             <h6 class="fw-bold mb-3">
                                 <i class="fas fa-tasks me-1"></i>Tareas a incluir
+                                <span id="contador-tareas" class="badge bg-success ms-2">0 seleccionadas</span>
                                 <button type="button" class="btn btn-sm btn-outline-success ms-2" id="select-all-tareas">
                                     <i class="fas fa-check-double"></i> Todas
                                 </button>
@@ -518,6 +519,7 @@
                         <div class="col-md-6">
                             <h6 class="fw-bold mb-3">
                                 <i class="fas fa-file-alt me-1"></i>Documentos a incluir
+                                <span id="contador-documentos" class="badge bg-success ms-2">0 seleccionados</span>
                                 <button type="button" class="btn btn-sm btn-outline-success ms-2" id="select-all-documentos">
                                     <i class="fas fa-check-double"></i> Todos
                                 </button>
@@ -952,6 +954,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             }
         });
+        
+        // Agregar event listeners a los checkboxes para actualizar contadores
+        container.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', actualizarContadores);
+        });
+        
+        // Actualizar contador inicial
+        actualizarContadores();
     }
 
     // Función para cargar documentos en el modal
@@ -988,6 +998,48 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             }
         });
+        
+        // Agregar event listeners a los checkboxes para actualizar contadores
+        container.querySelectorAll('.documento-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', actualizarContadores);
+        });
+        
+        // Actualizar contador inicial
+        actualizarContadores();
+    }
+
+    // Función para actualizar contadores
+    function actualizarContadores() {
+        const tareasSeleccionadas = document.querySelectorAll('.tarea-checkbox:checked').length;
+        const documentosSeleccionados = document.querySelectorAll('.documento-checkbox:checked').length;
+        
+        const contadorTareas = document.getElementById('contador-tareas');
+        const contadorDocumentos = document.getElementById('contador-documentos');
+        
+        if (contadorTareas) {
+            contadorTareas.textContent = `${tareasSeleccionadas} seleccionadas`;
+            contadorTareas.className = tareasSeleccionadas > 0 ? 'badge bg-success ms-2' : 'badge bg-secondary ms-2';
+        }
+        
+        if (contadorDocumentos) {
+            contadorDocumentos.textContent = `${documentosSeleccionados} seleccionados`;
+            contadorDocumentos.className = documentosSeleccionados > 0 ? 'badge bg-success ms-2' : 'badge bg-secondary ms-2';
+        }
+        
+        // Actualizar el botón de envío según las selecciones
+        const submitBtn = formConfiguracion ? formConfiguracion.querySelector('button[type="submit"]') : null;
+        if (submitBtn) {
+            const totalSeleccionados = tareasSeleccionadas + documentosSeleccionados;
+            if (totalSeleccionados === 0) {
+                submitBtn.classList.add('btn-outline-danger');
+                submitBtn.classList.remove('btn-success');
+                submitBtn.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Selecciona al menos un elemento';
+            } else {
+                submitBtn.classList.remove('btn-outline-danger');
+                submitBtn.classList.add('btn-success');
+                submitBtn.innerHTML = '<i class="fas fa-play me-1"></i>Crear y Ejecutar';
+            }
+        }
     }
 
     // Eventos para seleccionar todas las tareas/documentos
@@ -1029,6 +1081,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Recopilar documentos seleccionados
                 const documentosSeleccionados = Array.from(document.querySelectorAll('.documento-checkbox:checked'))
                     .map(cb => cb.value);
+
+                // Validar que al menos una tarea o documento esté seleccionado
+                if (tareasSeleccionadas.length === 0 && documentosSeleccionados.length === 0) {
+                    alert('Debes seleccionar al menos una tarea o un documento para crear la ejecución.\n\nNo puedes crear una ejecución sin elementos a ejecutar.');
+                    return;
+                }
+
+                console.log('Configuración validada:', {
+                    tareas_seleccionadas: tareasSeleccionadas.length,
+                    documentos_seleccionados: documentosSeleccionados.length
+                });
 
                 // Enviar configuración
                 enviarConfiguracion(flujoSeleccionado.id, {
