@@ -767,6 +767,13 @@ class Ejecucion extends Controller
                 'message' => $completada ? 'Tarea marcada como completada' : 'Tarea marcada como pendiente',
                 'completada' => ($detalle->estado == 3), // Verificar que sea exactamente 3
                 'detalle_id' => $detalle->id,
+                'usuario' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email
+                ],
+                'fecha_completada' => $detalle->updated_at->format('d/m/Y H:i:s'),
+                'fecha_completada_legible' => $detalle->updated_at->format('d/m/Y'),
                 'estados' => $this->verificarYActualizarEstados($tareaId, 'tarea', $detalleFlujoId)
             ]);
 
@@ -1484,8 +1491,11 @@ class Ejecucion extends Controller
             
             foreach ($etapa->tareas as $tarea) {
                 $tarea_completada = false;
+                $usuario_completo = null;
+                $fecha_completada = null;
+                
                 if ($detalleEtapa) {
-                    $detalle = DetalleTarea::where('id_tarea', $tarea->id)
+                    $detalle = DetalleTarea::with('userCreate')->where('id_tarea', $tarea->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
                         ->whereNotIn('estado', [99]) // Excluir tareas canceladas
                         ->first();
@@ -1493,13 +1503,24 @@ class Ejecucion extends Controller
                         $tareas_completadas++;
                         $items_completados++;
                         $tarea_completada = true;
+                        
+                        if ($detalle->userCreate) {
+                            $usuario_completo = [
+                                'id' => $detalle->userCreate->id,
+                                'name' => $detalle->userCreate->name,
+                                'email' => $detalle->userCreate->email
+                            ];
+                        }
+                        $fecha_completada = $detalle->updated_at ? $detalle->updated_at->format('d/m/Y') : null;
                     }
                 }
                 $total_items++;
                 
                 $tareas_data[] = [
                     'id' => $tarea->id,
-                    'completada' => $tarea_completada
+                    'completada' => $tarea_completada,
+                    'usuario_completo' => $usuario_completo,
+                    'fecha_completada' => $fecha_completada
                 ];
             }
 
@@ -1510,7 +1531,10 @@ class Ejecucion extends Controller
             if ($detalleEtapa) {
                 foreach ($etapa->documentos as $documento) {
                     $documento_subido = false;
-                    $detalle = DetalleDocumento::where('id_documento', $documento->id)
+                    $usuario_validado = null;
+                    $fecha_validada = null;
+                    
+                    $detalle = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
                         ->whereNotIn('estado', [99]) // Excluir documentos cancelados
                         ->first();
@@ -1518,13 +1542,24 @@ class Ejecucion extends Controller
                         $documentos_subidos++;
                         $items_completados++;
                         $documento_subido = true;
+                        
+                        if ($detalle->userCreate) {
+                            $usuario_validado = [
+                                'id' => $detalle->userCreate->id,
+                                'name' => $detalle->userCreate->name,
+                                'email' => $detalle->userCreate->email
+                            ];
+                        }
+                        $fecha_validada = $detalle->updated_at ? $detalle->updated_at->format('d/m/Y') : null;
                     }
                     $total_items++;
                     
                     $documentos_data[] = [
                         'id' => $documento->id,
                         'subido' => $documento_subido,
-                        'validado' => $documento_subido // Para este caso, subido = validado
+                        'validado' => $documento_subido, // Para este caso, subido = validado
+                        'usuario_validado' => $usuario_validado,
+                        'fecha_validada' => $fecha_validada
                     ];
                 }
             } else {
@@ -1534,7 +1569,9 @@ class Ejecucion extends Controller
                     $documentos_data[] = [
                         'id' => $documento->id,
                         'subido' => false,
-                        'validado' => false
+                        'validado' => false,
+                        'usuario_validado' => null,
+                        'fecha_validada' => null
                     ];
                 }
             }
@@ -1861,6 +1898,13 @@ class Ejecucion extends Controller
                 'message' => $validado ? 'Documento marcado como validado' : 'Documento marcado como pendiente',
                 'validado' => ($detalle->estado == 3), // Verificar que sea exactamente 3
                 'detalle_id' => $detalle->id,
+                'usuario' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email
+                ],
+                'fecha_validada' => $detalle->updated_at->format('d/m/Y H:i:s'),
+                'fecha_validada_legible' => $detalle->updated_at->format('d/m/Y'),
                 'estados' => $this->verificarYActualizarEstados($documentoId, 'documento', $detalleFlujoId)
             ]);
 

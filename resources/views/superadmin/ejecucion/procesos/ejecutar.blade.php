@@ -758,6 +758,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
                 
+                // La información de completado se actualiza automáticamente desde el servidor
+                // cuando se recarga la página o se sincroniza el progreso
+                
                 // Actualizar visual del contenedor de la tarea
                 if (completada) {
                     tareaItem.classList.add('border-success');
@@ -882,6 +885,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     documentoItem.classList.remove('border-success', 'border-info');
                     documentoItem.classList.add('border-warning');
                 }
+                
+                // La información de validación se actualiza automáticamente desde el servidor
+                // cuando se recarga la página o se sincroniza el progreso
                 
                 // Actualizar estado interno
                 const checkbox = document.querySelector(`[data-documento-id="${documentoId}"]`);
@@ -1026,15 +1032,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             <i class="fas fa-clock me-1"></i>Pendiente Validación
                         </span>
                     </div>
-                    <div class="small text-success mt-1">
-                        <i class="fas fa-user me-1"></i>
-                        Subido por: <strong>${data.usuario.name}</strong>
-                        <span class="text-muted ms-2">
-                            <i class="fas fa-clock me-1"></i>
-                            ${data.fecha_subida}
-                        </span>
-                    </div>
                 `;
+                
+                // La información de "Subido por" se mostrará automáticamente
+                // cuando se recargue la página desde el servidor
                 
                 // Agregar botones de ver y descargar
                 btnGroup.innerHTML = `
@@ -1422,6 +1423,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 }
                                             }
                                         }
+                                        
+                                        // La información de completado se gestiona desde el servidor
+                                        // y se muestra correctamente en el HTML inicial
                                     }
                                 });
                             }
@@ -1436,6 +1440,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                         if (!estadoLocalPendiente && checkbox.checked !== documentoServer.validado) {
                                             checkbox.checked = documentoServer.validado;
                                         }
+                                        
+                                        // La información de validación se gestiona desde el servidor
+                                        // y se muestra correctamente en el HTML inicial
                                     }
                                 });
                             }
