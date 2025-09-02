@@ -397,17 +397,6 @@
                     </div>
                     @endif
                 </div>
-                
-                <!-- Botón de Grabar -->
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <div class="d-flex justify-content-end">
-                            <button type="submit" class="btn btn-success grabar-etapa" data-etapa-id="{{ $etapa->id }}">
-                                <i class="fas fa-save me-2"></i>Grabar Cambios
-                            </button>
-                        </div>
-                    </div>
-                </div>
             </form>
         </div>
     </div>
@@ -670,122 +659,174 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Manejar formularios de etapas (botón Grabar)
-    document.querySelectorAll('.etapa-form').forEach(form => {
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            if (!procesoIniciado) {
-                alert('Debes iniciar la ejecución del flujo primero');
-                return;
-            }
+    // Función para actualizar una tarea individual
+    function actualizarTareaIndividual(tareaId, completada) {
+        if (!procesoIniciado) {
+            alert('Debes iniciar la ejecución del flujo primero');
+            return false;
+        }
 
-            if (!detalleFlujoId) {
-                alert('Error: No se encontró ID de ejecución');
-                return;
-            }
+        if (!detalleFlujoId) {
+            alert('Error: No se encontró ID de ejecución');
+            return false;
+        }
 
-            const etapaId = this.dataset.etapaId;
-            const etapaActual = this.closest('.etapa-card');
-            
-            // Validar que las etapas anteriores estén completadas
-            if (!validarEtapasAnteriores(etapaActual)) {
-                return;
-            }
-            const submitBtn = this.querySelector('.grabar-etapa');
-            
-            // Recopilar datos de tareas
-            const tareas = [];
-            this.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
-                tareas.push({
-                    tarea_id: checkbox.dataset.tareaId,
-                    completada: checkbox.checked
-                });
-            });
-            
-            // Recopilar datos de documentos
-            const documentos = [];
-            this.querySelectorAll('.documento-checkbox').forEach(checkbox => {
-                documentos.push({
-                    documento_id: checkbox.dataset.documentoId,
-                    validado: checkbox.checked
-                });
-            });
-            
-            // Deshabilitar botón mientras se procesa
-            submitBtn.disabled = true;
-            const originalHtml = submitBtn.innerHTML;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Grabando...';
-            
-            // Enviar datos al servidor
-            fetch('{{ route('ejecucion.detalle.etapa.grabar') }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                },
-                body: JSON.stringify({
-                    etapa_id: etapaId,
-                    detalle_flujo_id: detalleFlujoId,
-                    tareas: tareas,
-                    documentos: documentos
-                })
+        // Mostrar indicador de carga en la tarea
+        const tareaItem = document.querySelector(`[data-tarea-id="${tareaId}"]`).closest('.tarea-item');
+        const originalClass = tareaItem.className;
+        tareaItem.classList.add('border', 'border-info');
+        
+        // Enviar al servidor
+        fetch('{{ route('ejecucion.detalle.tarea.actualizar') }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({
+                tarea_id: tareaId,
+                completada: completada,
+                detalle_flujo_id: detalleFlujoId
             })
-            .then(response => response.json())
-            .then(data => {
-                console.log('Respuesta grabar etapa:', data);
-                if (data.success) {
-                    const formElement = this; // Guardar referencia al formulario
-                    
-                    // Actualizar UI de las tareas
-                    tareas.forEach(tareaData => {
-                        const checkbox = formElement.querySelector(`[data-tarea-id="${tareaData.tarea_id}"]`);
-                        if (checkbox) {
-                            const label = checkbox.parentElement.nextElementSibling.querySelector('label');
-                            if (label) {
-                                if (tareaData.completada) {
-                                    label.classList.add('text-decoration-line-through', 'text-muted');
-                                } else {
-                                    label.classList.remove('text-decoration-line-through', 'text-muted');
-                                }
-                            }
-                        }
-                    });
-                    
-                    // Restablecer el botón a su estado original después de grabar exitosamente
-                    restablecerBotonGrabar(formElement.closest('.etapa-card'));
-                    
-                    // Verificar si se completó etapa o flujo
-                    if (data.estados) {
-                        if (typeof data.estados === 'object' && data.estados.flujo_completado) {
-                            // Flujo completado - mostrar animación y redirigir
-                            mostrarAnimacionComplecion(data.estados.flujo_nombre);
-                        } else if (data.estados === true) {
-                            // Solo etapa completada
-                            const etapaCard = formElement.closest('.etapa-card');
-                            marcarEtapaComoCompletada(etapaCard);
-                        }
-                    }
-                    
-                    // Actualizar progreso
-                    actualizarProgreso();
-                    
-                    // Mostrar mensaje de éxito
-                    mostrarMensajeExito('Cambios guardados correctamente');
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Actualizar UI de la tarea
+                const checkbox = document.querySelector(`[data-tarea-id="${tareaId}"]`);
+                const label = checkbox.parentElement.nextElementSibling.querySelector('label');
+                
+                if (completada) {
+                    label.classList.add('text-decoration-line-through', 'text-muted');
+                    tareaItem.classList.add('border-success');
+                    tareaItem.classList.remove('border-info');
                 } else {
-                    alert('Error al grabar los cambios: ' + data.message);
+                    label.classList.remove('text-decoration-line-through', 'text-muted');
+                    tareaItem.classList.remove('border-success', 'border-info');
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Error al grabar los cambios');
-            })
-            .finally(() => {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalHtml;
-            });
+                
+                // Actualizar estado interno
+                checkbox.dataset.previouslyChecked = completada;
+                checkbox.dataset.cambioLocal = 'false';
+                
+                // Actualizar contadores y progreso
+                actualizarContadoresYProgreso();
+                
+                // Mostrar mensaje de éxito
+                mostrarMensajeExito(completada ? 'Tarea completada' : 'Tarea desmarcada');
+                
+                // Verificar si se completó etapa o flujo
+                if (data.estados) {
+                    if (typeof data.estados === 'object' && data.estados.flujo_completado) {
+                        mostrarAnimacionComplecion(data.estados.flujo_nombre);
+                    } else if (data.estados === true) {
+                        const etapaCard = tareaItem.closest('.etapa-card');
+                        marcarEtapaComoCompletada(etapaCard);
+                    }
+                }
+            } else {
+                // Revertir checkbox si hubo error
+                checkbox.checked = !completada;
+                alert('Error al actualizar la tarea: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // Revertir checkbox si hubo error
+            const checkbox = document.querySelector(`[data-tarea-id="${tareaId}"]`);
+            checkbox.checked = !completada;
+            alert('Error al actualizar la tarea');
+        })
+        .finally(() => {
+            // Restaurar estado visual original
+            tareaItem.className = originalClass;
         });
-    });
+        
+        return true;
+    }
+
+    // Función para actualizar validación de documento individual
+    function actualizarDocumentoIndividual(documentoId, validado) {
+        if (!procesoIniciado) {
+            alert('Debes iniciar la ejecución del flujo primero');
+            return false;
+        }
+
+        if (!detalleFlujoId) {
+            alert('Error: No se encontró ID de ejecución');
+            return false;
+        }
+
+        // Mostrar indicador de carga en el documento
+        const documentoItem = document.querySelector(`[data-documento-id="${documentoId}"]`).closest('.documento-item');
+        const originalClass = documentoItem.className;
+        documentoItem.classList.add('border', 'border-info');
+        
+        // Enviar al servidor
+        fetch('{{ route('ejecucion.detalle.documento.validar') }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({
+                documento_id: documentoId,
+                validado: validado,
+                detalle_flujo_id: detalleFlujoId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Actualizar visual del documento según la validación
+                if (validado) {
+                    documentoItem.classList.add('border-success');
+                    documentoItem.classList.remove('border-warning', 'border-info');
+                } else {
+                    documentoItem.classList.remove('border-success', 'border-info');
+                    documentoItem.classList.add('border-warning');
+                }
+                
+                // Actualizar estado interno
+                const checkbox = document.querySelector(`[data-documento-id="${documentoId}"]`);
+                checkbox.dataset.cambioLocal = 'false';
+                
+                // Actualizar contadores y progreso
+                actualizarContadoresYProgreso();
+                
+                // Mostrar mensaje de éxito
+                mostrarMensajeExito(validado ? 'Documento validado' : 'Validación removida');
+                
+                // Verificar si se completó etapa o flujo
+                if (data.estados) {
+                    if (typeof data.estados === 'object' && data.estados.flujo_completado) {
+                        mostrarAnimacionComplecion(data.estados.flujo_nombre);
+                    } else if (data.estados === true) {
+                        const etapaCard = documentoItem.closest('.etapa-card');
+                        marcarEtapaComoCompletada(etapaCard);
+                    }
+                }
+            } else {
+                // Revertir checkbox si hubo error
+                const checkbox = document.querySelector(`[data-documento-id="${documentoId}"]`);
+                checkbox.checked = !validado;
+                alert('Error al actualizar el documento: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // Revertir checkbox si hubo error
+            const checkbox = document.querySelector(`[data-documento-id="${documentoId}"]`);
+            checkbox.checked = !validado;
+            alert('Error al actualizar el documento');
+        })
+        .finally(() => {
+            // Restaurar estado visual original
+            documentoItem.className = originalClass;
+        });
+        
+        return true;
+    }
 
     // Manejar subida de documentos
     document.querySelectorAll('.subir-documento').forEach(btn => {
@@ -955,14 +996,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Marcar que hay cambios pendientes de grabar en la etapa
                 const etapaCard = documentoItem.closest('.etapa-card');
-                marcarCambiosPendientes(etapaCard);
                 
                 // Agregar event listener al nuevo checkbox
                 const newCheckbox = statusElement.querySelector('.documento-checkbox');
                 if (newCheckbox) {
                     newCheckbox.addEventListener('change', function() {
-                        const etapaCard = this.closest('.etapa-card');
-                        marcarCambiosPendientes(etapaCard);
+                        const documentoId = this.dataset.documentoId;
+                        const validado = this.checked;
+                        actualizarDocumentoIndividual(documentoId, validado);
                     });
                 }
                 
@@ -971,7 +1012,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('uploadForm').reset();
                 
                 // Mostrar mensaje de éxito
-                mostrarMensajeExito('Documento subido correctamente. Marca el checkbox y presiona "Grabar Cambios" para validar.');
+                mostrarMensajeExito('Documento subido correctamente. Marca el checkbox para validarlo.');
                 
                 console.log('Documento subido:', data);
             } else {
@@ -1194,6 +1235,141 @@ document.addEventListener('DOMContentLoaded', function() {
         actualizarProgresoEtapa(null); // Usar null ya que la función ahora obtiene datos del servidor
     }
 
+    // Nueva función que solo actualiza contadores sin afectar checkboxes
+    function actualizarContadoresYProgreso() {
+        if (!detalleFlujoId) {
+            console.log('No hay detalleFlujoId, omitiendo actualización de progreso');
+            return;
+        }
+        
+        fetch(`{{ route('ejecucion.detalle.progreso', ':detalleFlujoId') }}`.replace(':detalleFlujoId', detalleFlujoId))
+        .then(response => response.json())
+        .then(data => {
+            if (data && data.progreso_general !== undefined) {
+                const progresoGeneralElement = document.getElementById('progreso-general');
+                if (progresoGeneralElement) {
+                    progresoGeneralElement.textContent = data.progreso_general + '%';
+                }
+                
+                // Validar que existan etapas en la respuesta
+                if (data.etapas && Array.isArray(data.etapas)) {
+                    // Actualizar solo contadores y progreso, NO los checkboxes
+                    data.etapas.forEach(etapaData => {
+                        const etapaElement = document.querySelector(`[data-etapa-id="${etapaData.id}"]`);
+                        if (etapaElement) {
+                            const progresoElement = etapaElement.querySelector('.progreso-etapa');
+                            const estadoIcon = etapaElement.querySelector('.estado-etapa i');
+                            const statusText = etapaElement.querySelector('.card-header small');
+                            
+                            // Actualizar progreso
+                            if (progresoElement) {
+                                progresoElement.textContent = etapaData.progreso + '%';
+                            }
+                            
+                            // Sincronizar estado de tareas con servidor (sin forzar cambios)
+                            if (etapaData.tareas && Array.isArray(etapaData.tareas)) {
+                                etapaData.tareas.forEach(tareaServer => {
+                                    const checkbox = etapaElement.querySelector(`[data-tarea-id="${tareaServer.id}"]`);
+                                    if (checkbox) {
+                                        // Solo actualizar si hay diferencia y no hay cambios pendientes locales
+                                        const estadoLocalPendiente = checkbox.dataset.cambioLocal === 'true';
+                                        if (!estadoLocalPendiente && checkbox.checked !== tareaServer.completada) {
+                                            checkbox.checked = tareaServer.completada;
+                                            checkbox.dataset.previouslyChecked = tareaServer.completada;
+                                            
+                                            // Actualizar visual del label
+                                            const label = checkbox.parentElement.nextElementSibling.querySelector('label');
+                                            if (label) {
+                                                if (tareaServer.completada) {
+                                                    label.classList.add('text-decoration-line-through', 'text-muted');
+                                                } else {
+                                                    label.classList.remove('text-decoration-line-through', 'text-muted');
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                            
+                            // Sincronizar estado de documentos con servidor
+                            if (etapaData.documentos && Array.isArray(etapaData.documentos)) {
+                                etapaData.documentos.forEach(documentoServer => {
+                                    const checkbox = etapaElement.querySelector(`[data-documento-id="${documentoServer.id}"]`);
+                                    if (checkbox) {
+                                        // Solo actualizar si hay diferencia y no hay cambios pendientes locales
+                                        const estadoLocalPendiente = checkbox.dataset.cambioLocal === 'true';
+                                        if (!estadoLocalPendiente && checkbox.checked !== documentoServer.validado) {
+                                            checkbox.checked = documentoServer.validado;
+                                        }
+                                    }
+                                });
+                            }
+                            
+                            // Actualizar contadores de tareas y documentos
+                            const tareasListElement = etapaElement.querySelector('.tareas-list');
+                            const documentosListElement = etapaElement.querySelector('.documentos-list');
+                            
+                            if (tareasListElement) {
+                                const tareasHeader = tareasListElement.parentElement.querySelector('h6');
+                                if (tareasHeader) {
+                                    tareasHeader.textContent = `Tareas (${etapaData.tareas_completadas}/${etapaData.total_tareas})`;
+                                }
+                            }
+                            
+                            if (documentosListElement) {
+                                const documentosHeader = documentosListElement.parentElement.querySelector('h6');
+                                if (documentosHeader) {
+                                    documentosHeader.textContent = `Documentos (${etapaData.documentos_subidos}/${etapaData.total_documentos})`;
+                                }
+                            }
+                            
+                            // Actualizar estado visual de la etapa
+                            if (etapaData.progreso === 100) {
+                                etapaElement.classList.remove('activa');
+                                etapaElement.classList.add('completada');
+                                if (estadoIcon) {
+                                    estadoIcon.classList.remove('text-primary', 'text-warning', 'text-secondary');
+                                    estadoIcon.classList.add('text-success');
+                                }
+                                if (statusText) {
+                                    statusText.innerHTML = `Completada • Progreso: <span class="progreso-etapa">${etapaData.progreso}%</span>`;
+                                }
+                                
+                                // Activar siguiente etapa si existe
+                                const siguienteEtapa = etapaElement.nextElementSibling;
+                                if (siguienteEtapa && siguienteEtapa.classList.contains('etapa-card') && 
+                                    !siguienteEtapa.classList.contains('activa') && 
+                                    !siguienteEtapa.classList.contains('completada')) {
+                                    siguienteEtapa.classList.add('activa');
+                                    const siguienteIcon = siguienteEtapa.querySelector('.estado-etapa i');
+                                    if (siguienteIcon) {
+                                        siguienteIcon.classList.remove('text-secondary');
+                                        siguienteIcon.classList.add('text-primary');
+                                    }
+                                }
+                            } else if (etapaData.progreso > 0) {
+                                if (estadoIcon) {
+                                    estadoIcon.classList.remove('text-secondary');
+                                    estadoIcon.classList.add('text-warning');
+                                }
+                                if (statusText) {
+                                    statusText.innerHTML = `En progreso • Progreso: <span class="progreso-etapa">${etapaData.progreso}%</span>`;
+                                }
+                            } else {
+                                if (statusText) {
+                                    statusText.innerHTML = `Pendiente • Progreso: <span class="progreso-etapa">${etapaData.progreso}%</span>`;
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error al obtener progreso:', error);
+        });
+    }
+
     // Función para marcar etapa como completada
     function marcarEtapaComoCompletada(etapaCard) {
         if (!etapaCard) return;
@@ -1380,37 +1556,14 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Función para marcar cambios pendientes en una etapa
-    function marcarCambiosPendientes(etapaCard) {
-        if (!etapaCard) return;
-        
-        const submitBtn = etapaCard.querySelector('.grabar-etapa');
-        if (submitBtn && !submitBtn.classList.contains('btn-warning') && !submitBtn.disabled) {
-            submitBtn.classList.remove('btn-success');
-            submitBtn.classList.add('btn-warning');
-            submitBtn.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Hay cambios por grabar';
-        }
-    }
-
-    // Función para restablecer botón después de grabar
-    function restablecerBotonGrabar(etapaCard) {
-        if (!etapaCard) return;
-        
-        const submitBtn = etapaCard.querySelector('.grabar-etapa');
-        if (submitBtn) {
-            submitBtn.classList.remove('btn-warning');
-            submitBtn.classList.add('btn-success');
-            submitBtn.innerHTML = '<i class="fas fa-save me-2"></i>Grabar Cambios';
-        }
-    }
-
-    // Función para agregar event listeners a los checkboxes para marcar cambios pendientes
+    // Función para agregar event listeners a los checkboxes para actualizaciones individuales
     function agregarListenersCambiosPendientes() {
         // Event listeners para checkboxes de tareas
         document.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', function(e) {
                 const wasChecked = e.target.checked;
                 const previouslyChecked = this.dataset.previouslyChecked === 'true';
+                const tareaId = this.dataset.tareaId;
                 
                 // Si se está desmarcando una tarea que estaba marcada, mostrar modal de confirmación
                 if (!wasChecked && previouslyChecked) {
@@ -1427,13 +1580,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Guardar referencia para la confirmación
                     document.getElementById('confirmar-desmarcar-tarea').dataset.tareaCheckbox = this.id;
+                    document.getElementById('confirmar-desmarcar-tarea').dataset.tareaId = tareaId;
                     
                     modal.show();
                 } else {
-                    // Comportamiento normal para marcar o cambios que no requieren confirmación
-                    this.dataset.previouslyChecked = wasChecked;
-                    const etapaCard = this.closest('.etapa-card');
-                    marcarCambiosPendientes(etapaCard);
+                    // Actualizar inmediatamente
+                    actualizarTareaIndividual(tareaId, wasChecked);
                 }
             });
             
@@ -1444,8 +1596,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // Event listeners para checkboxes de documentos
         document.querySelectorAll('.documento-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', function() {
-                const etapaCard = this.closest('.etapa-card');
-                marcarCambiosPendientes(etapaCard);
+                const documentoId = this.dataset.documentoId;
+                const validado = this.checked;
+                
+                // Actualizar inmediatamente
+                actualizarDocumentoIndividual(documentoId, validado);
             });
         });
     }
@@ -1453,14 +1608,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event listener para confirmar desmarcar tarea
     document.getElementById('confirmar-desmarcar-tarea').addEventListener('click', function() {
         const checkboxId = this.dataset.tareaCheckbox;
+        const tareaId = this.dataset.tareaId;
         const checkbox = document.getElementById(checkboxId);
         
-        if (checkbox) {
+        if (checkbox && tareaId) {
             checkbox.checked = false;
-            checkbox.dataset.previouslyChecked = 'false';
-            
-            const etapaCard = checkbox.closest('.etapa-card');
-            marcarCambiosPendientes(etapaCard);
+            actualizarTareaIndividual(tareaId, false);
         }
         
         // Cerrar modal
@@ -1550,15 +1703,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     mostrarModalSubirDocumento(documentoId);
                 });
                 
-                // Marcar cambios pendientes
-                const etapaCard = documentoItem.closest('.etapa-card');
-                marcarCambiosPendientes(etapaCard);
-                
                 // Cerrar modal
                 bootstrap.Modal.getInstance(modal).hide();
                 
                 // Mostrar mensaje de éxito
-                mostrarMensajeExito('Documento eliminado correctamente. Recuerda grabar los cambios de la etapa.');
+                mostrarMensajeExito('Documento eliminado correctamente.');
             } else {
                 alert('Error al eliminar el documento: ' + data.message);
             }

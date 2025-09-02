@@ -1476,6 +1476,7 @@ class Ejecucion extends Controller
         foreach ($flujo->etapas as $etapa) {
             $tareas_completadas = 0;
             $total_tareas = $etapa->tareas->count();
+            $tareas_data = [];
             
             // Buscar detalle_etapa para esta ejecución
             $detalleEtapa = DetalleEtapa::where('id_etapa', $etapa->id)
@@ -1483,6 +1484,7 @@ class Ejecucion extends Controller
                 ->first();
             
             foreach ($etapa->tareas as $tarea) {
+                $tarea_completada = false;
                 if ($detalleEtapa) {
                     $detalle = DetalleTarea::where('id_tarea', $tarea->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
@@ -1491,16 +1493,24 @@ class Ejecucion extends Controller
                     if ($detalle && $detalle->estado == 3) { // Solo estado 3 es completado
                         $tareas_completadas++;
                         $items_completados++;
+                        $tarea_completada = true;
                     }
                 }
                 $total_items++;
+                
+                $tareas_data[] = [
+                    'id' => $tarea->id,
+                    'completada' => $tarea_completada
+                ];
             }
 
             $documentos_subidos = 0;
             $total_documentos = $etapa->documentos->count();
+            $documentos_data = [];
             
             if ($detalleEtapa) {
                 foreach ($etapa->documentos as $documento) {
+                    $documento_subido = false;
                     $detalle = DetalleDocumento::where('id_documento', $documento->id)
                         ->where('id_detalle_etapa', $detalleEtapa->id)
                         ->whereNotIn('estado', [99]) // Excluir documentos cancelados
@@ -1508,12 +1518,26 @@ class Ejecucion extends Controller
                     if ($detalle && $detalle->estado == 3) { // Solo estado 3 es subido
                         $documentos_subidos++;
                         $items_completados++;
+                        $documento_subido = true;
                     }
                     $total_items++;
+                    
+                    $documentos_data[] = [
+                        'id' => $documento->id,
+                        'subido' => $documento_subido,
+                        'validado' => $documento_subido // Para este caso, subido = validado
+                    ];
                 }
             } else {
                 // Si no hay detalle_etapa, contar documentos como pendientes
                 $total_items += $total_documentos;
+                foreach ($etapa->documentos as $documento) {
+                    $documentos_data[] = [
+                        'id' => $documento->id,
+                        'subido' => false,
+                        'validado' => false
+                    ];
+                }
             }
 
             $progreso_etapa = 0;
@@ -1529,7 +1553,9 @@ class Ejecucion extends Controller
                 'total_tareas' => $total_tareas,
                 'documentos_subidos' => $documentos_subidos,
                 'total_documentos' => $total_documentos,
-                'estado' => $etapa->estado
+                'estado' => $etapa->estado,
+                'tareas' => $tareas_data,
+                'documentos' => $documentos_data
             ];
         }
 
@@ -1743,6 +1769,120 @@ class Ejecucion extends Controller
             ]);
 
             return response()->json(['error' => 'Error interno del servidor'], 500);
+        }
+    }
+
+    /**
+     * Validar o invalidar un documento individual
+     */
+    public function validarDocumento(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+            // SUPERADMIN no puede actualizar documentos
+            if ($isSuper) {
+                return response()->json(['error' => 'Los SUPERADMIN no pueden modificar documentos'], 403);
+            }
+
+            Log::info('Iniciando validación de documento', $request->all());
+            
+            $request->validate([
+                'documento_id' => 'required|exists:documentos,id',
+                'validado' => 'required|boolean',
+                'detalle_flujo_id' => 'required|exists:detalle_flujo,id'
+            ]);
+            
+            $documentoId = $request->documento_id;
+            $validado = $request->validado;
+            $detalleFlujoId = $request->detalle_flujo_id;
+
+            Log::info('Datos validados', [
+                'documento_id' => $documentoId, 
+                'validado' => $validado, 
+                'detalle_flujo_id' => $detalleFlujoId,
+                'user_id' => $user->id
+            ]);
+
+            // Verificar que el detalle_flujo pertenece a la empresa del usuario
+            $detalleFlujo = DetalleFlujo::where('id', $detalleFlujoId)
+                ->where('id_emp', $user->id_emp)
+                ->firstOrFail();
+
+            // Verificar que la ejecución no esté cancelada
+            if ($detalleFlujo->estado == 99) {
+                return response()->json(['error' => 'No se pueden modificar documentos de una ejecución cancelada'], 400);
+            }
+
+            // Buscar el documento para obtener su etapa y validar el rol
+            $documento = \App\Models\Documento::findOrFail($documentoId);
+            
+            // Validar permisos por rol
+            if ($documento->rol_validacion && $documento->rol_validacion != $user->id_rol) {
+                return response()->json([
+                    'error' => 'No tienes permisos para validar este documento. Se requiere el rol: ' . 
+                              ($documento->rol ? $documento->rol->nombre : 'Rol específico')
+                ], 403);
+            }
+            
+            // Buscar el detalle_etapa correspondiente
+            $detalleEtapa = DetalleEtapa::where('id_etapa', $documento->id_etapa)
+                ->where('id_detalle_flujo', $detalleFlujoId)
+                ->firstOrFail();
+
+            // Buscar si ya existe un detalle para este documento en esta ejecución específica
+            $detalle = DetalleDocumento::where('id_documento', $documentoId)
+                ->where('id_detalle_etapa', $detalleEtapa->id)
+                ->first();
+            
+            if ($detalle) {
+                // Actualizar el existente
+                $detalle->update([
+                    'estado' => $validado ? 3 : 2, // 3 = validado, 2 = pendiente
+                    'id_user_create' => $user->id,
+                    'updated_at' => now()
+                ]);
+                Log::info('Detalle de documento actualizado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado, 'updated_by' => $user->id]);
+            } else {
+                // Crear nuevo detalle para esta ejecución específica
+                $detalle = DetalleDocumento::create([
+                    'id_documento' => $documentoId,
+                    'id_detalle_etapa' => $detalleEtapa->id,
+                    'estado' => $validado ? 3 : 2, // 3 = validado, 2 = pendiente
+                    'id_user_create' => $user->id,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                Log::info('Detalle de documento creado', ['detalle_id' => $detalle->id, 'estado' => $detalle->estado, 'created_by' => $user->id]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $validado ? 'Documento marcado como validado' : 'Documento marcado como pendiente',
+                'validado' => ($detalle->estado == 3), // Verificar que sea exactamente 3
+                'detalle_id' => $detalle->id,
+                'estados' => $this->verificarYActualizarEstados($documentoId, 'documento', $detalleFlujoId)
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Error de validación en validar documento: ' . $e->getMessage(), [
+                'request' => $request->all(),
+                'errors' => $e->errors()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error de validación: ' . implode(', ', collect($e->errors())->flatten()->toArray())
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Error validando documento: ' . $e->getMessage(), [
+                'request' => $request->all(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al validar el documento: ' . $e->getMessage()
+            ], 500);
         }
     }
 }
