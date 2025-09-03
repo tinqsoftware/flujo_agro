@@ -15,7 +15,7 @@ class Documento extends Model
         'nombre',
         'descripcion',
         'id_user_create',
-        'id_etapa',
+        'id_tarea',
         'estado',
         'rol_cambios'
     ];
@@ -24,15 +24,15 @@ class Documento extends Model
         'estado' => 'integer'
     ];
 
-    // Relaciones
+    // Relacioness
     public function userCreate()
     {
         return $this->belongsTo(User::class, 'id_user_create');
     }
 
-    public function etapa()
+    public function tarea()
     {
-        return $this->belongsTo(Etapa::class, 'id_etapa');
+        return $this->belongsTo(Tarea::class, 'id_tarea');
     }
 
     public function detalles()

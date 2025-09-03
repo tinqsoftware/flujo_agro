@@ -167,32 +167,35 @@
         const taskEstado = isEditMode && ti.getAttribute('data-task-db-id') ? 
           (ti.querySelector('.task-estado-switch')?.checked ? 1 : 0) : 1;
         const taskRolCambios = ti.getAttribute('data-task-rol-cambios') || null;
+        
+        // Obtener documentos de esta tarea específica
+        const documents = [];
+        ti.querySelectorAll('.task-docs-list .doc-item').forEach((di) => {
+          const docEstado = isEditMode && di.getAttribute('data-doc-db-id') ? 
+            (di.querySelector('.doc-estado-switch')?.checked ? 1 : 0) : 1;
+          const docRolCambios = di.getAttribute('data-doc-rol-cambios') || null;
+          documents.push({
+            id: di.getAttribute('data-doc-id') || uid('doc'),
+            name: di.querySelector('.doc-title')?.textContent?.trim() || 'Documento',
+            description: di.querySelector('.doc-desc')?.textContent?.trim() || '',
+            estado: docEstado,
+            rol_cambios: docRolCambios
+          });
+        });
+
         tasks.push({
           id: ti.getAttribute('data-task-id') || uid('tsk'),
           name: ti.querySelector('.task-title')?.textContent?.trim() || 'Tarea',
           description: ti.querySelector('.task-desc')?.textContent?.trim() || '',
           estado: taskEstado,
-          rol_cambios: taskRolCambios
-        });
-      });
-
-      const documents = [];
-      st.querySelectorAll('.docs-list .doc-item').forEach((di) => {
-        const docEstado = isEditMode && di.getAttribute('data-doc-db-id') ? 
-          (di.querySelector('.doc-estado-switch')?.checked ? 1 : 0) : 1;
-        const docRolCambios = di.getAttribute('data-doc-rol-cambios') || null;
-        documents.push({
-          id: di.getAttribute('data-doc-id') || uid('doc'),
-          name: di.querySelector('.doc-title')?.textContent?.trim() || 'Documento',
-          description: di.querySelector('.doc-desc')?.textContent?.trim() || '',
-          estado: docEstado,
-          rol_cambios: docRolCambios
+          rol_cambios: taskRolCambios,
+          documents: documents
         });
       });
 
       st.querySelector('.stage-nro').textContent = nro;
 
-      out.stages.push({ id: stageId, name, description: desc, nro, paralelo, estado, tasks, documents });
+      out.stages.push({ id: stageId, name, description: desc, nro, paralelo, estado, tasks });
     });
 
     builderInput.value = JSON.stringify(out);
@@ -251,19 +254,12 @@
           </div>
         </div>
         <div class="row g-3">
-          <div class="col-md-6">
+          <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-2">
               <div class="fw-semibold">Tareas</div>
               <button type="button" class="btn btn-sm btn-outline-primary btnAddTask"><i class="fas fa-plus me-1"></i> Tarea</button>
             </div>
             <div class="tasks-list d-grid gap-2" data-stage-id="${id}"></div>
-          </div>
-          <div class="col-md-6">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-semibold">Documentos</div>
-              <button type="button" class="btn btn-sm btn-outline-primary btnAddDoc"><i class="fas fa-plus me-1"></i> Documento</button>
-            </div>
-            <div class="docs-list d-grid gap-2" data-stage-id="${id}"></div>
           </div>
         </div>
         <input type="hidden" class="stage-name" value="Nueva etapa">
@@ -309,8 +305,8 @@
       const tl = stage.querySelector('.tasks-list');
       const id = uid('tsk');
       tl.insertAdjacentHTML('beforeend', `
-        <div class="task-item list-group-item border rounded p-2" data-task-id="${id}" data-task-rol-cambios="" tabindex="0">
-          <div class="d-flex justify-content-between align-items-center">
+        <div class="task-item list-group-item border rounded p-3 mb-2" data-task-id="${id}" data-task-rol-cambios="" tabindex="0">
+          <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="task-drag text-muted" style="cursor:grab"><i class="fas fa-grip-vertical me-2"></i></div>
             <div class="flex-grow-1">
               <div class="task-title fw-semibold">Nueva tarea</div>
@@ -324,31 +320,47 @@
               <button type="button" class="btn btn-sm btn-light btnDelTask">🗑</button>
             </div>
           </div>
-        </div>`);
-      initOneList(tl, '.task-item', '.task-drag'); rebuildJSON();
-    }
-
-    if (btn?.classList.contains('btnAddDoc') && stage) {
-      const dl = stage.querySelector('.docs-list');
-      const id = uid('doc');
-      dl.insertAdjacentHTML('beforeend', `
-        <div class="doc-item list-group-item border rounded p-2" data-doc-id="${id}" data-doc-rol-cambios="" tabindex="0">
-          <div class="d-flex justify-content-between align-items-center">
-            <div class="doc-drag text-muted" style="cursor:grab"><i class="fas fa-grip-vertical me-2"></i></div>
-            <div class="flex-grow-1">
-              <div class="doc-title fw-semibold">Nuevo documento</div>
-              <div class="small text-muted doc-desc"></div>
-              <span class="badge bg-warning badge-sm badge-rol">
-                <i class="fas fa-users"></i> Todos los roles
-              </span>
+          <div class="mt-2">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-semibold small text-muted">Documentos de esta tarea</div>
+              <button type="button" class="btn btn-sm btn-outline-info btnAddTaskDoc"><i class="fas fa-plus me-1"></i> Documento</button>
             </div>
-            <div class="ms-2 d-flex align-items-center gap-1">
-              <button type="button" class="btn btn-sm btn-light btnEditDoc">✎</button>
-              <button type="button" class="btn btn-sm btn-light btnDelDoc">🗑</button>
-            </div>
+            <div class="task-docs-list d-grid gap-1" data-task-id="${id}"></div>
           </div>
         </div>`);
-      initOneList(dl, '.doc-item', '.doc-drag'); rebuildJSON();
+      initOneList(tl, '.task-item', '.task-drag'); 
+      // Inicializar la lista de documentos de la nueva tarea
+      const newTask = tl.lastElementChild;
+      const newTaskDocsList = newTask.querySelector('.task-docs-list');
+      initOneList(newTaskDocsList, '.doc-item', '.doc-drag');
+      rebuildJSON();
+    }
+
+    if (btn?.classList.contains('btnAddTaskDoc')) {
+      const task = e.target.closest('.task-item');
+      if (task) {
+        const dl = task.querySelector('.task-docs-list');
+        const id = uid('doc');
+        dl.insertAdjacentHTML('beforeend', `
+          <div class="doc-item list-group-item border rounded p-2" data-doc-id="${id}" data-doc-rol-cambios="" tabindex="0">
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="doc-drag text-muted" style="cursor:grab"><i class="fas fa-grip-vertical me-2"></i></div>
+              <div class="flex-grow-1">
+                <div class="doc-title fw-semibold">Nuevo documento</div>
+                <div class="small text-muted doc-desc"></div>
+                <span class="badge bg-warning badge-sm badge-rol">
+                  <i class="fas fa-users"></i> Todos los roles
+                </span>
+              </div>
+              <div class="ms-2 d-flex align-items-center gap-1">
+                <button type="button" class="btn btn-sm btn-light btnEditDoc">✎</button>
+                <button type="button" class="btn btn-sm btn-light btnDelDoc">🗑</button>
+              </div>
+            </div>
+          </div>`);
+        initOneList(dl, '.doc-item', '.doc-drag'); 
+        rebuildJSON();
+      }
     }
 
     const task = e.target.closest('.task-item');
@@ -463,7 +475,7 @@
       });
     }
     stagesList.querySelectorAll('.tasks-list').forEach(el => initOneList(el, '.task-item', '.task-drag'));
-    stagesList.querySelectorAll('.docs-list').forEach(el => initOneList(el, '.doc-item', '.doc-drag'));
+    stagesList.querySelectorAll('.task-docs-list').forEach(el => initOneList(el, '.doc-item', '.doc-drag'));
   }
 
   initStageSortables();
@@ -507,5 +519,34 @@
   /* Tooltip para elementos bloqueados */
   .badge[title] {
     cursor: help;
+  }
+  
+  /* Estilos para documentos anidados en tareas */
+  .task-docs-list {
+    background-color: #f8f9fa;
+    border-radius: 0.375rem;
+    padding: 0.5rem;
+    min-height: 2rem;
+  }
+  
+  .task-docs-list:empty::before {
+    content: "No hay documentos asignados a esta tarea";
+    color: #6c757d;
+    font-style: italic;
+    font-size: 0.875rem;
+    display: block;
+    text-align: center;
+    padding: 0.5rem;
+  }
+  
+  .task-item .doc-item {
+    background-color: #ffffff;
+    border: 1px solid #e9ecef;
+    margin-bottom: 0.25rem;
+  }
+  
+  .task-item .doc-item:hover {
+    border-color: #17a2b8;
+    box-shadow: 0 0 0 0.1rem rgba(23, 162, 184, 0.25);
   }
 </style>
