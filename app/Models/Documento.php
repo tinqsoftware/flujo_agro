@@ -15,7 +15,7 @@ class Documento extends Model
         'nombre',
         'descripcion',
         'id_user_create',
-        'id_tarea',
+        'id_tarea',  // Nueva lógica: documento pertenece a tarea
         'estado',
         'rol_cambios'
     ];

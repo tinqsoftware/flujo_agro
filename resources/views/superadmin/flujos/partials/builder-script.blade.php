@@ -236,6 +236,193 @@
     modal.show();
   }
 
+  // Nueva función para abrir modal de tarea con gestión de documentos
+  function openTaskWithDocsModal(task) {
+    const modalEl = document.getElementById('taskDocsModal') || createTaskDocsModal();
+    const modal = new bootstrap.Modal(modalEl);
+    
+    // Cargar datos de la tarea
+    const taskName = task.querySelector('.task-title').textContent.trim();
+    const taskDesc = task.querySelector('.task-desc').textContent.trim();
+    const taskRol = task.getAttribute('data-task-rol-cambios') || '';
+    
+    modalEl.querySelector('#tdm-task-name').value = taskName;
+    modalEl.querySelector('#tdm-task-desc').value = taskDesc;
+    modalEl.querySelector('#tdm-task-rol').value = taskRol;
+    modalEl.querySelector('.modal-title').textContent = `Gestionar Tarea: ${taskName}`;
+    
+    // Limpiar lista de documentos del modal
+    const docsContainer = modalEl.querySelector('#tdm-docs-list');
+    docsContainer.innerHTML = '';
+    
+    // Cargar documentos existentes
+    const existingDocs = task.querySelectorAll('.task-docs-list .doc-item');
+    existingDocs.forEach(doc => {
+      addDocToModal(docsContainer, {
+        name: doc.querySelector('.doc-title').textContent.trim(),
+        description: doc.querySelector('.doc-desc').textContent.trim(),
+        rol_cambios: doc.getAttribute('data-doc-rol-cambios') || ''
+      });
+    });
+    
+    // Event handler para guardar
+    const saveBtn = modalEl.querySelector('#tdm-save');
+    const handler = () => {
+      saveTaskWithDocs(task, modalEl);
+      modal.hide();
+      saveBtn.removeEventListener('click', handler);
+    };
+    saveBtn.addEventListener('click', handler);
+    
+    modal.show();
+  }
+
+  function createTaskDocsModal() {
+    const modalHTML = `
+      <div class="modal fade" id="taskDocsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Gestionar Tarea y Documentos</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row">
+                <div class="col-md-6">
+                  <h6>Información de la Tarea</h6>
+                  <div class="mb-3">
+                    <label for="tdm-task-name" class="form-label">Nombre</label>
+                    <input type="text" class="form-control" id="tdm-task-name" required>
+                  </div>
+                  <div class="mb-3">
+                    <label for="tdm-task-desc" class="form-label">Descripción</label>
+                    <textarea class="form-control" id="tdm-task-desc" rows="3"></textarea>
+                  </div>
+                  <div class="mb-3">
+                    <label for="tdm-task-rol" class="form-label">Rol para cambios</label>
+                    <select class="form-select" id="tdm-task-rol">
+                      <option value="">Todos los roles</option>
+                      ${rolesData.map(rol => `<option value="${rol.id}">${rol.nombre}</option>`).join('')}
+                    </select>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6>Documentos</h6>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="tdm-add-doc">
+                      <i class="fas fa-plus me-1"></i> Agregar Documento
+                    </button>
+                  </div>
+                  <div id="tdm-docs-list" class="d-grid gap-2"></div>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+              <button type="button" class="btn btn-primary" id="tdm-save">Guardar Cambios</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    const modalEl = document.getElementById('taskDocsModal');
+    
+    // Event listener para agregar documentos
+    modalEl.querySelector('#tdm-add-doc').addEventListener('click', () => {
+      addDocToModal(modalEl.querySelector('#tdm-docs-list'));
+    });
+    
+    return modalEl;
+  }
+
+  function addDocToModal(container, values = {}) {
+    const docId = uid('modal-doc');
+    const docHTML = `
+      <div class="card card-body p-2 doc-modal-item" data-doc-modal-id="${docId}">
+        <div class="row g-2">
+          <div class="col-md-4">
+            <input type="text" class="form-control form-control-sm doc-modal-name" 
+                   placeholder="Nombre del documento" value="${values.name || ''}" required>
+          </div>
+          <div class="col-md-4">
+            <input type="text" class="form-control form-control-sm doc-modal-desc" 
+                   placeholder="Descripción" value="${values.description || ''}">
+          </div>
+          <div class="col-md-3">
+            <select class="form-select form-select-sm doc-modal-rol">
+              <option value="">Todos los roles</option>
+              ${rolesData.map(rol => `<option value="${rol.id}" ${rol.id == values.rol_cambios ? 'selected' : ''}>${rol.nombre}</option>`).join('')}
+            </select>
+          </div>
+          <div class="col-md-1">
+            <button type="button" class="btn btn-sm btn-outline-danger w-100 remove-doc-modal">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      </div>`;
+    
+    container.insertAdjacentHTML('beforeend', docHTML);
+    
+    // Event listener para remover documento
+    const newDoc = container.lastElementChild;
+    newDoc.querySelector('.remove-doc-modal').addEventListener('click', () => {
+      newDoc.remove();
+    });
+  }
+
+  function saveTaskWithDocs(task, modalEl) {
+    // Actualizar información de la tarea
+    const taskName = modalEl.querySelector('#tdm-task-name').value.trim();
+    const taskDesc = modalEl.querySelector('#tdm-task-desc').value.trim();
+    const taskRol = modalEl.querySelector('#tdm-task-rol').value;
+    
+    task.querySelector('.task-title').textContent = taskName || 'Tarea';
+    task.querySelector('.task-desc').textContent = taskDesc || '';
+    task.setAttribute('data-task-rol-cambios', taskRol || '');
+    updateTaskRolBadge(task, taskRol);
+    
+    // Limpiar documentos existentes
+    const taskDocsList = task.querySelector('.task-docs-list');
+    taskDocsList.innerHTML = '';
+    
+    // Agregar nuevos documentos
+    const docsFromModal = modalEl.querySelectorAll('.doc-modal-item');
+    docsFromModal.forEach(docModal => {
+      const docName = docModal.querySelector('.doc-modal-name').value.trim();
+      const docDesc = docModal.querySelector('.doc-modal-desc').value.trim();
+      const docRol = docModal.querySelector('.doc-modal-rol').value;
+      
+      if (docName) {
+        const docId = uid('doc');
+        const docHTML = `
+          <div class="doc-item list-group-item border rounded p-2" data-doc-id="${docId}" data-doc-rol-cambios="${docRol || ''}" tabindex="0">
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="doc-drag text-muted" style="cursor:grab"><i class="fas fa-grip-vertical me-2"></i></div>
+              <div class="flex-grow-1">
+                <div class="doc-title fw-semibold">${docName}</div>
+                <div class="small text-muted doc-desc">${docDesc}</div>
+                <span class="badge ${docRol ? 'bg-primary' : 'bg-warning'} badge-sm badge-rol">
+                  <i class="fas ${docRol ? 'fa-user-tag' : 'fa-users'}"></i> ${getRoleName(docRol)}
+                </span>
+              </div>
+              <div class="ms-2 d-flex align-items-center gap-1">
+                <button type="button" class="btn btn-sm btn-light btnEditDoc">✎</button>
+                <button type="button" class="btn btn-sm btn-light btnDelDoc">🗑</button>
+              </div>
+            </div>
+          </div>`;
+        
+        taskDocsList.insertAdjacentHTML('beforeend', docHTML);
+      }
+    });
+    
+    // Reinicializar sortable para los nuevos documentos
+    initOneList(taskDocsList, '.doc-item', '.doc-drag');
+    rebuildJSON();
+  }
+
   // Add Stage
   document.getElementById('btnAddStage')?.addEventListener('click', () => {
     const id = uid('stg');
@@ -339,27 +526,8 @@
     if (btn?.classList.contains('btnAddTaskDoc')) {
       const task = e.target.closest('.task-item');
       if (task) {
-        const dl = task.querySelector('.task-docs-list');
-        const id = uid('doc');
-        dl.insertAdjacentHTML('beforeend', `
-          <div class="doc-item list-group-item border rounded p-2" data-doc-id="${id}" data-doc-rol-cambios="" tabindex="0">
-            <div class="d-flex justify-content-between align-items-center">
-              <div class="doc-drag text-muted" style="cursor:grab"><i class="fas fa-grip-vertical me-2"></i></div>
-              <div class="flex-grow-1">
-                <div class="doc-title fw-semibold">Nuevo documento</div>
-                <div class="small text-muted doc-desc"></div>
-                <span class="badge bg-warning badge-sm badge-rol">
-                  <i class="fas fa-users"></i> Todos los roles
-                </span>
-              </div>
-              <div class="ms-2 d-flex align-items-center gap-1">
-                <button type="button" class="btn btn-sm btn-light btnEditDoc">✎</button>
-                <button type="button" class="btn btn-sm btn-light btnDelDoc">🗑</button>
-              </div>
-            </div>
-          </div>`);
-        initOneList(dl, '.doc-item', '.doc-drag'); 
-        rebuildJSON();
+        // Abrir modal de editar tarea con gestión de documentos
+        openTaskWithDocsModal(task);
       }
     }
 
@@ -548,5 +716,31 @@
   .task-item .doc-item:hover {
     border-color: #17a2b8;
     box-shadow: 0 0 0 0.1rem rgba(23, 162, 184, 0.25);
+  }
+  
+  /* Estilos para el modal de gestión de tareas y documentos */
+  .doc-modal-item {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+  }
+  
+  .doc-modal-item:hover {
+    background-color: #e9ecef;
+  }
+  
+  #tdm-docs-list:empty::before {
+    content: "No hay documentos. Haz clic en 'Agregar Documento' para crear uno.";
+    color: #6c757d;
+    font-style: italic;
+    font-size: 0.875rem;
+    display: block;
+    text-align: center;
+    padding: 1rem;
+    border: 2px dashed #dee2e6;
+    border-radius: 0.375rem;
+  }
+  
+  .modal-lg {
+    max-width: 900px;
   }
 </style>

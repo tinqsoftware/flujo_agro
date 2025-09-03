@@ -46,9 +46,23 @@ class FlujoController extends Controller
         $ids = $flujos->pluck('id');
         if ($ids->count()) {
             $etps = Etapa::select('id','id_flujo','nro','nombre')
-                ->withCount(['tareas','documentos'])
+                ->withCount(['tareas'])
                 ->whereIn('id_flujo',$ids)->orderBy('nro')->get()
                 ->groupBy('id_flujo');
+            
+            // Calcular manualmente el conteo de documentos para compatibilidad
+            foreach ($etps->flatten() as $etapa) {
+                // Contar documentos nuevos (a través de tareas)
+                $documentosNuevos = DB::table('documentos')
+                    ->join('tareas', 'documentos.id_tarea', '=', 'tareas.id')
+                    ->where('tareas.id_etapa', $etapa->id)
+                    ->count();
+                
+                // Ya no hay documentos antiguos porque la columna id_etapa fue eliminada
+                // Solo contamos los documentos que pertenecen a tareas de esta etapa
+                $etapa->documentos_count = $documentosNuevos;
+            }
+            
             foreach ($ids as $fid) $etapasPorFlujo[$fid] = $etps->get($fid) ?? collect();
         }
 
@@ -129,17 +143,22 @@ class FlujoController extends Controller
                         $ta->rol_cambios   = $t['rol_cambios'] ?? null;
                         $ta->estado        = 1;
                         $ta->save();
+
+                        // Crear documentos de esta tarea específica
+                        foreach (($t['documents'] ?? []) as $d) {
+                            $doc = new Documento();
+                            $doc->id_tarea       = $ta->id; // Nueva lógica: documento pertenece a tarea
+                            $doc->nombre         = $d['name'] ?? 'Documento';
+                            $doc->descripcion    = $d['description'] ?? null;
+                            $doc->rol_cambios    = $d['rol_cambios'] ?? null;
+                            $doc->id_user_create = $user->id;
+                            $doc->estado         = 1;
+                            $doc->save();
+                        }
                     }
-                    foreach (($st['documents'] ?? []) as $d) {
-                        $doc = new Documento();
-                        $doc->id_etapa      = $et->id;
-                        $doc->nombre        = $d['name'] ?? 'Documento';
-                        $doc->descripcion   = $d['description'] ?? null;
-                        $doc->rol_cambios   = $d['rol_cambios'] ?? null;
-                        $doc->id_user_create= $user->id;
-                        $doc->estado        = 1;
-                        $doc->save();
-                    }
+                    
+                    // Ya no procesamos documentos a nivel de etapa ($st['documents'])
+                    // porque ahora todos los documentos están dentro de las tareas
                 }
             }
         });
@@ -166,29 +185,34 @@ class FlujoController extends Controller
         $stages = Etapa::where('id_flujo',$flujo->id)->orderBy('nro')->get();
         $tree = ['stages'=>[]];
         foreach ($stages as $st) {
-            // Obtener tareas con información de detalles
+            // Obtener tareas con información de detalles y sus documentos
             $tareas = Tarea::where('id_etapa',$st->id)->get()->map(function($tarea) {
+                // Obtener documentos de esta tarea específica (nueva lógica)
+                $documentos = Documento::where('id_tarea', $tarea->id)->get()->map(function($doc) {
+                    return [
+                        'id' => $doc->id,
+                        'name' => $doc->nombre,
+                        'description' => $doc->descripcion,
+                        'estado' => (int)$doc->estado,
+                        'rol_cambios' => $doc->rol_cambios,
+                        'has_details' => $doc->detalles()->exists()
+                    ];
+                })->toArray();
+
                 return [
                     'id' => $tarea->id,
                     'name' => $tarea->nombre,
                     'description' => $tarea->descripcion,
                     'estado' => (int)$tarea->estado,
                     'rol_cambios' => $tarea->rol_cambios,
-                    'has_details' => $tarea->detalles()->exists()
+                    'has_details' => $tarea->detalles()->exists(),
+                    'documents' => $documentos // Agregar documentos a la tarea
                 ];
             })->toArray();
 
-            // Obtener documentos con información de detalles
-            $documentos = Documento::where('id_etapa',$st->id)->get()->map(function($doc) {
-                return [
-                    'id' => $doc->id,
-                    'name' => $doc->nombre,
-                    'description' => $doc->descripcion,
-                    'estado' => (int)$doc->estado,
-                    'rol_cambios' => $doc->rol_cambios,
-                    'has_details' => $doc->detalles()->exists()
-                ];
-            })->toArray();
+            // Para compatibilidad: como ya no existe id_etapa, no hay documentos antiguos que cargar
+            // Todos los documentos ahora están dentro de las tareas
+            $documentosAntiguos = []; // Array vacío ya que no hay documentos antiguos
 
             $tree['stages'][] = [
                 'id'         => $st->id,
@@ -198,10 +222,14 @@ class FlujoController extends Controller
                 'paralelo'   => (int)$st->paralelo,
                 'estado'     => (int)$st->estado,
                 'tasks'      => $tareas,
-                'documents'  => $documentos,
+                'documents'  => $documentosAntiguos, // Siempre vacío ahora
             ];
         }
         $treeJson = json_encode($tree);
+        
+        // Debug temporal: ver qué datos estamos pasando
+        \Illuminate\Support\Facades\Log::info('Tree data for edit:', ['tree' => $tree]);
+        
         $isEditMode = true;
 
         // Obtener roles (excluyendo SUPERADMIN)
@@ -298,6 +326,46 @@ class FlujoController extends Controller
                                 $tarea->save();
                                 $processedTareas[] = $tarea->id;
                             }
+
+                            // Gestionar documentos de esta tarea (nueva lógica)
+                            if (!empty($tData['documents'])) {
+                                $existingDocsInTask = Documento::where('id_tarea', $tarea->id)->get()->keyBy('id');
+                                $processedDocsInTask = [];
+
+                                foreach ($tData['documents'] as $dData) {
+                                    $docId = isset($dData['id']) && is_numeric($dData['id']) ? $dData['id'] : null;
+                                    
+                                    if ($docId && isset($existingDocsInTask[$docId])) {
+                                        // Actualizar documento existente
+                                        $doc = $existingDocsInTask[$docId];
+                                        $doc->nombre      = $dData['name'] ?? 'Documento';
+                                        $doc->descripcion = $dData['description'] ?? null;
+                                        $doc->rol_cambios = $dData['rol_cambios'] ?? null;
+                                        $doc->estado      = isset($dData['estado']) ? (int)$dData['estado'] : 1;
+                                        $doc->save();
+                                        $processedDocsInTask[] = $doc->id;
+                                    } else {
+                                        // Crear nuevo documento
+                                        $doc = new Documento();
+                                        $doc->id_tarea       = $tarea->id; // Nueva lógica: documento pertenece a tarea
+                                        $doc->nombre         = $dData['name'] ?? 'Documento';
+                                        $doc->descripcion    = $dData['description'] ?? null;
+                                        $doc->rol_cambios    = $dData['rol_cambios'] ?? null;
+                                        $doc->estado         = 1;
+                                        $doc->id_user_create = $flujo->id_user_create;
+                                        $doc->save();
+                                        $processedDocsInTask[] = $doc->id;
+                                    }
+                                }
+
+                                // Eliminar documentos de esta tarea no incluidos en el builder
+                                Documento::where('id_tarea', $tarea->id)
+                                         ->whereNotIn('id', $processedDocsInTask)
+                                         ->delete();
+                            } else {
+                                // Si no hay documentos en el builder para esta tarea, eliminar todos los existentes
+                                Documento::where('id_tarea', $tarea->id)->delete();
+                            }
                         }
 
                         // Eliminar tareas no incluidas en el builder
@@ -309,44 +377,13 @@ class FlujoController extends Controller
                         Tarea::where('id_etapa', $etapa->id)->delete();
                     }
 
-                    // Gestionar documentos
+                    // Gestionar documentos antiguos - YA NO APLICA
+                    // La columna id_etapa fue eliminada, por lo que no hay documentos antiguos que manejar
+                    // Todos los documentos ahora se manejan dentro de las tareas
+                    // Esta sección se mantiene por compatibilidad pero no hace nada
                     if (!empty($stData['documents'])) {
-                        $existingDocs = Documento::where('id_etapa', $etapa->id)->get()->keyBy('id');
-                        $processedDocs = [];
-
-                        foreach ($stData['documents'] as $dData) {
-                            $docId = isset($dData['id']) && is_numeric($dData['id']) ? $dData['id'] : null;
-                            
-                            if ($docId && isset($existingDocs[$docId])) {
-                                // Actualizar documento existente
-                                $doc = $existingDocs[$docId];
-                                $doc->nombre      = $dData['name'] ?? 'Documento';
-                                $doc->descripcion = $dData['description'] ?? null;
-                                $doc->rol_cambios = $dData['rol_cambios'] ?? null;
-                                $doc->estado      = isset($dData['estado']) ? (int)$dData['estado'] : 1;
-                                $doc->save();
-                                $processedDocs[] = $doc->id;
-                            } else {
-                                // Crear nuevo documento
-                                $doc = new Documento();
-                                $doc->id_etapa       = $etapa->id;
-                                $doc->nombre         = $dData['name'] ?? 'Documento';
-                                $doc->descripcion    = $dData['description'] ?? null;
-                                $doc->rol_cambios    = $dData['rol_cambios'] ?? null;
-                                $doc->estado         = 1;
-                                $doc->id_user_create = $flujo->id_user_create;
-                                $doc->save();
-                                $processedDocs[] = $doc->id;
-                            }
-                        }
-
-                        // Eliminar documentos no incluidos en el builder
-                        Documento::where('id_etapa', $etapa->id)
-                                 ->whereNotIn('id', $processedDocs)
-                                 ->delete();
-                    } else {
-                        // Si no hay documentos en el builder, eliminar todos los existentes
-                        Documento::where('id_etapa', $etapa->id)->delete();
+                        // No hay documentos antiguos que procesar
+                        // Los documentos ahora solo existen dentro de las tareas
                     }
                 }
 
@@ -356,17 +393,25 @@ class FlujoController extends Controller
                                        ->get();
                 
                 foreach ($etapasToDelete as $etapa) {
-                    // Eliminar tareas y documentos de la etapa
+                    // Eliminar tareas y todos sus documentos asociados (nueva lógica)
+                    $tareasIds = Tarea::where('id_etapa', $etapa->id)->pluck('id');
+                    Documento::whereIn('id_tarea', $tareasIds)->delete(); // Documentos nuevos
                     Tarea::where('id_etapa', $etapa->id)->delete();
-                    Documento::where('id_etapa', $etapa->id)->delete();
+                    
+                    // Ya no eliminamos documentos con id_etapa porque esa columna no existe
+                    
                     $etapa->delete();
                 }
             } else {
                 // Si no hay stages en el builder, eliminar todo
                 $etapas = Etapa::where('id_flujo',$flujo->id)->get();
                 foreach ($etapas as $e) {
+                    // Eliminar documentos nuevos (a través de tareas)
+                    $tareasIds = Tarea::where('id_etapa', $e->id)->pluck('id');
+                    Documento::whereIn('id_tarea', $tareasIds)->delete();
                     Tarea::where('id_etapa',$e->id)->delete();
-                    Documento::where('id_etapa',$e->id)->delete();
+                    
+                    // Ya no eliminamos documentos con id_etapa porque esa columna no existe
                 }
                 Etapa::where('id_flujo',$flujo->id)->delete();
             }
@@ -430,8 +475,8 @@ class FlujoController extends Controller
         $user = Auth::user();
         $isSuper = ($user->rol->nombre === 'SUPERADMIN');
         
-        // Verificar permisos
-        if (!$isSuper && $documento->etapa->flujo->id_emp != $user->id_emp) {
+        // Verificar permisos - ahora el documento pertenece a una tarea
+        if (!$isSuper && $documento->tarea->etapa->flujo->id_emp != $user->id_emp) {
             return response()->json(['error' => 'No autorizado'], 403);
         }
 
