@@ -49,7 +49,7 @@ class Ejecucion extends Controller
         $flujosConContadores = $flujos->getCollection()->map(function($flujo) {
             $totalEtapas = $flujo->etapas->count();
             $totalDocumentos = $flujo->etapas->sum(function($etapa) {
-                return $etapa->documentos()->where('estado', 1)->count();
+                return $etapa->documentos()->where('documentos.estado', 1)->count();
             });
             
             $flujo->total_etapas = $totalEtapas;
@@ -84,7 +84,7 @@ class Ejecucion extends Controller
                 $flujo = $detalleFlujo->flujo;
                 $totalEtapas = $flujo->etapas->count();
                 $totalDocumentos = $flujo->etapas->sum(function($etapa) {
-                    return $etapa->documentos()->where('estado', 1)->count();
+                    return $etapa->documentos()->where('documentos.estado', 1)->count();
                 });
                 
                 $flujo->total_etapas = $totalEtapas;
@@ -268,10 +268,18 @@ class Ejecucion extends Controller
                                 return [
                                     'id' => $tarea->id,
                                     'nombre' => $tarea->nombre,
-                                    'descripcion' => $tarea->descripcion
+                                    'descripcion' => $tarea->descripcion,
+                                    'documentos' => $tarea->documentos()->where('documentos.estado', 1)->get()->map(function($documento) {
+                                        return [
+                                            'id' => $documento->id,
+                                            'nombre' => $documento->nombre,
+                                            'descripcion' => $documento->descripcion
+                                        ];
+                                    })
                                 ];
                             }),
-                            'documentos' => $etapa->documentos->map(function($documento) {
+                            // Para compatibilidad, mantener documentos a nivel de etapa (todos los documentos de sus tareas)
+                            'documentos' => $etapa->documentos()->where('documentos.estado', 1)->get()->map(function($documento) {
                                 return [
                                     'id' => $documento->id,
                                     'nombre' => $documento->nombre,
@@ -347,10 +355,18 @@ class Ejecucion extends Controller
                                 return [
                                     'id' => $tarea->id,
                                     'nombre' => $tarea->nombre,
-                                    'descripcion' => $tarea->descripcion
+                                    'descripcion' => $tarea->descripcion,
+                                    'documentos' => $tarea->documentos()->where('documentos.estado', 1)->get()->map(function($documento) {
+                                        return [
+                                            'id' => $documento->id,
+                                            'nombre' => $documento->nombre,
+                                            'descripcion' => $documento->descripcion
+                                        ];
+                                    })
                                 ];
                             }),
-                            'documentos' => $etapa->documentos->map(function($documento) {
+                            // Para compatibilidad, mantener documentos a nivel de etapa
+                            'documentos' => $etapa->documentos()->where('documentos.estado', 1)->get()->map(function($documento) {
                                 return [
                                     'id' => $documento->id,
                                     'nombre' => $documento->nombre,
@@ -479,8 +495,14 @@ class Ejecucion extends Controller
                     ->first();
                 
                 if ($detalleEtapa) {
-                    // Procesar todos los documentos de la etapa
-                    foreach ($etapa->documentos()->where('estado', 1)->get() as $documento) {
+                    // Procesar todos los documentos de la etapa (ahora a través de las tareas)
+                    $documentosEtapa = collect();
+                    foreach ($etapa->tareas()->where('estado', 1)->get() as $tarea) {
+                        $documentosTarea = $tarea->documentos()->where('documentos.estado', 1)->get();
+                        $documentosEtapa = $documentosEtapa->merge($documentosTarea);
+                    }
+                    
+                    foreach ($documentosEtapa as $documento) {
                         $estadoDocumento = in_array($documento->id, $request->documentos_seleccionados ?? []) ? 0 : 66;
                         
                         DetalleDocumento::create([
@@ -1043,7 +1065,7 @@ class Ejecucion extends Controller
                 }
             } else {
                 // Si no hay tareas ni documentos, verificar si solo hay documentos y están completos
-                $totalDocumentos = $etapa->documentos()->where('estado', 1)->count();
+                $totalDocumentos = $etapa->documentos()->where('documentos.estado', 1)->count();
                 $documentosCompletos = DetalleDocumento::whereHas('documento', function($q) use ($etapaId) {
                         $q->where('id_etapa', $etapaId)->where('estado', 1);
                     })
@@ -1053,7 +1075,7 @@ class Ejecucion extends Controller
                 
                 if ($totalDocumentos > 0 && $documentosCompletos == $totalDocumentos) {
                     // Verificar estados usando cualquier documento de la etapa
-                    $primerDocumento = $etapa->documentos()->where('estado', 1)->first();
+                    $primerDocumento = $etapa->documentos()->where('documentos.estado', 1)->first();
                     if ($primerDocumento) {
                         $estadosResult = $this->verificarYActualizarEstados($primerDocumento->id, 'documento', $detalleFlujoId);
                         
@@ -2137,7 +2159,7 @@ class Ejecucion extends Controller
                 }
 
                 // Crear registros de detalle_documento para TODOS los documentos activos de la etapa (estado = 0, incluidos en flujo)
-                foreach ($etapa->documentos()->where('estado', 1)->get() as $documento) {
+                foreach ($etapa->documentos()->where('documentos.estado', 1)->get() as $documento) {
                     DetalleDocumento::create([
                         'id_documento' => $documento->id,
                         'id_detalle_etapa' => $detalleEtapa->id,
@@ -2164,7 +2186,7 @@ class Ejecucion extends Controller
                     return $etapa->tareas()->where('estado', 1)->count();
                 }),
                 'total_documentos' => $flujo->etapas()->where('estado', 1)->get()->sum(function($etapa) {
-                    return $etapa->documentos()->where('estado', 1)->count();
+                    return $etapa->documentos()->where('documentos.estado', 1)->count();
                 })
             ]);
 

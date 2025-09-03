@@ -975,27 +975,87 @@ document.addEventListener('DOMContentLoaded', function() {
         container.innerHTML = '';
 
         etapas.forEach(etapa => {
-            if (etapa.documentos.length > 0) {
+            let hasDocuments = false;
+            
+            // Verificar si hay documentos en las tareas de esta etapa
+            etapa.tareas.forEach(tarea => {
+                if (tarea.documentos && tarea.documentos.length > 0) {
+                    hasDocuments = true;
+                }
+            });
+            
+            // También verificar documentos a nivel de etapa (para compatibilidad)
+            if (etapa.documentos && etapa.documentos.length > 0) {
+                hasDocuments = true;
+            }
+            
+            if (hasDocuments) {
                 // Título de etapa
                 const etapaTitle = document.createElement('div');
-                etapaTitle.className = 'mb-2';
+                etapaTitle.className = 'mb-3';
                 etapaTitle.innerHTML = `<small class="fw-bold text-primary">Etapa ${etapa.nro}: ${etapa.nombre}</small>`;
                 container.appendChild(etapaTitle);
 
-                // Documentos de la etapa
-                etapa.documentos.forEach(documento => {
-                    const docDiv = document.createElement('div');
-                    docDiv.className = 'form-check mb-2';
-                    docDiv.innerHTML = `
-                        <input class="form-check-input documento-checkbox" type="checkbox" value="${documento.id}" 
-                               id="documento-${documento.id}" checked>
-                        <label class="form-check-label" for="documento-${documento.id}">
-                            <strong>${documento.nombre}</strong>
-                            ${documento.descripcion ? `<br><small class="text-muted">${documento.descripcion}</small>` : ''}
-                        </label>
-                    `;
-                    container.appendChild(docDiv);
+                // Mostrar documentos organizados por tareas
+                etapa.tareas.forEach(tarea => {
+                    if (tarea.documentos && tarea.documentos.length > 0) {
+                        // Título de tarea
+                        const tareaTitle = document.createElement('div');
+                        tareaTitle.className = 'ms-3 mb-2';
+                        tareaTitle.innerHTML = `<small class="fw-semibold text-secondary">• ${tarea.nombre}</small>`;
+                        container.appendChild(tareaTitle);
+
+                        // Documentos de la tarea
+                        tarea.documentos.forEach(documento => {
+                            const docDiv = document.createElement('div');
+                            docDiv.className = 'form-check mb-2 ms-4';
+                            docDiv.innerHTML = `
+                                <input class="form-check-input documento-checkbox" type="checkbox" value="${documento.id}" 
+                                       id="documento-${documento.id}" checked>
+                                <label class="form-check-label" for="documento-${documento.id}">
+                                    <strong>${documento.nombre}</strong>
+                                    ${documento.descripcion ? `<br><small class="text-muted">${documento.descripcion}</small>` : ''}
+                                </label>
+                            `;
+                            container.appendChild(docDiv);
+                        });
+                    }
                 });
+
+                // Para compatibilidad: mostrar documentos a nivel de etapa que no estén en tareas
+                if (etapa.documentos && etapa.documentos.length > 0) {
+                    // Verificar si algún documento no está ya mostrado en las tareas
+                    const documentosEnTareas = [];
+                    etapa.tareas.forEach(tarea => {
+                        if (tarea.documentos) {
+                            tarea.documentos.forEach(doc => documentosEnTareas.push(doc.id));
+                        }
+                    });
+                    
+                    const documentosNoEnTareas = etapa.documentos.filter(doc => !documentosEnTareas.includes(doc.id));
+                    
+                    if (documentosNoEnTareas.length > 0) {
+                        // Título para documentos sin tarea específica
+                        const sinTareaTitle = document.createElement('div');
+                        sinTareaTitle.className = 'ms-3 mb-2';
+                        sinTareaTitle.innerHTML = `<small class="fw-semibold text-warning">• Documentos generales de la etapa</small>`;
+                        container.appendChild(sinTareaTitle);
+
+                        documentosNoEnTareas.forEach(documento => {
+                            const docDiv = document.createElement('div');
+                            docDiv.className = 'form-check mb-2 ms-4';
+                            docDiv.innerHTML = `
+                                <input class="form-check-input documento-checkbox" type="checkbox" value="${documento.id}" 
+                                       id="documento-${documento.id}" checked>
+                                <label class="form-check-label" for="documento-${documento.id}">
+                                    <strong>${documento.nombre}</strong>
+                                    ${documento.descripcion ? `<br><small class="text-muted">${documento.descripcion}</small>` : ''}
+                                </label>
+                            `;
+                            container.appendChild(docDiv);
+                        });
+                    }
+                }
             }
         });
         
