@@ -235,13 +235,13 @@ class Ejecucion extends Controller
             // Cargar etapas con sus tareas y documentos para mostrar en la configuración
             $flujo->load([
                 'etapas' => function($query) {
-                    $query->where('estado', 1)->orderBy('nro');
+                    $query->where('etapas.estado', 1)->orderBy('nro');
                 },
                 'etapas.tareas' => function($query) {
-                    $query->where('estado', 1)->orderBy('nombre');
+                    $query->where('tareas.estado', 1)->orderBy('nombre');
                 },
                 'etapas.documentos' => function($query) {
-                    $query->where('estado', 1)->orderBy('nombre');
+                    $query->where('documentos.estado', 1)->orderBy('nombre');
                 }
             ]);
 
@@ -321,13 +321,13 @@ class Ejecucion extends Controller
                 'tipo',
                 'empresa',
                 'etapas' => function($query) {
-                    $query->where('estado', 1)->orderBy('nro');
+                    $query->where('etapas.estado', 1)->orderBy('nro');
                 },
                 'etapas.tareas' => function($query) {
-                    $query->where('estado', 1)->orderBy('id');
+                    $query->where('tareas.estado', 1)->orderBy('id');
                 },
                 'etapas.documentos' => function($query) {
-                    $query->where('estado', 1)->orderBy('id');
+                    $query->where('documentos.estado', 1)->orderBy('id');
                 }
             ]);
 
@@ -496,27 +496,33 @@ class Ejecucion extends Controller
                 
                 if ($detalleEtapa) {
                     // Procesar todos los documentos de la etapa (ahora a través de las tareas)
-                    $documentosEtapa = collect();
                     foreach ($etapa->tareas()->where('estado', 1)->get() as $tarea) {
-                        $documentosTarea = $tarea->documentos()->where('documentos.estado', 1)->get();
-                        $documentosEtapa = $documentosEtapa->merge($documentosTarea);
-                    }
-                    
-                    foreach ($documentosEtapa as $documento) {
-                        $estadoDocumento = in_array($documento->id, $request->documentos_seleccionados ?? []) ? 0 : 66;
+                        // Obtener el DetalleTarea correspondiente para poder relacionar los documentos
+                        $detalleTarea = DetalleTarea::where('id_tarea', $tarea->id)
+                            ->where('id_detalle_etapa', $detalleEtapa->id)
+                            ->first();
                         
-                        DetalleDocumento::create([
-                            'id_documento' => $documento->id,
-                            'id_detalle_etapa' => $detalleEtapa->id,
-                            'estado' => $estadoDocumento, // 0 = activo en flujo, 66 = no influye en flujo
-                            'id_user_create' => $user->id
-                        ]);
-                        
-                        Log::info('Documento creado en ejecución', [
-                            'documento_id' => $documento->id,
-                            'estado' => $estadoDocumento,
-                            'incluido_en_flujo' => $estadoDocumento === 0
-                        ]);
+                        if ($detalleTarea) {
+                            $documentosTarea = $tarea->documentos()->where('documentos.estado', 1)->get();
+                            
+                            foreach ($documentosTarea as $documento) {
+                                $estadoDocumento = in_array($documento->id, $request->documentos_seleccionados ?? []) ? 0 : 66;
+                                
+                                DetalleDocumento::create([
+                                    'id_documento' => $documento->id,
+                                    'id_detalle_tarea' => $detalleTarea->id, // Nueva relación a través de DetalleTarea
+                                    'estado' => $estadoDocumento, // 0 = activo en flujo, 66 = no influye en flujo
+                                    'id_user_create' => $user->id
+                                ]);
+                                
+                                Log::info('Documento creado en ejecución', [
+                                    'documento_id' => $documento->id,
+                                    'detalle_tarea_id' => $detalleTarea->id,
+                                    'estado' => $estadoDocumento,
+                                    'incluido_en_flujo' => $estadoDocumento === 0
+                                ]);
+                            }
+                        }
                     }
                 }
             }
@@ -648,13 +654,13 @@ class Ejecucion extends Controller
             'tipo',
             'empresa', 
             'etapas' => function($query) {
-                $query->where('estado', 1)->orderBy('nro');
+                $query->where('etapas.estado', 1)->orderBy('nro');
             },
             'etapas.tareas' => function($query) {
-                $query->where('estado', 1);
+                $query->where('tareas.estado', 1);
             },
             'etapas.documentos' => function($query) {
-                $query->where('estado', 1);
+                $query->where('documentos.estado', 1);
             }
         ])->first();
 
@@ -698,11 +704,13 @@ class Ejecucion extends Controller
             }
             
             foreach ($etapa->documentos as $documento) {
-                // Buscar DetalleDocumento vinculado a esta ejecución específica a través del detalle_etapa
+                // Buscar DetalleDocumento vinculado a esta ejecución específica a través del detalle_tarea
                 $detalleDocumento = null;
                 if ($detalleEtapa) {
                     $detalleDocumento = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)
-                        ->where('id_detalle_etapa', $detalleEtapa->id)
+                        ->whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                            $query->where('id_detalle_etapa', $detalleEtapa->id);
+                        })
                         ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo (66) y cancelados (99)
                         ->first();
                 }
@@ -1020,7 +1028,9 @@ class Ejecucion extends Controller
 
                     // Buscar si ya existe un detalle para este documento
                     $detalle = DetalleDocumento::where('id_documento', $documentoId)
-                        ->where('id_detalle_etapa', $detalleEtapa->id)
+                        ->whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                            $query->where('id_detalle_etapa', $detalleEtapa->id);
+                        })
                         ->first();
                     
                     if ($detalle) {
@@ -1067,9 +1077,14 @@ class Ejecucion extends Controller
                 // Si no hay tareas ni documentos, verificar si solo hay documentos y están completos
                 $totalDocumentos = $etapa->documentos()->where('documentos.estado', 1)->count();
                 $documentosCompletos = DetalleDocumento::whereHas('documento', function($q) use ($etapaId) {
-                        $q->where('id_etapa', $etapaId)->where('estado', 1);
+                        // Nueva lógica: los documentos pertenecen a tareas, no directamente a etapas
+                        $q->whereHas('tarea', function($tq) use ($etapaId) {
+                            $tq->where('tareas.id_etapa', $etapaId);
+                        })->where('documentos.estado', 1);
                     })
-                    ->where('id_detalle_etapa', $detalleEtapa->id)
+                    ->whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                        $query->where('id_detalle_etapa', $detalleEtapa->id);
+                    })
                     ->where('estado', 3) // Solo documentos validados
                     ->count();
                 
@@ -1205,7 +1220,9 @@ class Ejecucion extends Controller
             }
 
             $detalle = DetalleDocumento::where('id_documento', $documentoId)
-                ->where('id_detalle_etapa', $detalleEtapa->id)
+                ->whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                    $query->where('id_detalle_etapa', $detalleEtapa->id);
+                })
                 ->first();
 
             if ($detalle) {
@@ -1351,11 +1368,16 @@ class Ejecucion extends Controller
                 ->count();
 
             // Verificar si todos los documentos de la etapa están subidos para esta ejecución (excluyendo los que no influyen en flujo y cancelados)
-            $totalDocumentos = DetalleDocumento::where('id_detalle_etapa', $detalleEtapa->id)
+            // Nueva lógica: documentos están relacionados a través de DetalleTarea
+            $totalDocumentos = DetalleDocumento::whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                    $query->where('id_detalle_etapa', $detalleEtapa->id);
+                })
                 ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo (66) y cancelados (99)  
                 ->count();
             $documentosSubidos = DetalleDocumento::where('estado', 3) // Solo estado 3 es subido
-                ->where('id_detalle_etapa', $detalleEtapa->id)
+                ->whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                    $query->where('id_detalle_etapa', $detalleEtapa->id);
+                })
                 ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo (66) y cancelados (99)
                 ->count();
 
@@ -1468,7 +1490,9 @@ class Ejecucion extends Controller
 
             // Buscar el detalle_documento
             $detalleDocumento = DetalleDocumento::where('id_documento', $documentoId)
-                ->where('id_detalle_etapa', $detalleEtapa->id)
+                ->whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                    $query->where('id_detalle_etapa', $detalleEtapa->id);
+                })
                 ->first();
 
             if (!$detalleDocumento) {
@@ -1636,7 +1660,9 @@ class Ejecucion extends Controller
             // Obtener solo los documentos que influyen en el flujo (excluir estado 66)
             $documentosActivosIds = [];
             if ($detalleEtapa) {
-                $documentosActivosIds = DetalleDocumento::where('id_detalle_etapa', $detalleEtapa->id)
+                $documentosActivosIds = DetalleDocumento::whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                        $query->where('id_detalle_etapa', $detalleEtapa->id);
+                    })
                     ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo (66) y cancelados (99)
                     ->pluck('id_documento')
                     ->toArray();
@@ -1655,7 +1681,9 @@ class Ejecucion extends Controller
                     $fecha_validada = null;
                     
                     $detalle = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)
-                        ->where('id_detalle_etapa', $detalleEtapa->id)
+                        ->whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                            $query->where('id_detalle_etapa', $detalleEtapa->id);
+                        })
                         ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo (66) y cancelados (99)
                         ->first();
                     if ($detalle && $detalle->estado == 3) { // Solo estado 3 es subido
@@ -1877,8 +1905,15 @@ class Ejecucion extends Controller
                     ->update(['estado' => 99]);
 
                 // Actualizar todos los DetalleDocumento relacionados a estado 99
-                DetalleDocumento::whereIn('id_detalle_etapa', $detalleEtapaIds)
-                    ->update(['estado' => 99]);
+                // Nueva lógica: usar la relación a través de DetalleTarea
+                $detalleTareaIds = DetalleTarea::whereIn('id_detalle_etapa', $detalleEtapaIds)
+                    ->pluck('id')
+                    ->toArray();
+                
+                if (!empty($detalleTareaIds)) {
+                    DetalleDocumento::whereIn('id_detalle_tarea', $detalleTareaIds)
+                        ->update(['estado' => 99]);
+                }
             }
 
             DB::commit();
@@ -1890,7 +1925,7 @@ class Ejecucion extends Controller
                 'fecha_cancelacion' => now(),
                 'detalle_etapas_actualizadas' => count($detalleEtapaIds),
                 'detalle_tareas_actualizadas' => !empty($detalleEtapaIds) ? DetalleTarea::whereIn('id_detalle_etapa', $detalleEtapaIds)->count() : 0,
-                'detalle_documentos_actualizados' => !empty($detalleEtapaIds) ? DetalleDocumento::whereIn('id_detalle_etapa', $detalleEtapaIds)->count() : 0
+                'detalle_documentos_actualizados' => !empty($detalleTareaIds) ? DetalleDocumento::whereIn('id_detalle_tarea', $detalleTareaIds)->count() : 0
             ]);
 
             return response()->json([
@@ -1973,14 +2008,16 @@ class Ejecucion extends Controller
                 ], 403);
             }
             
-            // Buscar el detalle_etapa correspondiente
-            $detalleEtapa = DetalleEtapa::where('id_etapa', $documento->id_etapa)
+            // Buscar el detalle_etapa correspondiente a través de la tarea del documento
+            $detalleEtapa = DetalleEtapa::where('id_etapa', $documento->tarea->id_etapa)
                 ->where('id_detalle_flujo', $detalleFlujoId)
                 ->firstOrFail();
 
             // Buscar si ya existe un detalle para este documento en esta ejecución específica
             $detalle = DetalleDocumento::where('id_documento', $documentoId)
-                ->where('id_detalle_etapa', $detalleEtapa->id)
+                ->whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                    $query->where('id_detalle_etapa', $detalleEtapa->id);
+                })
                 ->first();
             
             if ($detalle) {

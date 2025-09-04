@@ -46,6 +46,14 @@ class DetalleEtapa extends Model
 
     public function detalleDocumentos()
     {
-        return $this->hasMany(DetalleDocumento::class, 'id_detalle_etapa');
+        // Nueva lógica: los documentos están relacionados a través de DetalleTarea
+        return $this->hasManyThrough(
+            DetalleDocumento::class,
+            DetalleTarea::class,
+            'id_detalle_etapa', // Foreign key en DetalleTarea
+            'id_detalle_tarea', // Foreign key en DetalleDocumento
+            'id', // Local key en DetalleEtapa
+            'id'  // Local key en DetalleTarea
+        );
     }
 }

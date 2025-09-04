@@ -46,7 +46,7 @@ class Etapa extends Model
     public function documentos()
     {
         // Nueva lógica: los documentos de una etapa son todos los documentos de sus tareas
-        // Especificamos la tabla para evitar ambigüedad en la columna 'estado'
+        // Especificamos las tablas para evitar ambigüedad en las columnas
         return $this->hasManyThrough(
             Documento::class, 
             Tarea::class, 
@@ -54,7 +54,7 @@ class Etapa extends Model
             'id_tarea', // Foreign key en tabla documentos
             'id', // Local key en tabla etapas
             'id'  // Local key en tabla tareas
-        )->select('documentos.*'); // Especificar que queremos todas las columnas de documentos
+        );
     }
 
     public function tareas()

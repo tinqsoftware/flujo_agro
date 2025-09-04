@@ -226,10 +226,6 @@ class FlujoController extends Controller
             ];
         }
         $treeJson = json_encode($tree);
-        
-        // Debug temporal: ver qué datos estamos pasando
-        \Illuminate\Support\Facades\Log::info('Tree data for edit:', ['tree' => $tree]);
-        
         $isEditMode = true;
 
         // Obtener roles (excluyendo SUPERADMIN)
