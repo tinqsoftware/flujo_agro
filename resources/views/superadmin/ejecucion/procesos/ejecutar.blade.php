@@ -722,6 +722,13 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Flujo ID:', flujoId);
     console.log('Proceso iniciado:', procesoIniciado);
     
+    // Verificar si la URL tiene parámetros de query innecesarios y limpiarla
+    if (window.location.search && window.location.search === '?') {
+        const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+        console.log('URL limpiada de parámetros vacíos');
+    }
+    
     // Inicializar estado del flujo
     if (procesoIniciado) {
         actualizarProgreso();
@@ -733,6 +740,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const estadoIcon = primeraEtapa.querySelector('.estado-etapa i');
             estadoIcon.classList.remove('text-secondary');
             estadoIcon.classList.add('text-primary');
+        }
+        
+        // Verificar si el flujo ya está completado al cargar la página
+        if (detalleFlujoId) {
+            setTimeout(() => {
+                verificarEstadoCompletado();
+            }, 1000); // Dar tiempo para que se cargue la interfaz
         }
     }
 
@@ -1206,9 +1220,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Verificar si se completó etapa o flujo
                 if (data.estados) {
+                    console.log('Estados recibidos:', data.estados);
                     if (typeof data.estados === 'object' && data.estados.flujo_completado) {
+                        console.log('Flujo completado detectado, mostrando animación');
                         mostrarAnimacionComplecion(data.estados.flujo_nombre);
                     } else if (data.estados === true) {
+                        console.log('Etapa completada detectada');
                         const etapaCard = tareaItem.closest('.etapa-card');
                         marcarEtapaComoCompletada(etapaCard);
                     }
@@ -1333,9 +1350,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Verificar si se completó etapa o flujo
                 if (data.estados) {
+                    console.log('Estados recibidos (documento):', data.estados);
                     if (typeof data.estados === 'object' && data.estados.flujo_completado) {
+                        console.log('Flujo completado detectado por documento, mostrando animación');
                         mostrarAnimacionComplecion(data.estados.flujo_nombre);
                     } else if (data.estados === true) {
+                        console.log('Etapa completada detectada por documento');
                         const etapaCard = documentoItem.closest('.etapa-card');
                         marcarEtapaComoCompletada(etapaCard);
                     }
@@ -1868,6 +1888,35 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Función para verificar si el flujo está completado al cargar la página
+    function verificarEstadoCompletado() {
+        if (!detalleFlujoId) {
+            return;
+        }
+        
+        console.log('Verificando estado completado del flujo...');
+        
+        fetch(`{{ route('ejecucion.detalle.progreso', ':detalleFlujoId') }}`.replace(':detalleFlujoId', detalleFlujoId))
+        .then(response => response.json())
+        .then(data => {
+            console.log('Datos de progreso obtenidos:', data);
+            
+            if (data && data.progreso_general === 100) {
+                console.log('Flujo al 100% detectado');
+                // Si el flujo está al 100%, debería activarse la animación automáticamente
+                // Simular que se está completando ahora mismo
+                setTimeout(() => {
+                    const flujoNombre = '{{ $flujo->nombre ?? "Flujo" }}';
+                    console.log('Activando animación para flujo completado:', flujoNombre);
+                    mostrarAnimacionComplecion(flujoNombre);
+                }, 500);
+            }
+        })
+        .catch(error => {
+            console.error('Error al verificar progreso inicial:', error);
+        });
+    }
+
     // Función para marcar etapa como completada
     function marcarEtapaComoCompletada(etapaCard) {
         if (!etapaCard) return;
@@ -2002,14 +2051,16 @@ document.addEventListener('DOMContentLoaded', function() {
             countdownElement.textContent = countdown;
             if (countdown <= 0) {
                 clearInterval(countdownInterval);
-                window.location.href = '{{ route('ejecucion.index') }}';
+                // Asegurar redirección limpia sin parámetros de query
+                window.location.href = '/ejecucion';
             }
         }, 1000);
         
         // Botón para redirigir inmediatamente
         overlay.querySelector('#redirect-now').addEventListener('click', () => {
             clearInterval(countdownInterval);
-            window.location.href = '{{ route('ejecucion.index') }}';
+            // Asegurar redirección limpia sin parámetros de query
+            window.location.href = '/ejecucion';
         });
     }
 

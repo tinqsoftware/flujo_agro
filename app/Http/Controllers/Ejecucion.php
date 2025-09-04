@@ -1181,8 +1181,8 @@ class Ejecucion extends Controller
                 return response()->json(['error' => 'No se pueden subir documentos a una ejecución cancelada'], 400);
             }
 
-            // Buscar el documento para validar permisos
-            $documento = \App\Models\Documento::find($documentoId);
+            // Buscar el documento para validar permisos, cargando las relaciones necesarias
+            $documento = \App\Models\Documento::with(['tarea', 'tarea.etapa'])->find($documentoId);
             if (!$documento) {
                 return response()->json(['error' => 'Documento no encontrado'], 404);
             }
@@ -1204,14 +1204,15 @@ class Ejecucion extends Controller
             // Guardar archivo
             $rutaArchivo = $archivo->storeAs($directorio, $nombreArchivo, 'public');
 
-            // Buscar la etapa del documento
-            $etapa = $documento->etapa;
-            if (!$etapa) {
-                throw new \Exception('Etapa del documento no encontrada');
+            // En el nuevo enfoque, necesitamos encontrar el DetalleTarea directamente
+            // basándonos en la tarea del documento y la ejecución actual
+            $tarea = $documento->tarea;
+            if (!$tarea) {
+                throw new \Exception('Tarea del documento no encontrada');
             }
 
-            // Buscar el detalle_etapa correspondiente a esta ejecución
-            $detalleEtapa = DetalleEtapa::where('id_etapa', $etapa->id)
+            // Buscar el detalle_etapa correspondiente a esta ejecución a través de la tarea
+            $detalleEtapa = DetalleEtapa::where('id_etapa', $tarea->id_etapa)
                 ->where('id_detalle_flujo', $detalleFlujoId)
                 ->first();
 
@@ -1219,10 +1220,18 @@ class Ejecucion extends Controller
                 throw new \Exception('Detalle de etapa no encontrado para esta ejecución');
             }
 
+            // Buscar o crear el DetalleTarea correspondiente
+            $detalleTarea = DetalleTarea::where('id_tarea', $tarea->id)
+                ->where('id_detalle_etapa', $detalleEtapa->id)
+                ->first();
+
+            if (!$detalleTarea) {
+                throw new \Exception('DetalleTarea no encontrado para esta ejecución');
+            }
+
+            // Verificar si ya existe un detalle para este documento en esta ejecución específica
             $detalle = DetalleDocumento::where('id_documento', $documentoId)
-                ->whereHas('detalleTarea', function($query) use ($detalleEtapa) {
-                    $query->where('id_detalle_etapa', $detalleEtapa->id);
-                })
+                ->where('id_detalle_tarea', $detalleTarea->id)
                 ->first();
 
             if ($detalle) {
@@ -1239,7 +1248,7 @@ class Ejecucion extends Controller
                 // Crear nuevo detalle para esta ejecución específica - estado 2 (pendiente de validación)
                 $detalle = DetalleDocumento::create([
                     'id_documento' => $documentoId,
-                    'id_detalle_etapa' => $detalleEtapa->id,
+                    'id_detalle_tarea' => $detalleTarea->id, // Nueva relación a través de DetalleTarea
                     'estado' => 2, // 2 = archivo subido, pendiente de validación con "Grabar"
                     'ruta_doc' => $rutaArchivo,
                     'archivo_url' => Storage::url($rutaArchivo),
@@ -1346,7 +1355,11 @@ class Ejecucion extends Controller
             } else { // documento
                 $documento = \App\Models\Documento::find($itemId);
                 if (!$documento) return false;
-                $etapa = $documento->etapa;
+                
+                // Obtener etapa a través de la tarea
+                $tarea = $documento->tarea;
+                if (!$tarea) return false;
+                $etapa = $tarea->etapa;
             }
 
             if (!$etapa || !$detalleFlujoId) return false;
@@ -1483,8 +1496,16 @@ class Ejecucion extends Controller
             // Buscar el documento
             $documento = \App\Models\Documento::findOrFail($documentoId);
             
-            // Buscar el detalle_etapa correspondiente
-            $detalleEtapa = DetalleEtapa::where('id_etapa', $documento->id_etapa)
+            // Buscar el detalle_etapa correspondiente a través de la tarea
+            $tarea = $documento->tarea;
+            if (!$tarea) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tarea del documento no encontrada'
+                ], 404);
+            }
+            
+            $detalleEtapa = DetalleEtapa::where('id_etapa', $tarea->id_etapa)
                 ->where('id_detalle_flujo', $detalleFlujoId)
                 ->firstOrFail();
 
