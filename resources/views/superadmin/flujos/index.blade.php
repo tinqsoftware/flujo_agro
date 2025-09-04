@@ -4,9 +4,21 @@
 @section('page-subtitle','Listado general de flujos')
 
 @section('header-actions')
-  <a href="{{ route('flujos.create') }}" class="btn btn-light">
-    <i class="fas fa-project-diagram me-1"></i> Nuevo Flujo
-  </a>
+  <div class="d-flex gap-2 align-items-center">
+    @if($isSuper && $empresas->count() > 0)
+      <select name="empresa_id" class="form-select" style="min-width: 50px;" onchange="filtrarPorEmpresa(this.value)">
+        <option value="">Todas las empresas</option>
+        @foreach($empresas as $empresa)
+          <option value="{{ $empresa->id }}" {{ $empresaId == $empresa->id ? 'selected' : '' }}>
+            {{ $empresa->nombre }}
+          </option>
+        @endforeach
+      </select>
+    @endif
+    <a href="{{ route('flujos.create') }}" class="btn btn-light">
+      <i class="fas fa-project-diagram me-1"></i> Nuevo Flujo
+    </a>
+  </div>
 @endsection
 
 @section('content-area')
@@ -17,6 +29,7 @@
         $qs = request()->query();
         $make = fn($o=[]) => route('flujos.index', array_merge($qs,$o));
         $estado = $estado ?? 'todos';
+        $empresaId = $empresaId ?? '';
         $btn = function($label,$val) use ($estado,$make) {
           $active = $estado===$val ? 'active' : '';
           return '<a class="btn btn-outline-secondary '.$active.'" href="'.$make(['estado'=>$val,'page'=>1]).'">'.$label.'</a>';
@@ -28,6 +41,9 @@
     </div>
 
     <div class="ms-auto d-flex" style="min-width:320px;">
+      @if($isSuper && $empresaId)
+        <input type="hidden" name="empresa_id" value="{{ $empresaId }}">
+      @endif
       <input type="text" name="q" value="{{ $q }}" class="form-control" placeholder="Buscar por nombre...">
       <button class="btn btn-primary ms-2"><i class="fas fa-search"></i></button>
     </div>
@@ -146,6 +162,23 @@
       Mostrando {{ $flujos->firstItem() }} - {{ $flujos->lastItem() }} de {{ $flujos->total() }} resultados
     </small>
   </div>
-</div>
+  </div>
 @endif
 @endsection
+
+@if($isSuper)
+@push('scripts')
+<script>
+function filtrarPorEmpresa(empresaId) {
+    const url = new URL(window.location.href);
+    if (empresaId) {
+        url.searchParams.set('empresa_id', empresaId);
+    } else {
+        url.searchParams.delete('empresa_id');
+    }
+    url.searchParams.set('page', 1); // Reset pagination
+    window.location.href = url.toString();
+}
+</script>
+@endpush
+@endif

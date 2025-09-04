@@ -31,12 +31,14 @@ class FlujoController extends Controller
 
         $estado = $request->get('estado','todos');
         $q      = trim((string)$request->get('q',''));
+        $empresaId = $request->get('empresa_id');
 
         $qf = Flujo::with(['empresa','tipo'])
             ->when(!$isSuper, fn($x)=>$x->where('id_emp',$user->id_emp))
             ->when($estado==='activos', fn($x)=>$x->where('estado',1))
             ->when($estado==='inactivos', fn($x)=>$x->where('estado',0))
             ->when($q!=='', fn($x)=>$x->where('nombre','like',"%{$q}%"))
+            ->when($isSuper && $empresaId, fn($x)=>$x->where('id_emp',$empresaId))
             ->orderByDesc('created_at');
 
         $flujos = $qf->paginate(12)->appends($request->query());
@@ -66,8 +68,11 @@ class FlujoController extends Controller
             foreach ($ids as $fid) $etapasPorFlujo[$fid] = $etps->get($fid) ?? collect();
         }
 
+        // Obtener empresas para el filtro (solo para superadmin)
+        $empresas = $isSuper ? Empresa::where('estado', 1)->orderBy('nombre')->get(['id', 'nombre']) : collect();
+
         return view('superadmin.flujos.index', compact(
-            'flujos','etapasPorFlujo','isSuper','estado','q'
+            'flujos','etapasPorFlujo','isSuper','estado','q','empresas','empresaId'
         ));
     }
 
