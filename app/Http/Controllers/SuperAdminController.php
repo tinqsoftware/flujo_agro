@@ -80,8 +80,42 @@ class SuperAdminController extends Controller
 
     public function empresas()
     {
-        $empresas = Empresa::with(['userAdmin', 'userCreate'])->paginate(10);
+        $empresas = Empresa::with(['userAdmin', 'userCreate'])
+            ->withCount(['flujos' => function($query) {
+                $query->where('estado', 1); // Solo flujos activos
+            }])
+            ->paginate(10);
         return view('superadmin.empresas.index', compact('empresas'));
+    }
+
+    public function showEmpresa(Empresa $empresa)
+    {
+        $empresa->load([
+            'userAdmin',
+            'userCreate', 
+            'flujos' => function($query) {
+                $query->with('tipo')->orderBy('created_at', 'desc');
+            },
+            'fichas' => function($query) {
+                $query->orderBy('created_at', 'desc');
+            }
+        ]);
+        
+        $estadisticas = [
+            'total_flujos' => $empresa->flujos->count(),
+            'flujos_activos' => $empresa->flujos->where('estado', 1)->count(),
+            'flujos_inactivos' => $empresa->flujos->where('estado', 0)->count(),
+            'total_fichas' => $empresa->fichas->count(),
+            'usuarios_count' => User::where('id_emp', $empresa->id)->count(),
+            'clientes_count' => $empresa->clientes()->count(),
+            'productos_count' => $empresa->productos()->count(),
+            'proveedores_count' => $empresa->proveedores()->count()
+        ];
+        
+        return response()->json([
+            'empresa' => $empresa,
+            'estadisticas' => $estadisticas
+        ]);
     }
 
     public function createEmpresa()

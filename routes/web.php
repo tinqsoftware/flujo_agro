@@ -31,6 +31,7 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::get('/empresas', [SuperAdminController::class, 'empresas'])->name('empresas');
         Route::get('/empresas/create', [SuperAdminController::class, 'createEmpresa'])->name('empresas.create');
         Route::post('/empresas', [SuperAdminController::class, 'storeEmpresa'])->name('empresas.store');
+        Route::get('/empresas/{empresa}/show', [SuperAdminController::class, 'showEmpresa'])->name('empresas.show');
         Route::get('/empresas/{empresa}/edit', [SuperAdminController::class, 'editEmpresa'])->name('empresas.edit');
         Route::put('/empresas/{empresa}', [SuperAdminController::class, 'updateEmpresa'])->name('empresas.update');
         Route::delete('/empresas/{empresa}', [SuperAdminController::class, 'destroyEmpresa'])->name('empresas.destroy');
