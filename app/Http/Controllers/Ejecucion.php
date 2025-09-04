@@ -150,28 +150,88 @@ class Ejecucion extends Controller
                 'etapas.documentos'
             ])->findOrFail($id);
 
-            // Cargar datos de progreso desde las tablas detalle
-            foreach ($flujo->etapas as $etapa) {
-                // Cargar tareas completadas con información del usuario
-                foreach ($etapa->tareas as $tarea) {
-                    $detalleTarea = DetalleTarea::with('userCreate')->where('id_tarea', $tarea->id)->first();
-                    $tarea->completada = $detalleTarea ? ($detalleTarea->estado == 3) : false;
-                    $tarea->detalle = $detalleTarea;
-                    Log::info('Tarea cargada', [
-                        'tarea_id' => $tarea->id,
-                        'detalle_estado' => $detalleTarea ? $detalleTarea->estado : 'null',
-                        'completada' => $tarea->completada
-                    ]);
+            // Buscar ejecución activa para mostrar progreso real
+            $detalleFlujoActivo = DetalleFlujo::where('id_flujo', $flujo->id)
+                ->when(!$isSuper, fn($q) => $q->where('id_emp', $user->id_emp))
+                ->whereIn('estado', [2, 3, 4]) // En proceso, completado, pausado
+                ->orderBy('updated_at', 'desc')
+                ->first();
+
+            // Si hay ejecución activa, cargar datos específicos de esa ejecución
+            if ($detalleFlujoActivo) {
+                // Cargar estados específicos de esta ejecución (DetalleFlujo)
+                foreach ($flujo->etapas as $etapa) {
+                    // Buscar el DetalleEtapa correspondiente
+                    $detalleEtapa = DetalleEtapa::where('id_etapa', $etapa->id)
+                        ->where('id_detalle_flujo', $detalleFlujoActivo->id)
+                        ->first();
+                    
+                    $etapa->detalle_etapa = $detalleEtapa;
+                    $etapa->estado_ejecucion = $detalleEtapa ? $detalleEtapa->estado : 1;
+
+                    foreach ($etapa->tareas as $tarea) {
+                        // Buscar DetalleTarea vinculado a esta ejecución específica a través del detalle_etapa
+                        $detalleTarea = null;
+                        if ($detalleEtapa) {
+                            $detalleTarea = DetalleTarea::with('userCreate')->where('id_tarea', $tarea->id)
+                                ->where('id_detalle_etapa', $detalleEtapa->id)
+                                ->whereNotIn('estado', [66, 99]) // Excluir tareas que no influyen en flujo (66) y canceladas (99)
+                                ->first();
+                        }
+                        
+                        if ($detalleTarea) {
+                            // Solo estado 3 significa completado
+                            $tarea->completada = ($detalleTarea->estado == 3);
+                            $tarea->detalle_id = $detalleTarea->id;
+                            $tarea->detalle_flujo_id = $detalleFlujoActivo->id;
+                            $tarea->detalle = $detalleTarea;
+                        } else {
+                            // Si no tiene detalle o tiene estado 66, marcar como no incluida
+                            $tarea->completada = false;
+                            $tarea->detalle = null;
+                        }
+                    }
+                    
+                    foreach ($etapa->documentos as $documento) {
+                        // Buscar DetalleDocumento vinculado a esta ejecución específica a través del detalle_tarea
+                        $detalleDocumento = null;
+                        if ($detalleEtapa) {
+                            $detalleDocumento = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)
+                                ->whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                                    $query->where('id_detalle_etapa', $detalleEtapa->id);
+                                })
+                                ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo (66) y cancelados (99)
+                                ->first();
+                        }
+                        
+                        if ($detalleDocumento) {
+                            // Solo estado 3 significa subido/completado
+                            $documento->subido = ($detalleDocumento->estado == 3);
+                            $documento->url_archivo = ($detalleDocumento && $detalleDocumento->ruta_doc) ? 
+                                Storage::url($detalleDocumento->ruta_doc) : null;
+                            $documento->detalle_id = $detalleDocumento->id;
+                            $documento->detalle_flujo_id = $detalleFlujoActivo->id;
+                            $documento->detalle = $detalleDocumento;
+                        } else {
+                            // Si no tiene detalle o tiene estado 66, marcar como no incluido
+                            $documento->subido = false;
+                            $documento->url_archivo = null;
+                            $documento->detalle = null;
+                        }
+                    }
                 }
-                
-                // Cargar documentos subidos con información del usuario
-                foreach ($etapa->documentos as $documento) {
-                    $detalleDocumento = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)->first();
-                    $documento->subido = $detalleDocumento ? $detalleDocumento->estado : false;
-                    $documento->detalle = $detalleDocumento;
-                    // Si hay archivo subido, generar URL
-                    if ($detalleDocumento && $detalleDocumento->ruta_doc) {
-                        $documento->url_archivo = Storage::url($detalleDocumento->ruta_doc);
+            } else {
+                // Si no hay ejecución activa, marcar todo como no completado
+                foreach ($flujo->etapas as $etapa) {
+                    foreach ($etapa->tareas as $tarea) {
+                        $tarea->completada = false;
+                        $tarea->detalle = null;
+                    }
+                    
+                    foreach ($etapa->documentos as $documento) {
+                        $documento->subido = false;
+                        $documento->url_archivo = null;
+                        $documento->detalle = null;
                     }
                 }
             }
@@ -203,13 +263,14 @@ class Ejecucion extends Controller
                 'flujo_id' => $flujo->id,
                 'isSuper' => $isSuper,
                 'user_role' => $user->rol->nombre,
-                'view_data_flujo_id' => $flujo->id
+                'view_data_flujo_id' => $flujo->id,
+                'detalle_flujo_activo' => $detalleFlujoActivo ? $detalleFlujoActivo->id : null
             ]);
 
             // Pasar información del rol para la vista
             $userRole = $user->rol->nombre;
 
-            return view('superadmin.ejecucion.show', compact('flujo', 'isSuper', 'userRole'));
+            return view('superadmin.ejecucion.show', compact('flujo', 'isSuper', 'userRole', 'detalleFlujoActivo'));
 
         } catch (\Exception $e) {
             Log::error('Error in show method', [
@@ -1308,49 +1369,28 @@ class Ejecucion extends Controller
             return response()->json(['error' => 'No autorizado'], 403);
         }
 
-        $flujo->load(['etapas.tareas', 'etapas.documentos']);
-        
-        $etapas = [];
-        $totalItems = 0;
-        $itemsCompletados = 0;
+        // Buscar ejecución activa de este flujo
+        $detalleFlujoActivo = DetalleFlujo::where('id_flujo', $flujo->id)
+            ->when(!$isSuper, fn($q) => $q->where('id_emp', $user->id_emp))
+            ->whereIn('estado', [2, 3, 4]) // En proceso, completado, pausado
+            ->orderBy('updated_at', 'desc')
+            ->first();
 
-        foreach ($flujo->etapas as $etapa) {
-            $tareasCompletadas = DetalleTarea::where('estado', 3) // Solo estado 3 es completado
-                ->whereIn('id_tarea', $etapa->tareas->pluck('id'))
-                ->whereNotIn('estado', [99]) // Excluir tareas canceladas
-                ->count();
-            
-            $documentosSubidos = DetalleDocumento::where('estado', 3) // Solo estado 3 es subido
-                ->whereIn('id_documento', $etapa->documentos->pluck('id'))
-                ->whereNotIn('estado', [99]) // Excluir documentos cancelados
-                ->count();
-            
-            $totalEtapa = $etapa->tareas->count() + $etapa->documentos->count();
-            $completadosEtapa = $tareasCompletadas + $documentosSubidos;
-            
-            $progresoEtapa = $totalEtapa > 0 ? round(($completadosEtapa / $totalEtapa) * 100) : 0;
-            
-            $etapas[] = [
-                'id' => $etapa->id,
-                'progreso' => $progresoEtapa,
-                'tareas_completadas' => $tareasCompletadas,
-                'documentos_subidos' => $documentosSubidos,
-                'total_tareas' => $etapa->tareas->count(),
-                'total_documentos' => $etapa->documentos->count()
-            ];
-            
-            $totalItems += $totalEtapa;
-            $itemsCompletados += $completadosEtapa;
+        if (!$detalleFlujoActivo) {
+            return response()->json([
+                'progreso_general' => 0,
+                'etapas' => [],
+                'mensaje' => 'No hay ejecuciones activas para este flujo'
+            ]);
         }
 
-        $progresoGeneral = $totalItems > 0 ? round(($itemsCompletados / $totalItems) * 100) : 0;
-
-        return response()->json([
-            'progreso_general' => $progresoGeneral,
-            'etapas' => $etapas,
-            'total_items' => $totalItems,
-            'items_completados' => $itemsCompletados
-        ]);
+        // Usar el método progreso existente que maneja DetalleFlujo
+        $progresoResponse = $this->progreso($detalleFlujoActivo);
+        
+        // Como progreso() retorna un JsonResponse, necesitamos obtener los datos
+        $responseData = json_decode($progresoResponse->getContent(), true);
+        
+        return response()->json($responseData);
     }
 
     /**

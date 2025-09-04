@@ -194,12 +194,18 @@
                     <div class="card-body">
                         <h5 class="text-primary mb-1">Progreso</h5>
                         <h2 class="mb-0" id="progreso-general">
-                            @if($flujo->estado == 3)
-                                100%
-                            @elseif($flujo->estado == 2)
-                                <span class="text-warning">En curso</span>
+                            @if($detalleFlujoActivo)
+                                @if($detalleFlujoActivo->estado == 3)
+                                    <span class="text-success">Completado</span>
+                                @elseif($detalleFlujoActivo->estado == 2)
+                                    <span class="text-warning">Calculando...</span>
+                                @elseif($detalleFlujoActivo->estado == 4)
+                                    <span class="text-secondary">Pausado</span>
+                                @else
+                                    <span class="text-muted">0%</span>
+                                @endif
                             @else
-                                0%
+                                <span class="text-muted">Sin ejecución</span>
                             @endif
                         </h2>
                     </div>
@@ -244,7 +250,7 @@
                     <div class="col-md-3">
                         <div class="border rounded p-3">
                             <i class="fas fa-file-pdf fa-2x text-danger mb-2"></i>
-                            <h4 class="mb-1">{{ $flujo->etapas->sum(function($etapa) { return $etapa->documentos->count(); }) }}</h4>
+                            <h4 class="mb-1">{{ $flujo->etapas->sum(function($etapa) { return $etapa->tareas->sum(function($tarea) { return $tarea->documentos->count(); }); }) }}</h4>
                             <p class="text-muted mb-0">Documentos Totales</p>
                         </div>
                     </div>
@@ -274,23 +280,20 @@
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center">
                 <div class="estado-etapa me-3">
-                    @if($flujo->estado == 3)
-                        <i class="fas fa-check-circle text-success" id="estado-etapa-{{ $etapa->id }}"></i>
-                    @elseif($flujo->estado == 2)
-                        <i class="fas fa-play-circle text-warning" id="estado-etapa-{{ $etapa->id }}"></i>
-                    @else
+                    @if($detalleFlujoActivo)
+                        <!-- El estado se actualizará via JavaScript -->
                         <i class="fas fa-circle text-secondary" id="estado-etapa-{{ $etapa->id }}"></i>
+                    @else
+                        <i class="fas fa-circle text-muted" id="estado-etapa-{{ $etapa->id }}"></i>
                     @endif
                 </div>
                 <div>
                     <h6 class="mb-0">{{ $etapa->nro }}. {{ $etapa->nombre }}</h6>
                     <small class="text-muted">
-                        @if($flujo->estado == 3)
-                            Completada
-                        @elseif($flujo->estado == 2)
-                            En ejecución
+                        @if($detalleFlujoActivo)
+                            Estado será actualizado...
                         @else
-                            Lista para ejecutar
+                            Sin ejecución activa
                         @endif
                         @if($etapa->descripcion)
                             • {{ \Illuminate\Support\Str::limit($etapa->descripcion, 50) }}
@@ -355,15 +358,21 @@
                 @endif
 
                 <!-- Documentos -->
-                @if($etapa->documentos->count() > 0)
+                @php
+                    $documentosEtapa = collect();
+                    foreach($etapa->tareas as $tarea) {
+                        $documentosEtapa = $documentosEtapa->merge($tarea->documentos);
+                    }
+                @endphp
+                @if($documentosEtapa->count() > 0)
                 <div class="col-md-6">
                     <div class="d-flex align-items-center mb-3">
                         <i class="fas fa-file-pdf text-danger me-2"></i>
-                        <h6 class="mb-0">Documentos ({{ $etapa->documentos->count() }})</h6>
+                        <h6 class="mb-0">Documentos ({{ $documentosEtapa->count() }})</h6>
                     </div>
                     
                     <div class="documentos-list">
-                        @foreach($etapa->documentos as $documento)
+                        @foreach($documentosEtapa as $documento)
                         <div class="documento-item mb-3 p-3 rounded {{ isset($documento->subido) && $documento->subido ? 'subido' : 'pendiente' }}" data-documento-id="{{ $documento->id }}">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div class="flex-grow-1">
@@ -524,7 +533,7 @@
                             <div class="card border-danger">
                                 <div class="card-body text-center">
                                     <i class="fas fa-file-pdf fa-2x text-danger mb-2"></i>
-                                    <h5 class="card-title">{{ $flujo->etapas->sum(function($etapa) { return $etapa->documentos->count(); }) }}</h5>
+                                    <h5 class="card-title">{{ $flujo->etapas->sum(function($etapa) { return $etapa->tareas->sum(function($tarea) { return $tarea->documentos->count(); }); }) }}</h5>
                                     <p class="card-text text-muted">Documentos Totales</p>
                                 </div>
                             </div>
@@ -636,14 +645,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const flujoEstado = @json($flujo->estado);
     const isSuper = @json($isSuper);
     const etapasCount = @json($flujo->etapas->count());
+    const detalleFlujoActivo = @json($detalleFlujoActivo);
     
     console.log('Flujo ID:', flujoId);
     console.log('Estado del flujo:', flujoEstado);
     console.log('Es SUPERADMIN:', isSuper);
     console.log('Número de etapas:', etapasCount);
+    console.log('DetalleFlujo activo:', detalleFlujoActivo);
     
-    // Si el flujo está en ejecución o completado, obtener progreso real
-    if (flujoEstado >= 2) {
+    // Si hay una ejecución activa, obtener progreso real
+    if (detalleFlujoActivo && detalleFlujoActivo.id) {
         actualizarProgreso();
     }
 
@@ -669,9 +680,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para actualizar progreso desde el servidor
     function actualizarProgreso() {
-        if (flujoEstado < 2) return; // Solo obtener progreso si está en ejecución o completado
+        if (!detalleFlujoActivo || !detalleFlujoActivo.id) {
+            console.log('No hay ejecución activa para obtener progreso');
+            return;
+        }
         
-        const url = '/ejecucion/' + flujoId + '/progreso';
+        const url = '/ejecucion/detalle/' + detalleFlujoActivo.id + '/progreso';
         console.log('URL de progreso:', url);
         
         fetch(url)
