@@ -63,7 +63,11 @@ class Ejecucion extends Controller
         // Obtener ejecuciones activas usando la tabla detalle_flujo
         $ejecucionesActivas = collect();
         if (!$isSuper) {
-            $ejecucionesActivas = DetalleFlujo::with(['flujo.empresa', 'flujo.tipo', 'flujo.etapas'])
+            $ejecucionesActivas = DetalleFlujo::with([
+                'flujo.empresa', 
+                'flujo.tipo', 
+                'flujo.etapas.tareas.documentos'
+            ])
                 ->where('id_emp', $user->id_emp)
                 ->whereIn('estado', [2, 3, 4, 99]) // 2 = En ejecución, 3 = Terminado, 4 = Pausado, 99 = Cancelado
                 ->orderBy('estado') // Primero en ejecución, luego pausados, luego terminados, luego cancelados
@@ -71,7 +75,11 @@ class Ejecucion extends Controller
                 ->get();
         } else {
             // Para SUPERADMIN, mostrar todas las ejecuciones
-            $ejecucionesActivas = DetalleFlujo::with(['flujo.empresa', 'flujo.tipo', 'flujo.etapas'])
+            $ejecucionesActivas = DetalleFlujo::with([
+                'flujo.empresa', 
+                'flujo.tipo', 
+                'flujo.etapas.tareas.documentos'
+            ])
                 ->whereIn('estado', [2, 3, 4, 99])
                 ->orderBy('estado')
                 ->orderBy('updated_at', 'desc')
@@ -87,11 +95,15 @@ class Ejecucion extends Controller
                     return $etapa->documentos()->where('documentos.estado', 1)->count();
                 });
                 
+                // Calcular progreso usando lógica simplificada
+                $progresoPorcentaje = $this->calcularProgresoSimple($detalleFlujo);
+                
                 $flujo->total_etapas = $totalEtapas;
                 $flujo->total_documentos = $totalDocumentos;
                 $flujo->estado_ejecucion = $detalleFlujo->estado;
                 $flujo->detalle_flujo_id = $detalleFlujo->id;
                 $flujo->fecha_ejecucion = $detalleFlujo->updated_at;
+                $flujo->progreso_porcentaje = $progresoPorcentaje;
             }
             return $detalleFlujo;
         });
@@ -2270,5 +2282,82 @@ class Ejecucion extends Controller
 
             return response()->json(['error' => 'Error al crear la nueva ejecución'], 500);
         }
+    }
+
+    /**
+     * Calcula el progreso simplificado para el índice
+     * Basado en la lógica del método progreso() pero sin retornar JSON
+     */
+    private function calcularProgresoSimple(DetalleFlujo $detalleFlujo)
+    {
+        $flujo = $detalleFlujo->flujo;
+        if (!$flujo) {
+            return 0;
+        }
+
+        $items_completados = 0;
+        $total_items = 0;
+
+        foreach ($flujo->etapas as $etapa) {
+            // Buscar detalle_etapa para esta ejecución
+            $detalleEtapa = DetalleEtapa::where('id_etapa', $etapa->id)
+                ->where('id_detalle_flujo', $detalleFlujo->id)
+                ->first();
+            
+            if (!$detalleEtapa) {
+                continue;
+            }
+
+            // Obtener solo las tareas que influyen en el flujo (excluir estado 66)
+            $tareasActivasIds = DetalleTarea::where('id_detalle_etapa', $detalleEtapa->id)
+                ->whereNotIn('estado', [66, 99]) // Excluir tareas que no influyen en flujo (66) y canceladas (99)
+                ->pluck('id_tarea')
+                ->toArray();
+
+            $total_items += count($tareasActivasIds);
+
+            // Contar tareas completadas
+            $tareasCompletadas = DetalleTarea::where('id_detalle_etapa', $detalleEtapa->id)
+                ->whereIn('id_tarea', $tareasActivasIds)
+                ->where('estado', 3)
+                ->count();
+
+            $items_completados += $tareasCompletadas;
+
+            // Contar documentos validados
+            foreach ($etapa->tareas as $tarea) {
+                if (!in_array($tarea->id, $tareasActivasIds)) {
+                    continue;
+                }
+
+                $detalleTarea = DetalleTarea::where('id_tarea', $tarea->id)
+                    ->where('id_detalle_etapa', $detalleEtapa->id)
+                    ->whereNotIn('estado', [66, 99])
+                    ->first();
+
+                if ($detalleTarea) {
+                    $documentosEtapa = $tarea->documentos()->where('documentos.estado', 1)->get();
+                    
+                    foreach ($documentosEtapa as $documento) {
+                        $total_items++;
+                        
+                        $documentoSubido = DetalleDocumento::where('id_documento', $documento->id)
+                            ->where('id_detalle_tarea', $detalleTarea->id)
+                            ->where('estado', 3) // Solo documentos validados
+                            ->first();
+
+                        if ($documentoSubido) {
+                            $items_completados++;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($total_items > 0) {
+            return round(($items_completados / $total_items) * 100);
+        }
+
+        return 0;
     }
 }

@@ -135,10 +135,8 @@
                                     <!-- Progreso -->
                                     <div class="mb-3">
                                         @php
-                                            // Calcular progreso real basado en etapas completadas
-                                            $etapasCompletadas = $detalleEjecucion->detalleEtapas->where('estado', 3)->count();
-                                            $totalEtapas = $detalleEjecucion->flujo->total_etapas;
-                                            $porcentajeProgreso = $totalEtapas > 0 ? round(($etapasCompletadas / $totalEtapas) * 100) : 0;
+                                            // Usar el progreso calculado en el controlador que incluye tareas y documentos
+                                            $porcentajeProgreso = $detalleEjecucion->flujo->progreso_porcentaje ?? 0;
                                         @endphp
                                         <div class="d-flex justify-content-between align-items-center">
                                             <small class="text-muted">Progreso</small>
@@ -251,12 +249,16 @@
 
                                         <!-- Estado completado -->
                                         <div class="mb-3">
+                                            @php
+                                                // Usar el progreso calculado en el controlador
+                                                $porcentajeProgreso = $detalleEjecucion->flujo->progreso_porcentaje ?? 100;
+                                            @endphp
                                             <div class="d-flex justify-content-between align-items-center">
                                                 <small class="text-muted">Estado</small>
-                                                <small class="text-success fw-bold">100%</small>
+                                                <small class="text-success fw-bold">{{ $porcentajeProgreso }}%</small>
                                             </div>
                                             <div class="progress" style="height: 6px;">
-                                                <div class="progress-bar bg-success" role="progressbar" style="width: 100%"></div>
+                                                <div class="progress-bar bg-success" role="progressbar" style="width: {{ $porcentajeProgreso }}%"></div>
                                             </div>
                                         </div>
 
@@ -361,19 +363,15 @@
                                         <!-- Progreso -->
                                         <div class="mb-3">
                                             @php
-                                                // Calcular progreso para pausadas/canceladas
+                                                // Usar el progreso calculado en el controlador que incluye tareas y documentos
+                                                $porcentajeProgreso = $detalleEjecucion->flujo->progreso_porcentaje ?? 0;
+                                                
                                                 if($detalleEjecucion->estado == 4) {
-                                                    // Pausada: calcular progreso real
-                                                    $etapasCompletadas = $detalleEjecucion->detalleEtapas->where('estado', 3)->count();
-                                                    $totalEtapas = $detalleEjecucion->flujo->total_etapas;
-                                                    $porcentajeProgreso = $totalEtapas > 0 ? round(($etapasCompletadas / $totalEtapas) * 100) : 0;
+                                                    // Pausada
                                                     $colorBarra = 'bg-secondary';
                                                     $textoProgreso = $porcentajeProgreso . '% (Pausada)';
                                                 } else {
-                                                    // Cancelada: progreso final antes de cancelación
-                                                    $etapasCompletadas = $detalleEjecucion->detalleEtapas->where('estado', 3)->count();
-                                                    $totalEtapas = $detalleEjecucion->flujo->total_etapas;
-                                                    $porcentajeProgreso = $totalEtapas > 0 ? round(($etapasCompletadas / $totalEtapas) * 100) : 0;
+                                                    // Cancelada
                                                     $colorBarra = 'bg-danger';
                                                     $textoProgreso = $porcentajeProgreso . '% (Cancelada)';
                                                 }
