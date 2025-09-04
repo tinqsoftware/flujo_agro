@@ -1523,7 +1523,7 @@ class Ejecucion extends Controller
                 ], 404);
             }
 
-            if (!$detalleDocumento->archivo_url) {
+            if (!$detalleDocumento->ruta_doc) {
                 return response()->json([
                     'success' => false,
                     'message' => 'El documento no tiene archivo para eliminar'
@@ -1533,10 +1533,9 @@ class Ejecucion extends Controller
             DB::beginTransaction();
 
             // Eliminar archivo físico del storage
-            $archivoPath = str_replace('/storage/', '', $detalleDocumento->archivo_url);
-            if (Storage::disk('public')->exists($archivoPath)) {
-                Storage::disk('public')->delete($archivoPath);
-                Log::info('Archivo físico eliminado', ['path' => $archivoPath]);
+            if ($detalleDocumento->ruta_doc && Storage::disk('public')->exists($detalleDocumento->ruta_doc)) {
+                Storage::disk('public')->delete($detalleDocumento->ruta_doc);
+                Log::info('Archivo físico eliminado', ['path' => $detalleDocumento->ruta_doc]);
             }
 
             // Actualizar el detalle_documento - resetear a estado inicial

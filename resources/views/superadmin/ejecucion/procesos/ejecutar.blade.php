@@ -470,7 +470,14 @@
                                                title="Descargar">
                                                 <i class="fas fa-download"></i>
                                             </a>
-                                           
+                                            <!-- Botón para eliminar documento -->
+                                            <button type="button" class="btn btn-outline-danger btn-sm eliminar-documento" 
+                                                    data-documento-id="{{ $documento->id }}"
+                                                    data-documento-nombre="{{ $documento->nombre }}"
+                                                    data-url="{{ $documento->archivo_url }}"
+                                                    title="Eliminar documento">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
                                         @endif
                                         
                                         <!-- Botón para subir/cambiar archivo -->
