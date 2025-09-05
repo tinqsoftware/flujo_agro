@@ -811,6 +811,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // Inicializar control de etapas bloqueadas
     inicializarControlEtapas();
     
+    // Inicializar listeners de cambios visuales TEMPRANO
+    agregarListenersCambiosVisuales();
+    agregarListenersEliminarDocumento();
+    
+    // Inicializar event listeners de botones "Grabar Cambios" por etapa
+    document.querySelectorAll('.grabar-cambios-etapa').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const etapaId = this.dataset.etapaId;
+            grabarCambiosDeEtapa(etapaId);
+        });
+    });
+    
     // Inicializar estado del flujo
     if (procesoIniciado) {
         actualizarProgreso();
@@ -2370,7 +2382,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Guardar referencia para la confirmación
                     document.getElementById('confirmar-desmarcar-tarea').dataset.tareaCheckbox = this.id;
                     document.getElementById('confirmar-desmarcar-tarea').dataset.tareaId = tareaId;
-                    document.getElementById('confirmar-desmarcar-tarea').dataset.etapaId = etapaParent;
+                    document.getElementById('confirmar-desmarcar-tarea').dataset.etapaId = etapaId;
                     document.getElementById('confirmar-desmarcar-tarea').dataset.tipo = 'tarea';
                     
                     modal.show();
@@ -2379,8 +2391,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     actualizarVisualTarea(this, wasChecked);
                     
                     // Agregar a cambios pendientes por etapa
-                    if (etapaParent) {
-                        agregarCambioPendienteEtapa(etapaParent, 'tarea', tareaId, wasChecked);
+                    if (etapaId) {
+                        agregarCambioPendienteEtapa(etapaId, 'tarea', tareaId, wasChecked);
                     }
                 }
             });
@@ -2406,7 +2418,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const previouslyChecked = this.dataset.previouslyChecked === 'true';
                 
                 // Encontrar la etapa padre
-                const etapaParent = etapaCard ? etapaCard.querySelector('.grabar-cambios-etapa').dataset.etapaId : null;
+                const etapaId = etapaCard ? etapaCard.querySelector('.grabar-cambios-etapa').dataset.etapaId : null;
                 
                 // Si se está desmarcando un documento que estaba validado originalmente, mostrar modal de confirmación
                 if (!validado && previouslyChecked) {
@@ -2657,18 +2669,6 @@ document.addEventListener('DOMContentLoaded', function() {
         .finally(() => {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalHtml;
-        });
-    });
-
-    // Inicializar listeners de cambios visuales y eliminación de documentos
-    agregarListenersCambiosVisuales();
-    agregarListenersEliminarDocumento();
-    
-    // Inicializar event listeners de botones "Grabar Cambios" por etapa
-    document.querySelectorAll('.grabar-cambios-etapa').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const etapaId = this.dataset.etapaId;
-            grabarCambiosDeEtapa(etapaId);
         });
     });
 

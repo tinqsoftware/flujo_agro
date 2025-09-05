@@ -147,6 +147,81 @@
                                         </div>
                                     </div>
 
+                                    <!-- Estado de Etapa Actual -->
+                                    <div class="mb-3">
+                                        @php
+                                            // Obtener información de la etapa actual
+                                            $etapaActual = null;
+                                            $estadoEtapa = '';
+                                            $colorEtapa = 'secondary';
+                                            
+                                            // Buscar las etapas del flujo para determinar el estado actual
+                                            $etapas = $detalleEjecucion->flujo->etapas->sortBy('nro');
+                                            $totalEtapas = $etapas->count();
+                                            
+                                            // Determinar la etapa actual basándose en los detalles de etapa
+                                            foreach ($etapas as $etapa) {
+                                                $detalleEtapa = \App\Models\DetalleEtapa::where('id_etapa', $etapa->id)
+                                                    ->where('id_detalle_flujo', $detalleEjecucion->id)
+                                                    ->first();
+                                                
+                                                if ($detalleEtapa) {
+                                                    // Verificar si todas las tareas de esta etapa están completadas
+                                                    $tareasEtapa = \App\Models\DetalleTarea::where('id_detalle_etapa', $detalleEtapa->id)
+                                                        ->whereNotIn('estado', [66, 99]) // Excluir tareas que no influyen
+                                                        ->get();
+                                                    
+                                                    $totalTareas = $tareasEtapa->count();
+                                                    $tareasCompletadas = $tareasEtapa->where('estado', 3)->count();
+                                                    
+                                                    if ($totalTareas > 0) {
+                                                        if ($tareasCompletadas == $totalTareas) {
+                                                            // Etapa completada, continuar buscando la siguiente
+                                                            continue;
+                                                        } elseif ($tareasCompletadas > 0) {
+                                                            // Etapa en progreso
+                                                            $etapaActual = $etapa;
+                                                            $estadoEtapa = 'En Progreso';
+                                                            $colorEtapa = 'warning';
+                                                            break;
+                                                        } else {
+                                                            // Primera etapa sin completar
+                                                            $etapaActual = $etapa;
+                                                            $estadoEtapa = 'Por Comenzar';
+                                                            $colorEtapa = 'info';
+                                                            break;
+                                                        }
+                                                    }
+                                                } else {
+                                                    // Si no existe detalle_etapa, es la primera etapa por comenzar
+                                                    $etapaActual = $etapa;
+                                                    $estadoEtapa = 'Por Comenzar';
+                                                    $colorEtapa = 'info';
+                                                    break;
+                                                }
+                                            }
+                                            
+                                            // Si no se encontró etapa actual, verificar si todas están completadas
+                                            if (!$etapaActual) {
+                                                $ultimaEtapa = $etapas->last();
+                                                if ($ultimaEtapa) {
+                                                    $etapaActual = $ultimaEtapa;
+                                                    $estadoEtapa = 'Completada';
+                                                    $colorEtapa = 'success';
+                                                }
+                                            }
+                                        @endphp
+                                        
+                                        @if($etapaActual)
+                                            <div class="text-center">
+                                                <span class="badge bg-{{ $colorEtapa }} d-block mb-1">
+                                                    Etapa {{ $etapaActual->nro }}. {{ $estadoEtapa }}
+                                                </span>
+                                                <small class="text-muted">{{ $etapaActual->nombre }}</small>
+                                            </div>
+                                        @endif
+                                    </div>
+
                                     <!-- Fechas -->
                                     <div class="mb-3">
                                         <small class="text-muted d-block">
@@ -260,6 +335,30 @@
                                             <div class="progress" style="height: 6px;">
                                                 <div class="progress-bar bg-success" role="progressbar" style="width: {{ $porcentajeProgreso }}%"></div>
                                             </div>
+                                        </div>
+
+                                        <!-- Estado de Finalización -->
+                                        <div class="mb-3">
+                                            @php
+                                                // Para ejecuciones completadas, mostrar la última etapa
+                                                $etapas = $detalleEjecucion->flujo->etapas->sortBy('nro');
+                                                $ultimaEtapa = $etapas->last();
+                                            @endphp
+                                            
+                                            @if($ultimaEtapa)
+                                                <div class="text-center">
+                                                    <span class="badge bg-success d-block mb-1">
+                                                        Etapa {{ $ultimaEtapa->nro }}. Completada
+                                                    </span>
+                                                    <small class="text-muted">{{ $ultimaEtapa->nombre }}</small>
+                                                </div>
+                                            @else
+                                                <div class="text-center">
+                                                    <span class="badge bg-success d-block mb-1">
+                                                        Flujo Completado
+                                                    </span>
+                                                </div>
+                                            @endif
                                         </div>
 
                                         <!-- Fechas -->
@@ -383,6 +482,76 @@
                                             <div class="progress" style="height: 6px;">
                                                 <div class="progress-bar {{ $colorBarra }}" role="progressbar" style="width: {{ $porcentajeProgreso }}%"></div>
                                             </div>
+                                        </div>
+
+                                        <!-- Estado de Etapa Actual -->
+                                        <div class="mb-3">
+                                            @php
+                                                // Obtener información de la etapa actual para pausadas/canceladas
+                                                $etapaActual = null;
+                                                $estadoEtapa = '';
+                                                $colorEtapa = $detalleEjecucion->estado == 4 ? 'secondary' : 'danger';
+                                                
+                                                // Buscar las etapas del flujo para determinar el estado actual
+                                                $etapas = $detalleEjecucion->flujo->etapas->sortBy('nro');
+                                                
+                                                // Determinar la etapa actual basándose en los detalles de etapa
+                                                foreach ($etapas as $etapa) {
+                                                    $detalleEtapa = \App\Models\DetalleEtapa::where('id_etapa', $etapa->id)
+                                                        ->where('id_detalle_flujo', $detalleEjecucion->id)
+                                                        ->first();
+                                                    
+                                                    if ($detalleEtapa) {
+                                                        // Verificar si todas las tareas de esta etapa están completadas
+                                                        $tareasEtapa = \App\Models\DetalleTarea::where('id_detalle_etapa', $detalleEtapa->id)
+                                                            ->whereNotIn('estado', [66, 99]) // Excluir tareas que no influyen
+                                                            ->get();
+                                                        
+                                                        $totalTareas = $tareasEtapa->count();
+                                                        $tareasCompletadas = $tareasEtapa->where('estado', 3)->count();
+                                                        
+                                                        if ($totalTareas > 0) {
+                                                            if ($tareasCompletadas == $totalTareas) {
+                                                                // Etapa completada, continuar buscando la siguiente
+                                                                continue;
+                                                            } elseif ($tareasCompletadas > 0) {
+                                                                // Etapa en progreso
+                                                                $etapaActual = $etapa;
+                                                                $estadoEtapa = $detalleEjecucion->estado == 4 ? 'Pausada' : 'Cancelada';
+                                                                break;
+                                                            } else {
+                                                                // Primera etapa sin completar
+                                                                $etapaActual = $etapa;
+                                                                $estadoEtapa = $detalleEjecucion->estado == 4 ? 'Pausada' : 'Cancelada';
+                                                                break;
+                                                            }
+                                                        }
+                                                    } else {
+                                                        // Si no existe detalle_etapa, es la primera etapa
+                                                        $etapaActual = $etapa;
+                                                        $estadoEtapa = $detalleEjecucion->estado == 4 ? 'Pausada' : 'Cancelada';
+                                                        break;
+                                                    }
+                                                }
+                                                
+                                                // Si no se encontró etapa actual, tomar la última
+                                                if (!$etapaActual) {
+                                                    $ultimaEtapa = $etapas->last();
+                                                    if ($ultimaEtapa) {
+                                                        $etapaActual = $ultimaEtapa;
+                                                        $estadoEtapa = $detalleEjecucion->estado == 4 ? 'Pausada' : 'Cancelada';
+                                                    }
+                                                }
+                                            @endphp
+                                            
+                                            @if($etapaActual)
+                                                <div class="text-center">
+                                                    <span class="badge bg-{{ $colorEtapa }} d-block mb-1">
+                                                        Etapa {{ $etapaActual->nro }}. {{ $estadoEtapa }}
+                                                    </span>
+                                                    <small class="text-muted">{{ $etapaActual->nombre }}</small>
+                                                </div>
+                                            @endif
                                         </div>
 
                                         <!-- Motivo de cancelación si aplica -->
