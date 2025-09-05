@@ -282,6 +282,81 @@
 .notification .close-btn:hover {
     opacity: 1;
 }
+
+/* Nuevos estilos para la estructura de tareas con documentos agrupados */
+.tarea-container {
+    border-left: 4px solid #007bff !important;
+    transition: all 0.3s ease;
+    margin-bottom: 1rem;
+}
+
+.tarea-container:hover {
+    box-shadow: 0 2px 8px rgba(0,123,255,0.15);
+    transform: translateY(-1px);
+}
+
+.tarea-container .tarea-item {
+    background-color: white;
+    margin-bottom: 0;
+}
+
+.documentos-tarea {
+    border-left: 2px solid #e9ecef;
+    padding-left: 15px;
+    margin-left: 20px;
+    margin-top: 10px;
+}
+
+.documentos-tarea .documento-item {
+    border-left: 4px solid #dc3545 !important;
+    transition: all 0.2s ease;
+    margin-bottom: 0.75rem;
+}
+
+.documentos-tarea .documento-item:hover {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+}
+
+.documentos-sin-tarea {
+    border-top: 2px solid #e9ecef;
+    padding-top: 20px;
+    margin-top: 20px;
+}
+
+.tareas-con-documentos h6 {
+    color: #495057;
+    font-weight: 600;
+}
+
+.tarea-container .form-check-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.documentos-tarea .documento-item h6 {
+    color: #dc3545;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+/* Mejoras visuales para los badges */
+.tarea-container .badge {
+    font-size: 0.75rem;
+}
+
+.documentos-tarea .badge {
+    font-size: 0.7rem;
+}
+
+/* Espaciado mejorado */
+.tarea-container .d-flex.align-items-start {
+    gap: 0.5rem;
+}
+
+.documentos-tarea .small {
+    font-size: 0.8rem;
+}
 </style>
 @endpush
 
@@ -409,93 +484,84 @@
     <div class="etapa-content" id="etapa-content-{{ $etapa->id }}">
         <div class="card-body">
             <form class="etapa-form" data-etapa-id="{{ $etapa->id }}">
-                <div class="row">
-                    <!-- Tareas con sus documentos asociados -->
-                    @if($etapa->tareas->count() > 0)
-                    <div class="col-md-12">
-                        <div class="d-flex align-items-center mb-3">
-                            <i class="fas fa-tasks text-primary me-2"></i>
-                            <h6 class="mb-0">Tareas y Documentos ({{ $etapa->tareas->where('completada', true)->count() }}/{{ $etapa->tareas->count() }} tareas completadas)</h6>
+                <!-- Tareas con sus documentos agrupados -->
+                @if($etapa->tareas->count() > 0)
+                <div class="tareas-con-documentos">
+                    <div class="d-flex align-items-center mb-4">
+                        <i class="fas fa-tasks text-primary me-2"></i>
+                        <h6 class="mb-0">Tareas y Documentos ({{ $etapa->tareas->where('completada', true)->count() }}/{{ $etapa->tareas->count() }} tareas completadas)</h6>
+                    </div>
+                    
+                    @foreach($etapa->tareas as $tarea)
+                    @php
+                        $puedeModificar = !$tarea->rol_cambios || $tarea->rol_cambios == Auth::user()->id_rol;
+                        $rolAsignado = $tarea->rol_cambios ? App\Models\Rol::find($tarea->rol_cambios) : null;
+                        // Obtener documentos relacionados a esta tarea
+                        $documentosTarea = $etapa->documentos->where('id_tarea', $tarea->id);
+                    @endphp
+                    
+                    <!-- Contenedor de Tarea -->
+                    <div class="tarea-container mb-4 p-3 border rounded {{ !$puedeModificar ? 'tarea-bloqueada' : '' }}" style="background-color: #f8f9fa;">
+                        <!-- Información de la Tarea -->
+                        <div class="d-flex align-items-start mb-3 tarea-item" data-tarea-id="{{ $tarea->id }}">
+                            <div class="form-check me-3 mt-1">
+                                <input class="form-check-input tarea-checkbox" 
+                                       type="checkbox" 
+                                       id="tarea-{{ $tarea->id }}" 
+                                       data-tarea-id="{{ $tarea->id }}"
+                                       {{ $tarea->completada ? 'checked' : '' }}
+                                       {{ !$puedeModificar ? 'disabled' : '' }}>
+                            </div>
+                            <div class="flex-grow-1">
+                                <label class="form-check-label fw-bold {{ $tarea->completada ? 'text-decoration-line-through text-muted' : '' }}" 
+                                       for="tarea-{{ $tarea->id }}">
+                                    <i class="fas fa-check-circle me-2"></i>{{ $tarea->nombre }}
+                                    @if(!$puedeModificar)
+                                        <span class="badge bg-warning ms-2" title="Requiere rol: {{ $rolAsignado ? $rolAsignado->nombre : 'Rol específico' }}">
+                                            <i class="fas fa-lock"></i> {{ $rolAsignado ? $rolAsignado->nombre : 'Rol específico' }}
+                                        </span>
+                                    @endif
+                                </label>
+                                @if($tarea->descripcion)
+                                    <div class="small text-muted mt-1">{{ $tarea->descripcion }}</div>
+                                @endif
+                                @if($tarea->completada && $tarea->detalle && $tarea->detalle->userCreate)
+                                    <div class="small text-success mt-2">
+                                        <i class="fas fa-user me-1"></i>
+                                        Completada por: <strong>{{ $tarea->detalle->userCreate->name }}</strong>
+                                        <span class="text-muted ms-2">
+                                            <i class="fas fa-clock me-1"></i>
+                                            {{ $tarea->detalle->updated_at->format('d/m/Y') }}
+                                        </span>
+                                    </div>
+                                @endif
+                            </div>
                         </div>
                         
-                        <div class="tareas-list">
-                            @foreach($etapa->tareas as $tarea)
-                            @php
-                                $puedeModificar = !$tarea->rol_cambios || $tarea->rol_cambios == Auth::user()->id_rol;
-                                $rolAsignado = $tarea->rol_cambios ? App\Models\Rol::find($tarea->rol_cambios) : null;
-                                
-                                // Obtener documentos asociados a esta tarea
-                                $documentosTarea = $etapa->documentos->where('id_tarea', $tarea->id);
-                            @endphp
+                        <!-- Documentos de esta Tarea -->
+                        @if($documentosTarea->count() > 0)
+                        <div class="documentos-tarea ms-4">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="fas fa-file-pdf text-danger me-2"></i>
+                                <small class="text-muted fw-bold">
+                                    Documentos de esta tarea ({{ $documentosTarea->where('subido', true)->count() }}/{{ $documentosTarea->count() }})
+                                </small>
+                            </div>
                             
-                            <!-- Contenedor de la tarea -->
-                            <div class="tarea-container mb-4 p-3 border rounded-3 {{ !$puedeModificar ? 'tarea-bloqueada bg-light' : 'bg-white' }}" data-tarea-id="{{ $tarea->id }}">
-                                <!-- Header de la tarea -->
-                                <div class="d-flex align-items-start mb-3">
-                                    <div class="form-check me-3 mt-1">
-                                        <input class="form-check-input tarea-checkbox" 
-                                               type="checkbox" 
-                                               id="tarea-{{ $tarea->id }}" 
-                                               data-tarea-id="{{ $tarea->id }}"
-                                               {{ $tarea->completada ? 'checked' : '' }}
-                                               {{ !$puedeModificar ? 'disabled' : '' }}>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex align-items-center mb-2">
-                                            <h6 class="mb-0 me-2">
-                                                <label class="form-check-label {{ $tarea->completada ? 'text-decoration-line-through text-muted' : '' }}" 
-                                                       for="tarea-{{ $tarea->id }}">
-                                                    <i class="fas fa-check-square text-primary me-2"></i>{{ $tarea->nombre }}
-                                                </label>
-                                            </h6>
-                                            @if(!$puedeModificar)
-                                                <span class="badge bg-warning ms-2" title="Requiere rol: {{ $rolAsignado ? $rolAsignado->nombre : 'Rol específico' }}">
-                                                    <i class="fas fa-lock"></i> {{ $rolAsignado ? $rolAsignado->nombre : 'Rol específico' }}
-                                                </span>
-                                            @endif
-                                            @if($documentosTarea->count() > 0)
-                                                <span class="badge bg-info ms-2">
-                                                    <i class="fas fa-paperclip me-1"></i>{{ $documentosTarea->count() }} documento(s)
-                                                </span>
-                                            @endif
-                                        </div>
-                                        
-                                        @if($tarea->descripcion)
-                                            <div class="small text-muted mb-2">{{ $tarea->descripcion }}</div>
-                                        @endif
-                                        
-                                        @if($tarea->completada && $tarea->detalle && $tarea->detalle->userCreate)
-                                            <div class="small text-success">
-                                                <i class="fas fa-user me-1"></i>
-                                                Completada por: <strong>{{ $tarea->detalle->userCreate->name }}</strong>
-                                                <span class="text-muted ms-2">
-                                                    <i class="fas fa-clock me-1"></i>
-                                                    {{ $tarea->detalle->updated_at->format('d/m/Y H:i') }}
-                                                </span>
-                                            </div>
-                                        @endif
-                                    </div>
-                                </div>
-                                
-                                <!-- Documentos asociados a esta tarea -->
-                                @if($documentosTarea->count() > 0)
-                                <div class="documentos-tarea ms-4 ps-3 border-start border-primary border-2">
-                                    <div class="mb-2">
-                                        <small class="text-primary fw-bold">
-                                            <i class="fas fa-file-pdf me-1"></i>Documentos requeridos ({{ $documentosTarea->where('subido', true)->count() }}/{{ $documentosTarea->count() }})
-                                        </small>
-                                    </div>
-                                    
-                                    @foreach($documentosTarea as $documento)
-                                    @php
-                                        $puedeSubir = !$documento->rol_cambios || $documento->rol_cambios == Auth::user()->id_rol;
-                                        $rolAsignado = $documento->rol_cambios ? App\Models\Rol::find($documento->rol_cambios) : null;
-                                    @endphp
-                                    <div class="documento-item mb-3 p-3 border rounded {{ !$puedeSubir ? 'documento-bloqueado' : '' }} bg-light" data-documento-id="{{ $documento->id }}">
+                            <div class="row">
+                                @foreach($documentosTarea as $documento)
+                                @php
+                                    $puedeSubir = !$documento->rol_cambios || $documento->rol_cambios == Auth::user()->id_rol;
+                                    $rolAsignado = $documento->rol_cambios ? App\Models\Rol::find($documento->rol_cambios) : null;
+                                @endphp
+                                <div class="col-md-6 mb-3">
+                                    <div class="documento-item p-3 border rounded h-100 {{ !$puedeSubir ? 'documento-bloqueado' : '' }}" 
+                                         data-documento-id="{{ $documento->id }}" 
+                                         style="background-color: white; border-left: 4px solid #dc3545 !important;">
                                         <div class="d-flex justify-content-between align-items-start">
                                             <div class="flex-grow-1">
-                                                <h6 class="mb-1">
-                                                    <i class="fas fa-file-pdf text-danger me-2"></i>{{ $documento->nombre }}
+                                                <h6 class="mb-1 text-danger">
+                                                    <i class="fas fa-file-pdf me-1"></i>{{ $documento->nombre }}
                                                     @if(!$puedeSubir)
                                                         <span class="badge bg-warning ms-2" title="Requiere rol: {{ $rolAsignado ? $rolAsignado->nombre : 'Rol específico' }}">
                                                             <i class="fas fa-lock"></i> {{ $rolAsignado ? $rolAsignado->nombre : 'Rol específico' }}
@@ -528,7 +594,7 @@
                                                                 {{ $documento->subido ? 'Validado' : 'Subido' }} por: <strong>{{ $documento->detalle->userCreate->name }}</strong>
                                                                 <span class="text-muted ms-2">
                                                                     <i class="fas fa-clock me-1"></i>
-                                                                    {{ $documento->detalle->updated_at->format('d/m/Y H:i') }}
+                                                                    {{ $documento->detalle->updated_at->format('d/m/Y') }}
                                                                 </span>
                                                             </div>
                                                         @endif
@@ -576,39 +642,35 @@
                                             </div>
                                         </div>
                                     </div>
-                                    @endforeach
                                 </div>
-                                @else
-                                    <div class="ms-4 ps-3">
-                                        <small class="text-muted">
-                                            <i class="fas fa-info-circle me-1"></i>Esta tarea no requiere documentos adicionales
-                                        </small>
-                                    </div>
-                                @endif
+                                @endforeach
                             </div>
-                            @endforeach
                         </div>
+                        @endif
                     </div>
-                    @endif
-
-                    <!-- Documentos huérfanos (que no pertenecen a ninguna tarea específica) -->
-                    @php
-                        $documentosHuerfanos = $etapa->documentos->whereNull('id_tarea')->where('id_tarea', 0);
-                    @endphp
-                    @if($documentosHuerfanos->count() > 0)
-                    <div class="col-md-12 mt-4">
-                        <div class="d-flex align-items-center mb-3">
-                            <i class="fas fa-file-pdf text-warning me-2"></i>
-                            <h6 class="mb-0">Documentos adicionales de la etapa ({{ $documentosHuerfanos->where('subido', true)->count() }}/{{ $documentosHuerfanos->count() }})</h6>
-                        </div>
-                        
-                        <div class="documentos-list">
-                            @foreach($documentosHuerfanos as $documento)
-                            @php
-                                $puedeSubir = !$documento->rol_cambios || $documento->rol_cambios == Auth::user()->id_rol;
-                                $rolAsignado = $documento->rol_cambios ? App\Models\Rol::find($documento->rol_cambios) : null;
-                            @endphp
-                            <div class="documento-item mb-3 p-3 border rounded {{ !$puedeSubir ? 'documento-bloqueado' : '' }}" data-documento-id="{{ $documento->id }}">
+                    @endforeach
+                </div>
+                @endif
+                
+                <!-- Documentos sin tarea asignada (si los hay) -->
+                @php
+                    $documentosSinTarea = $etapa->documentos->whereNull('id_tarea');
+                @endphp
+                @if($documentosSinTarea->count() > 0)
+                <div class="documentos-sin-tarea mt-4">
+                    <div class="d-flex align-items-center mb-3">
+                        <i class="fas fa-file-pdf text-warning me-2"></i>
+                        <h6 class="mb-0">Documentos Generales de la Etapa ({{ $documentosSinTarea->where('subido', true)->count() }}/{{ $documentosSinTarea->count() }})</h6>
+                    </div>
+                    
+                    <div class="row">
+                        @foreach($documentosSinTarea as $documento)
+                        @php
+                            $puedeSubir = !$documento->rol_cambios || $documento->rol_cambios == Auth::user()->id_rol;
+                            $rolAsignado = $documento->rol_cambios ? App\Models\Rol::find($documento->rol_cambios) : null;
+                        @endphp
+                        <div class="col-md-6 mb-3">
+                            <div class="documento-item p-3 border rounded {{ !$puedeSubir ? 'documento-bloqueado' : '' }}" data-documento-id="{{ $documento->id }}">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div class="flex-grow-1">
                                         <h6 class="mb-1">
@@ -645,7 +707,7 @@
                                                         {{ $documento->subido ? 'Validado' : 'Subido' }} por: <strong>{{ $documento->detalle->userCreate->name }}</strong>
                                                         <span class="text-muted ms-2">
                                                             <i class="fas fa-clock me-1"></i>
-                                                            {{ $documento->detalle->updated_at->format('d/m/Y H:i') }}
+                                                            {{ $documento->detalle->updated_at->format('d/m/Y') }}
                                                         </span>
                                                     </div>
                                                 @endif
@@ -693,11 +755,11 @@
                                     </div>
                                 </div>
                             </div>
-                            @endforeach
                         </div>
+                        @endforeach
                     </div>
-                    @endif
                 </div>
+                @endif
                 
                 <!-- Botón para grabar cambios de esta etapa -->
                 @if($flujo->proceso_iniciado)
