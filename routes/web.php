@@ -107,7 +107,14 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
             ->name('flujos.documentos.toggle-estado');
 
         // EJECUCIÓN DE FLUJOS
-        Route::resource('ejecucion', Ejecucion::class)->only(['index', 'show']);
+        Route::resource('ejecucion', Ejecucion::class)->only(['index']);
+        
+        // Rutas específicas para mostrar flujos y ejecuciones
+        Route::get('ejecucion/flujo/{flujo}', [Ejecucion::class, 'showFlujo'])->name('ejecucion.flujo.show');
+        Route::get('ejecucion/detalle/{detalleFlujo}', [Ejecucion::class, 'showDetalle'])->name('ejecucion.detalle.show');
+        
+        // Mantener compatibilidad con la ruta antigua (redirige a la nueva estructura)
+        Route::get('ejecucion/{flujo}', [Ejecucion::class, 'show'])->name('ejecucion.show');
         Route::get('ejecucion/{flujo}/configurar', [Ejecucion::class, 'configurar'])->name('ejecucion.configurar');
         Route::get('ejecucion/{flujo}/previsualizar', [Ejecucion::class, 'previsualizar'])->name('ejecucion.previsualizar');
         Route::post('ejecucion/{flujo}/crear', [Ejecucion::class, 'crearEjecucion'])->name('ejecucion.crear');

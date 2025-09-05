@@ -169,18 +169,34 @@
                         @endif
                     </div>
                     <div class="text-end">
-                        @if($flujo->estado == 1)
-                            <span class="badge bg-primary estado-flujo-badge">
-                                <i class="fas fa-circle me-1"></i>Listo para Ejecutar
-                            </span>
-                        @elseif($flujo->estado == 2)
-                            <span class="badge bg-warning estado-flujo-badge">
-                                <i class="fas fa-play me-1"></i>En Ejecución
-                            </span>
-                        @elseif($flujo->estado == 3)
-                            <span class="badge bg-success estado-flujo-badge">
-                                <i class="fas fa-check-circle me-1"></i>Completado
-                            </span>
+                        @if(isset($detalleFlujoActivo))
+                            @if($detalleFlujoActivo->estado == 3)
+                                <span class="badge bg-success estado-flujo-badge">
+                                    <i class="fas fa-check-circle me-1"></i>Ejecución Completada
+                                </span>
+                            @elseif($detalleFlujoActivo->estado == 2)
+                                <span class="badge bg-warning estado-flujo-badge">
+                                    <i class="fas fa-play me-1"></i>Ejecución en Curso
+                                </span>
+                            @elseif($detalleFlujoActivo->estado == 4)
+                                <span class="badge bg-secondary estado-flujo-badge">
+                                    <i class="fas fa-pause me-1"></i>Ejecución Pausada
+                                </span>
+                            @endif
+                        @else
+                            @if($flujo->estado == 1)
+                                <span class="badge bg-primary estado-flujo-badge">
+                                    <i class="fas fa-circle me-1"></i>Listo para Ejecutar
+                                </span>
+                            @elseif($flujo->estado == 2)
+                                <span class="badge bg-warning estado-flujo-badge">
+                                    <i class="fas fa-play me-1"></i>En Ejecución
+                                </span>
+                            @elseif($flujo->estado == 3)
+                                <span class="badge bg-success estado-flujo-badge">
+                                    <i class="fas fa-check-circle me-1"></i>Completado
+                                </span>
+                            @endif
                         @endif
                     </div>
                 </div>
@@ -280,7 +296,7 @@
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center">
                 <div class="estado-etapa me-3">
-                    @if($detalleFlujoActivo)
+                    @if(isset($detalleFlujoActivo))
                         <!-- El estado se actualizará via JavaScript -->
                         <i class="fas fa-circle text-secondary" id="estado-etapa-{{ $etapa->id }}"></i>
                     @else
@@ -290,7 +306,7 @@
                 <div>
                     <h6 class="mb-0">{{ $etapa->nro }}. {{ $etapa->nombre }}</h6>
                     <small class="text-muted">
-                        @if($detalleFlujoActivo)
+                        @if(isset($detalleFlujoActivo))
                             Estado será actualizado...
                         @else
                             Sin ejecución activa
@@ -632,30 +648,30 @@
 document.addEventListener('DOMContentLoaded', function() {
     console.log('JavaScript cargado correctamente');
     
-    // Debug inicial
-    console.log('Variables PHP disponibles:', {
-        flujo: @json($flujo ? ['id' => $flujo->id, 'nombre' => $flujo->nombre, 'estado' => $flujo->estado] : null),
-        isSuper: @json($isSuper ?? false),
-        userRole: @json($userRole ?? 'UNKNOWN'),
-        etapasCount: @json($flujo ? $flujo->etapas->count() : 0)
-    });
-    
     // Variables desde PHP
     const flujoId = @json($flujo->id);
     const flujoEstado = @json($flujo->estado);
     const isSuper = @json($isSuper);
     const etapasCount = @json($flujo->etapas->count());
-    const detalleFlujoActivo = @json($detalleFlujoActivo);
+    
+    // Variable de ejecución activa (puede ser null si no hay ejecución)
+    const detalleFlujoActivo = @json($detalleFlujoActivo ?? null);
+    
+    // Variables adicionales para manejar la ejecución específica
+    const detalleFlujoId = detalleFlujoActivo ? detalleFlujoActivo.id : null;
     
     console.log('Flujo ID:', flujoId);
     console.log('Estado del flujo:', flujoEstado);
     console.log('Es SUPERADMIN:', isSuper);
     console.log('Número de etapas:', etapasCount);
     console.log('DetalleFlujo activo:', detalleFlujoActivo);
+    console.log('DetalleFlujo ID:', detalleFlujoId);
     
     // Si hay una ejecución activa, obtener progreso real
-    if (detalleFlujoActivo && detalleFlujoActivo.id) {
+    if (detalleFlujoActivo && detalleFlujoId) {
         actualizarProgreso();
+    } else {
+        console.log('No hay ejecución activa, mostrando estado base del flujo');
     }
 
     // Ver PDF
@@ -680,66 +696,146 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para actualizar progreso desde el servidor
     function actualizarProgreso() {
-        if (!detalleFlujoActivo || !detalleFlujoActivo.id) {
+        if (!detalleFlujoActivo || !detalleFlujoId) {
             console.log('No hay ejecución activa para obtener progreso');
+            document.getElementById('progreso-general').innerHTML = '<span class="text-muted">Sin ejecución</span>';
             return;
         }
         
-        const url = '/ejecucion/detalle/' + detalleFlujoActivo.id + '/progreso';
+        // Usar la ruta con nombre de Laravel para mayor robustez
+        const baseUrl = "{{ route('ejecucion.detalle.progreso', ['detalleFlujo' => ':id']) }}";
+        const url = baseUrl.replace(':id', detalleFlujoId);
         console.log('URL de progreso:', url);
         
         fetch(url)
         .then(response => {
             console.log('Response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             return response.json();
         })
         .then(data => {
             console.log('Datos recibidos:', data);
             if (data.progreso_general !== undefined) {
-                document.getElementById('progreso-general').textContent = data.progreso_general + '%';
+                // Actualizar progreso general
+                const progresoElement = document.getElementById('progreso-general');
+                if (data.progreso_general === 100) {
+                    progresoElement.innerHTML = '<span class="text-success">100% Completado</span>';
+                } else {
+                    progresoElement.innerHTML = '<span class="text-warning">' + data.progreso_general + '%</span>';
+                }
                 
                 // Actualizar estado visual de cada etapa basado en el progreso real
-                data.etapas.forEach(etapaData => {
-                    console.log('Procesando etapa:', etapaData);
-                    const etapaElement = document.querySelector(`[data-etapa-id="${etapaData.id}"]`);
-                    if (etapaElement) {
-                        const estadoIcon = etapaElement.querySelector('.estado-etapa i');
-                        const statusText = etapaElement.querySelector('.card-header small');
-                        
-                        // Actualizar ícono y estado según progreso
-                        if (etapaData.progreso === 100) {
-                            estadoIcon.classList.remove('text-primary', 'text-warning', 'text-secondary');
-                            estadoIcon.classList.add('text-success');
-                            estadoIcon.classList.remove('fa-circle', 'fa-play-circle');
-                            estadoIcon.classList.add('fa-check-circle');
-                            statusText.innerHTML = `Completada • Progreso: ${etapaData.progreso}%`;
-                            etapaElement.classList.add('completada');
-                        } else if (etapaData.progreso > 0) {
-                            estadoIcon.classList.remove('text-secondary', 'text-success');
-                            estadoIcon.classList.add('text-warning');
-                            estadoIcon.classList.remove('fa-circle', 'fa-check-circle');
-                            estadoIcon.classList.add('fa-play-circle');
-                            statusText.innerHTML = `En progreso • Progreso: ${etapaData.progreso}%`;
-                            etapaElement.classList.add('activa');
+                if (data.etapas && Array.isArray(data.etapas)) {
+                    data.etapas.forEach(etapaData => {
+                        console.log('Procesando etapa:', etapaData);
+                        const etapaElement = document.querySelector(`[data-etapa-id="${etapaData.id}"]`);
+                        if (etapaElement) {
+                            const estadoIcon = etapaElement.querySelector('.estado-etapa i');
+                            const statusText = etapaElement.querySelector('.card-header small');
+                            
+                            // Actualizar ícono y estado según progreso
+                            if (etapaData.progreso === 100) {
+                                estadoIcon.classList.remove('text-primary', 'text-warning', 'text-secondary', 'text-muted');
+                                estadoIcon.classList.add('text-success');
+                                estadoIcon.classList.remove('fa-circle', 'fa-play-circle');
+                                estadoIcon.classList.add('fa-check-circle');
+                                statusText.innerHTML = `Completada • Progreso: ${etapaData.progreso}%`;
+                                etapaElement.classList.add('completada');
+                            } else if (etapaData.progreso > 0) {
+                                estadoIcon.classList.remove('text-secondary', 'text-success', 'text-muted');
+                                estadoIcon.classList.add('text-warning');
+                                estadoIcon.classList.remove('fa-circle', 'fa-check-circle');
+                                estadoIcon.classList.add('fa-play-circle');
+                                statusText.innerHTML = `En progreso • Progreso: ${etapaData.progreso}%`;
+                                etapaElement.classList.add('activa');
+                            } else {
+                                estadoIcon.classList.remove('text-success', 'text-warning');
+                                estadoIcon.classList.add('text-secondary');
+                                estadoIcon.classList.remove('fa-check-circle', 'fa-play-circle');
+                                estadoIcon.classList.add('fa-circle');
+                                statusText.innerHTML = `Pendiente • Progreso: ${etapaData.progreso}%`;
+                            }
+                            
+                            // Actualizar contador de tareas en el header si existe
+                            const tareasHeader = etapaElement.querySelector('.tareas-list')?.parentElement.querySelector('h6');
+                            if (tareasHeader && etapaData.tareas_completadas !== undefined && etapaData.total_tareas !== undefined) {
+                                tareasHeader.textContent = `Tareas (${etapaData.tareas_completadas}/${etapaData.total_tareas})`;
+                            }
+                            
+                            // Actualizar contador de documentos en el header si existe
+                            const documentosHeader = etapaElement.querySelector('.documentos-list')?.parentElement.querySelector('h6');
+                            if (documentosHeader && etapaData.documentos_subidos !== undefined && etapaData.total_documentos !== undefined) {
+                                documentosHeader.textContent = `Documentos (${etapaData.documentos_subidos}/${etapaData.total_documentos})`;
+                            }
+                            
+                            // Actualizar estado visual de tareas individuales si están disponibles
+                            if (etapaData.tareas) {
+                                etapaData.tareas.forEach(tareaData => {
+                                    const tareaElement = etapaElement.querySelector(`[data-tarea-id="${tareaData.id}"]`);
+                                    if (tareaElement) {
+                                        const tareaIcon = tareaElement.querySelector('i');
+                                        const tareaTitle = tareaElement.querySelector('h6');
+                                        const tareaStatus = tareaElement.querySelector('.small.text-muted');
+                                        
+                                        if (tareaData.completada) {
+                                            tareaElement.classList.remove('pendiente');
+                                            tareaElement.classList.add('completada');
+                                            tareaIcon.classList.remove('fa-clock', 'text-warning');
+                                            tareaIcon.classList.add('fa-check-circle', 'text-success');
+                                            tareaTitle.classList.add('text-decoration-line-through', 'text-muted');
+                                            if (tareaStatus) {
+                                                tareaStatus.innerHTML = 'Estado: <span class="text-success fw-bold">Completada</span>';
+                                            }
+                                        } else {
+                                            tareaElement.classList.remove('completada');
+                                            tareaElement.classList.add('pendiente');
+                                            tareaIcon.classList.remove('fa-check-circle', 'text-success');
+                                            tareaIcon.classList.add('fa-clock', 'text-warning');
+                                            tareaTitle.classList.remove('text-decoration-line-through', 'text-muted');
+                                            if (tareaStatus) {
+                                                tareaStatus.innerHTML = 'Estado: <span class="text-warning fw-bold">Pendiente</span>';
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                            
+                            // Actualizar estado visual de documentos individuales si están disponibles
+                            if (etapaData.documentos) {
+                                etapaData.documentos.forEach(documentoData => {
+                                    const documentoElement = etapaElement.querySelector(`[data-documento-id="${documentoData.id}"]`);
+                                    if (documentoElement) {
+                                        const statusBadge = documentoElement.querySelector('.document-status .badge');
+                                        
+                                        if (documentoData.subido) {
+                                            documentoElement.classList.remove('pendiente');
+                                            documentoElement.classList.add('subido');
+                                            if (statusBadge) {
+                                                statusBadge.className = 'badge bg-success';
+                                                statusBadge.innerHTML = '<i class="fas fa-check me-1"></i>Documento Subido';
+                                            }
+                                        } else {
+                                            documentoElement.classList.remove('subido');
+                                            documentoElement.classList.add('pendiente');
+                                            if (statusBadge) {
+                                                statusBadge.className = 'badge bg-warning text-dark';
+                                                statusBadge.innerHTML = '<i class="fas fa-clock me-1"></i>Pendiente';
+                                            }
+                                        }
+                                    }
+                                });
+                            }
                         }
-                        
-                        // Actualizar contador de tareas en el header
-                        const tareasHeader = etapaElement.querySelector('.tareas-list')?.parentElement.querySelector('h6');
-                        if (tareasHeader) {
-                            tareasHeader.textContent = `Tareas (${etapaData.tareas_completadas}/${etapaData.total_tareas})`;
-                        }
-                        
-                        // Actualizar contador de documentos en el header
-                        const documentosHeader = etapaElement.querySelector('.documentos-list')?.parentElement.querySelector('h6');
-                        if (documentosHeader) {
-                            documentosHeader.textContent = `Documentos (${etapaData.documentos_subidos}/${etapaData.total_documentos})`;
-                        }
-                    }
-                });
+                    });
+                }
             }
         })
         .catch(error => {
             console.error('Error al obtener progreso:', error);
+            const progresoElement = document.getElementById('progreso-general');
+            progresoElement.innerHTML = '<span class="text-danger">Error al cargar</span>';
         });
     }
 
@@ -844,7 +940,10 @@ function confirmarReEjecucion() {
     progresoModal.show();
     
     // Realizar petición AJAX
-    fetch(`/ejecucion/${window.currentFlujoId}/re-ejecutar`, {
+    const reEjecutarUrl = "{{ route('ejecucion.re-ejecutar', ['flujo' => ':id']) }}";
+    const url = reEjecutarUrl.replace(':id', window.currentFlujoId);
+    
+    fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

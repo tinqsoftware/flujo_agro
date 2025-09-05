@@ -282,6 +282,178 @@ class Ejecucion extends Controller
     }
 
     /**
+     * Show a flujo (redirects to active detalle_flujo if exists)
+     */
+    public function showFlujo(Flujo $flujo)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+        // Verificar permisos
+        if (!$isSuper && $flujo->id_emp != $user->id_emp) {
+            abort(403, 'No tienes permisos para ver este flujo.');
+        }
+
+        // Buscar ejecución activa
+        $detalleFlujoActivo = DetalleFlujo::where('id_flujo', $flujo->id)
+            ->when(!$isSuper, fn($q) => $q->where('id_emp', $user->id_emp))
+            ->whereIn('estado', [2, 3, 4]) // En proceso, completado, pausado
+            ->orderBy('updated_at', 'desc')
+            ->first();
+
+        if ($detalleFlujoActivo) {
+            // Redirigir a la vista específica del detalle_flujo
+            return redirect()->route('ejecucion.detalle.show', $detalleFlujoActivo);
+        } else {
+            // Mostrar vista del flujo sin ejecución activa
+            return $this->showFlujoSinEjecucion($flujo);
+        }
+    }
+
+    /**
+     * Show a specific detalle_flujo execution
+     */
+    public function showDetalle(DetalleFlujo $detalleFlujo)
+    {
+        try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+            // Cargar el flujo con todas sus relaciones
+            $flujo = $detalleFlujo->flujo()->with([
+                'tipo',
+                'empresa', 
+                'etapas' => function($query) {
+                    $query->orderBy('nro');
+                },
+                'etapas.tareas',
+                'etapas.documentos'
+            ])->first();
+
+            if (!$flujo) {
+                abort(404, 'Flujo no encontrado');
+            }
+
+            // Verificar permisos
+            if (!$isSuper && $detalleFlujo->id_emp != $user->id_emp) {
+                abort(403, 'No tienes permisos para ver esta ejecución.');
+            }
+
+            // Cargar estados específicos de esta ejecución
+            foreach ($flujo->etapas as $etapa) {
+                // Buscar el DetalleEtapa correspondiente
+                $detalleEtapa = DetalleEtapa::where('id_etapa', $etapa->id)
+                    ->where('id_detalle_flujo', $detalleFlujo->id)
+                    ->first();
+                
+                $etapa->detalle_etapa = $detalleEtapa;
+                $etapa->estado_ejecucion = $detalleEtapa ? $detalleEtapa->estado : 1;
+
+                foreach ($etapa->tareas as $tarea) {
+                    // Buscar DetalleTarea vinculado a esta ejecución específica
+                    $detalleTarea = null;
+                    if ($detalleEtapa) {
+                        $detalleTarea = DetalleTarea::with('userCreate')->where('id_tarea', $tarea->id)
+                            ->where('id_detalle_etapa', $detalleEtapa->id)
+                            ->whereNotIn('estado', [66, 99]) // Excluir tareas que no influyen en flujo
+                            ->first();
+                    }
+                    
+                    if ($detalleTarea) {
+                        $tarea->completada = ($detalleTarea->estado == 3);
+                        $tarea->detalle_id = $detalleTarea->id;
+                        $tarea->detalle_flujo_id = $detalleFlujo->id;
+                        $tarea->detalle = $detalleTarea;
+                    } else {
+                        $tarea->completada = false;
+                        $tarea->detalle = null;
+                    }
+                }
+                
+                foreach ($etapa->documentos as $documento) {
+                    // Buscar DetalleDocumento vinculado a esta ejecución específica
+                    $detalleDocumento = null;
+                    if ($detalleEtapa) {
+                        $detalleDocumento = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)
+                            ->whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                                $query->where('id_detalle_etapa', $detalleEtapa->id);
+                            })
+                            ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo
+                            ->first();
+                    }
+                    
+                    if ($detalleDocumento) {
+                        $documento->subido = ($detalleDocumento->estado == 3);
+                        $documento->url_archivo = ($detalleDocumento && $detalleDocumento->ruta_doc) ? 
+                            Storage::url($detalleDocumento->ruta_doc) : null;
+                        $documento->detalle_id = $detalleDocumento->id;
+                        $documento->detalle_flujo_id = $detalleFlujo->id;
+                        $documento->detalle = $detalleDocumento;
+                    } else {
+                        $documento->subido = false;
+                        $documento->url_archivo = null;
+                        $documento->detalle = null;
+                    }
+                }
+            }
+
+            // Pasar información del rol para la vista
+            $userRole = $user->rol->nombre;
+
+            // Usar detalleFlujoActivo para consistencia con el blade
+            $detalleFlujoActivo = $detalleFlujo;
+
+            return view('superadmin.ejecucion.show', compact('flujo', 'isSuper', 'userRole', 'detalleFlujoActivo'));
+
+        } catch (\Exception $e) {
+            Log::error('Error in showDetalle method', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Show flujo without active execution
+     */
+    private function showFlujoSinEjecucion(Flujo $flujo)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+        // Cargar el flujo con todas sus relaciones
+        $flujo = $flujo->load([
+            'tipo',
+            'empresa', 
+            'etapas' => function($query) {
+                $query->orderBy('nro');
+            },
+            'etapas.tareas',
+            'etapas.documentos'
+        ]);
+
+        // Marcar todo como no completado
+        foreach ($flujo->etapas as $etapa) {
+            foreach ($etapa->tareas as $tarea) {
+                $tarea->completada = false;
+                $tarea->detalle = null;
+            }
+            
+            foreach ($etapa->documentos as $documento) {
+                $documento->subido = false;
+                $documento->url_archivo = null;
+                $documento->detalle = null;
+            }
+        }
+
+        $userRole = $user->rol->nombre;
+        $detalleFlujoActivo = null; // No hay ejecución activa
+
+        return view('superadmin.ejecucion.show', compact('flujo', 'isSuper', 'userRole', 'detalleFlujoActivo'));
+    }
+
+    /**
      * Show the configuration modal for a specific flow execution.
      */
     public function configurar(Flujo $flujo)

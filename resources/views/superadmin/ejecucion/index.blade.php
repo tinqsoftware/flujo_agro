@@ -235,7 +235,7 @@
                                     <!-- Botones de acción -->
                                     @if($isSuper)
                                         <div class="d-grid">
-                                            <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-info btn-sm">
+                                            <a href="{{ route('ejecucion.detalle.show', $detalleEjecucion) }}" class="btn btn-outline-info btn-sm">
                                                 <i class="fas fa-eye me-1"></i>Ver Estado
                                             </a>
                                         </div>
@@ -373,7 +373,7 @@
 
                                         <!-- Botones de acción -->
                                         <div class="d-grid gap-2">
-                                            <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-success btn-sm">
+                                            <a href="{{ route('ejecucion.detalle.show', $detalleEjecucion) }}" class="btn btn-outline-success btn-sm">
                                                 <i class="fas fa-eye me-1"></i>Ver Detalles
                                             </a>
                                             <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
@@ -581,7 +581,7 @@
                                             <!-- Ejecución pausada -->
                                             @if($isSuper)
                                                 <div class="d-grid gap-2">
-                                                    <a href="/ejecucion/{{ $detalleEjecucion->flujo->id }}" class="btn btn-outline-info btn-sm">
+                                                    <a href="{{ route('ejecucion.detalle.show', $detalleEjecucion) }}" class="btn btn-outline-info btn-sm">
                                                         <i class="fas fa-eye me-1"></i>Ver Estado
                                                     </a>
                                                     <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
@@ -1002,7 +1002,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        const url = `/ejecucion/${selectedId}`;
+        const url = "{{ route('ejecucion.flujo.show', ['flujo' => ':id']) }}".replace(':id', selectedId);
         window.location.href = url;
     });
 
