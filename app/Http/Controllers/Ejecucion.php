@@ -1972,7 +1972,7 @@ class Ejecucion extends Controller
                 'total_tareas' => $total_tareas,
                 'documentos_subidos' => $documentos_subidos,
                 'total_documentos' => $total_documentos,
-                'estado' => $etapa->estado,
+                'estado' => $detalleEtapa ? $detalleEtapa->estado : 1, // Estado de BD: 1=Pendiente, 2=En progreso, 3=Completada
                 'tareas' => $tareas_data,
                 'documentos' => $documentos_data
             ];
@@ -1982,9 +1982,19 @@ class Ejecucion extends Controller
             $progreso_general = round(($items_completados / $total_items) * 100);
         }
 
+        // Crear un array de estados indexado por ID de etapa para facilitar acceso desde JavaScript
+        $estados_por_etapa = [];
+        foreach ($etapas_data as $etapa_data) {
+            $estados_por_etapa[$etapa_data['id']] = [
+                'estado' => $etapa_data['estado'],
+                'progreso' => $etapa_data['progreso']
+            ];
+        }
+
         return response()->json([
             'progreso_general' => $progreso_general,
-            'etapas' => $etapas_data,
+            'etapas' => $estados_por_etapa, // Estados indexados por ID para JavaScript
+            'etapas_detalle' => $etapas_data, // Información completa de etapas
             'detalle_flujo_estado' => $detalleFlujo->estado,
             'nombre_ejecucion' => $detalleFlujo->nombre
         ]);

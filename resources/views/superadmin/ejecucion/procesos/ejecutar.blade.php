@@ -415,20 +415,53 @@
 <!-- Etapas del flujo -->
 @foreach($flujo->etapas as $index => $etapa)
 @php
-    // Lógica para determinar si la etapa está disponible
+    // Lógica para determinar si la etapa está disponible basada en BD
     $etapaDisponible = true;
+    $estadoEtapaActual = null;
     
-    if (!$etapa->paralelo) {
-        // Si la etapa no es paralela (paralelo = 0), verificar que las anteriores estén completadas
-        if ($index > 0) {
-            // Verificar que todas las etapas anteriores estén completadas
+    // Si el proceso está iniciado y hay un detalle_flujo_id, consultar estado real
+    if ($flujo->proceso_iniciado && $flujo->detalle_flujo_id) {
+        // Obtener el estado actual de esta etapa
+        $detalleEtapaActual = App\Models\DetalleEtapa::where('id_detalle_flujo', $flujo->detalle_flujo_id)
+            ->where('id_etapa', $etapa->id)
+            ->first();
+        
+        $estadoEtapaActual = $detalleEtapaActual ? $detalleEtapaActual->estado : 1; // 1 = pendiente por defecto
+        
+        // Solo verificar bloqueos para etapas secuenciales
+        if (!$etapa->paralelo) {
+            // Si es la primera etapa secuencial, siempre está disponible
+            if ($index == 0) {
+                $etapaDisponible = true;
+            } else {
+                // Verificar que todas las etapas secuenciales anteriores estén completadas (estado = 3)
+                $etapasAnteriores = $flujo->etapas->slice(0, $index);
+                foreach ($etapasAnteriores as $etapaAnterior) {
+                    // Solo verificar etapas secuenciales anteriores
+                    if (!$etapaAnterior->paralelo) {
+                        $detalleEtapaAnterior = App\Models\DetalleEtapa::where('id_detalle_flujo', $flujo->detalle_flujo_id)
+                            ->where('id_etapa', $etapaAnterior->id)
+                            ->first();
+                        
+                        $estadoAnterior = $detalleEtapaAnterior ? $detalleEtapaAnterior->estado : 1;
+                        
+                        // Si la etapa anterior no está completada (estado != 3), bloquear esta etapa
+                        if ($estadoAnterior != 3) {
+                            $etapaDisponible = false;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        // Las etapas paralelas siempre están disponibles cuando el proceso está iniciado
+    } else {
+        // Si el proceso no está iniciado, solo la primera etapa está disponible
+        if (!$etapa->paralelo && $index > 0) {
+            // Verificar etapas anteriores sin estado de BD
             $etapasAnteriores = $flujo->etapas->slice(0, $index);
             foreach ($etapasAnteriores as $etapaAnterior) {
-                // Si la etapa anterior también no es paralela, debe estar completada
                 if (!$etapaAnterior->paralelo) {
-                    // Aquí deberías verificar si la etapa anterior está completada
-                    // Por ahora, simplificamos asumiendo que si hay una etapa no paralela anterior,
-                    // esta etapa queda bloqueada hasta que se complete la anterior
                     $etapaDisponible = false;
                     break;
                 }
@@ -436,9 +469,11 @@
         }
     }
     
-    // Determinar clases CSS
+    // Determinar clases CSS basadas en estado real de BD
     $clasesEtapa = 'card mb-3 etapa-card';
-    if (!$etapaDisponible) {
+    if ($estadoEtapaActual == 3) {
+        $clasesEtapa .= ' completada';
+    } elseif (!$etapaDisponible) {
         $clasesEtapa .= ' bloqueada';
     }
 @endphp
@@ -447,7 +482,15 @@
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center">
                 <div class="estado-etapa me-3">
-                    <i class="fas fa-circle text-secondary" id="estado-etapa-{{ $etapa->id }}"></i>
+                    @if($estadoEtapaActual == 3)
+                        <i class="fas fa-check-circle text-success" id="estado-etapa-{{ $etapa->id }}"></i>
+                    @elseif($estadoEtapaActual == 2)
+                        <i class="fas fa-play-circle text-primary" id="estado-etapa-{{ $etapa->id }}"></i>
+                    @elseif($etapaDisponible)
+                        <i class="fas fa-circle text-warning" id="estado-etapa-{{ $etapa->id }}"></i>
+                    @else
+                        <i class="fas fa-lock text-secondary" id="estado-etapa-{{ $etapa->id }}"></i>
+                    @endif
                 </div>
                 <div>
                     <h6 class="mb-0">
@@ -463,10 +506,16 @@
                         @endif
                     </h6>
                     <small class="text-muted">
-                        @if($etapaDisponible)
-                            Pendiente • Progreso: <span class="progreso-etapa" data-etapa="{{ $etapa->id }}">0%</span>
+                        @if($estadoEtapaActual == 3)
+                            <i class="fas fa-check-circle text-success me-1"></i>Completada • Progreso: <span class="progreso-etapa" data-etapa="{{ $etapa->id }}">100%</span>
+                        @elseif($etapaDisponible)
+                            @if($estadoEtapaActual == 2)
+                                <i class="fas fa-play-circle text-primary me-1"></i>En Progreso • Progreso: <span class="progreso-etapa" data-etapa="{{ $etapa->id }}">0%</span>
+                            @else
+                                Pendiente • Progreso: <span class="progreso-etapa" data-etapa="{{ $etapa->id }}">0%</span>
+                            @endif
                         @else
-                            <i class="fas fa-lock me-1"></i>Bloqueada - Completa las etapas anteriores
+                            <i class="fas fa-lock me-1"></i>Bloqueada - Completa las etapas secuenciales anteriores
                         @endif
                     </small>
                 </div>
@@ -782,6 +831,8 @@
 </div>
 @endforeach
 
+
+
 <!-- Modal para subir documentos -->
 <div class="modal fade" id="uploadModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -1020,18 +1071,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (procesoIniciado) {
         actualizarProgreso();
         
-        // Activar primera etapa si el proceso ya está iniciado
-        const primeraEtapa = document.querySelector('.etapa-card:not(.bloqueada)');
-        if (primeraEtapa) {
-            primeraEtapa.classList.add('activa');
-            const estadoIcon = primeraEtapa.querySelector('.estado-etapa i');
-            estadoIcon.classList.remove('text-secondary');
-            estadoIcon.classList.add('text-primary');
-        }
-        
-        // Verificar si el flujo ya está completado al cargar la página
+        // Verificar estados de etapas desde BD al cargar la página
         if (detalleFlujoId) {
             setTimeout(() => {
+                verificarYActualizarEstadoEtapas();
                 verificarEstadoCompletado();
             }, 1000); // Dar tiempo para que se cargue la interfaz
         }
@@ -1131,40 +1174,107 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Función para verificar y actualizar el estado de las etapas basado en el progreso
+    // Función para verificar y actualizar el estado de las etapas basado en el estado real de BD
     function verificarYActualizarEstadoEtapas() {
-        const etapas = document.querySelectorAll('.etapa-card');
+        if (!detalleFlujoId) {
+            console.log('No hay detalleFlujoId, no se puede verificar estados de etapas');
+            return;
+        }
         
-        etapas.forEach((etapa, index) => {
-            const esParalela = etapa.dataset.paralelo === '1';
-            const etapaId = etapa.dataset.etapaId;
-            
-            if (!esParalela) {
-                // Para etapas secuenciales, verificar que las anteriores estén completadas
-                let puedeHabilitarse = true;
+        console.log('Verificando estados de etapas desde BD...');
+        
+        // Consultar estado real de las etapas desde el servidor
+        fetch(`{{ route('ejecucion.detalle.progreso', ':detalleFlujoId') }}`.replace(':detalleFlujoId', detalleFlujoId))
+        .then(response => response.json())
+        .then(data => {
+            if (data && data.etapas) {
+                console.log('Estados de etapas desde BD:', data.etapas);
                 
-                // Revisar todas las etapas anteriores
-                for (let i = 0; i < index; i++) {
-                    const etapaAnterior = etapas[i];
-                    const esParalelaAnterior = etapaAnterior.dataset.paralelo === '1';
+                const etapas = document.querySelectorAll('.etapa-card');
+                
+                etapas.forEach((etapa, index) => {
+                    const esParalela = etapa.dataset.paralelo === '1';
+                    const etapaId = parseInt(etapa.dataset.etapaId);
+                    const estadoEtapa = data.etapas[etapaId] || { estado: 1 };
                     
-                    if (!esParalelaAnterior && !etapaAnterior.classList.contains('completada')) {
-                        puedeHabilitarse = false;
-                        break;
+                    console.log(`Etapa ${index + 1} (ID: ${etapaId}): Paralela=${esParalela}, Estado BD=${estadoEtapa.estado}`);
+                    
+                    if (!esParalela) {
+                        // Para etapas secuenciales, verificar que las anteriores estén completadas
+                        let puedeHabilitarse = true;
+                        
+                        // Revisar todas las etapas anteriores
+                        for (let i = 0; i < index; i++) {
+                            const etapaAnterior = etapas[i];
+                            const esParalelaAnterior = etapaAnterior.dataset.paralelo === '1';
+                            const etapaAnteriorId = parseInt(etapaAnterior.dataset.etapaId);
+                            const estadoAnterior = data.etapas[etapaAnteriorId] || { estado: 1 };
+                            
+                            // Solo verificar etapas secuenciales anteriores
+                            if (!esParalelaAnterior && estadoAnterior.estado !== 3) {
+                                puedeHabilitarse = false;
+                                console.log(`Etapa ${index + 1} bloqueada por etapa anterior ${i + 1} (estado: ${estadoAnterior.estado})`);
+                                break;
+                            }
+                        }
+                        
+                        // Aplicar el estado correspondiente
+                        if (puedeHabilitarse && etapa.classList.contains('bloqueada')) {
+                            habilitarEtapa(etapa);
+                            console.log(`Etapa ${index + 1} habilitada por completar etapas anteriores`);
+                        } else if (!puedeHabilitarse && !etapa.classList.contains('bloqueada')) {
+                            etapa.classList.add('bloqueada');
+                            deshabilitarEtapa(etapa);
+                            console.log(`Etapa ${index + 1} bloqueada por etapas anteriores incompletas`);
+                        }
+                    }
+                    
+                    // Actualizar visual según estado real de BD
+                    actualizarVisualEtapaSegunEstado(etapa, estadoEtapa.estado);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error al verificar estados de etapas:', error);
+        });
+    }
+    
+    // Función para actualizar visual de etapa según estado de BD
+    function actualizarVisualEtapaSegunEstado(etapaElement, estado) {
+        const etapaId = etapaElement.dataset.etapaId;
+        const estadoIcon = etapaElement.querySelector('.estado-etapa i');
+        const statusText = etapaElement.querySelector('.card-header small');
+        
+        // Remover clases anteriores
+        etapaElement.classList.remove('completada', 'activa');
+        estadoIcon.classList.remove('text-success', 'text-primary', 'text-warning', 'text-secondary');
+        
+        // Aplicar visual según estado
+        switch(estado) {
+            case 3: // Completada
+                etapaElement.classList.add('completada');
+                estadoIcon.classList.add('text-success');
+                if (statusText) {
+                    statusText.innerHTML = '<i class="fas fa-check-circle text-success me-1"></i>Completada • Progreso: <span class="progreso-etapa">100%</span>';
+                }
+                break;
+            case 2: // En progreso
+                etapaElement.classList.add('activa');
+                estadoIcon.classList.add('text-primary');
+                if (statusText) {
+                    statusText.innerHTML = '<i class="fas fa-play-circle text-primary me-1"></i>En Progreso • ';
+                }
+                break;
+            case 1: // Pendiente
+            default:
+                if (!etapaElement.classList.contains('bloqueada')) {
+                    estadoIcon.classList.add('text-warning');
+                    if (statusText) {
+                        statusText.innerHTML = 'Pendiente • Progreso: <span class="progreso-etapa">0%</span>';
                     }
                 }
-                
-                // Aplicar el estado correspondiente
-                if (puedeHabilitarse && etapa.classList.contains('bloqueada')) {
-                    habilitarEtapa(etapa);
-                    console.log(`Etapa ${index + 1} habilitada por completar etapas anteriores`);
-                } else if (!puedeHabilitarse && !etapa.classList.contains('bloqueada')) {
-                    etapa.classList.add('bloqueada');
-                    deshabilitarEtapa(etapa);
-                    console.log(`Etapa ${index + 1} bloqueada por etapas anteriores incompletas`);
-                }
-            }
-        });
+                break;
+        }
     }
 
     // Función personalizada para manejar collapse/expand
