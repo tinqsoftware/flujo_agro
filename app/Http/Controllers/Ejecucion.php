@@ -933,18 +933,19 @@ class Ejecucion extends Controller
                         ->first();
                 }
                 
-                // Solo mostrar tareas que están incluidas en el flujo (no estado 66)
+                // Configurar estado de la tarea
                 if ($detalleTarea) {
-                    // Solo estado 3 significa completado (no estado 2 que es "en ejecución")
+                    // Si existe detalle, usar su estado (solo estado 3 significa completado)
                     $tarea->completada = ($detalleTarea->estado == 3);
                     $tarea->detalle_id = $detalleTarea->id;
                     $tarea->detalle_flujo_id = $detalleFlujo->id;
                     $tarea->detalle = $detalleTarea; // Agregar referencia al detalle completo
                 } else {
-                    // Si no tiene detalle o tiene estado 66, remover de la colección
-                    $etapa->tareas = $etapa->tareas->reject(function($t) use ($tarea) {
-                        return $t->id === $tarea->id;
-                    });
+                    // Si no existe detalle, mostrar como no completada (estado inicial)
+                    $tarea->completada = false;
+                    $tarea->detalle_id = null;
+                    $tarea->detalle_flujo_id = $detalleFlujo->id;
+                    $tarea->detalle = null;
                 }
             }
             
@@ -960,9 +961,9 @@ class Ejecucion extends Controller
                         ->first();
                 }
                 
-                // Solo mostrar documentos que están incluidos en el flujo (no estado 66)
+                // Configurar estado del documento
                 if ($detalleDocumento) {
-                    // Solo estado 3 significa subido/completado (no estado 2 que es "pendiente")
+                    // Si existe detalle, usar su estado (solo estado 3 significa subido/completado)
                     $documento->subido = ($detalleDocumento->estado == 3);
                     $documento->archivo_url = ($detalleDocumento && $detalleDocumento->ruta_doc) ? 
                         Storage::url($detalleDocumento->ruta_doc) : null;
@@ -970,10 +971,12 @@ class Ejecucion extends Controller
                     $documento->detalle_flujo_id = $detalleFlujo->id;
                     $documento->detalle = $detalleDocumento; // Agregar referencia al detalle completo
                 } else {
-                    // Si no tiene detalle o tiene estado 66, remover de la colección
-                    $etapa->documentos = $etapa->documentos->reject(function($d) use ($documento) {
-                        return $d->id === $documento->id;
-                    });
+                    // Si no existe detalle, mostrar como no subido (estado inicial)
+                    $documento->subido = false;
+                    $documento->archivo_url = null;
+                    $documento->detalle_id = null;
+                    $documento->detalle_flujo_id = $detalleFlujo->id;
+                    $documento->detalle = null;
                 }
             }
         }
