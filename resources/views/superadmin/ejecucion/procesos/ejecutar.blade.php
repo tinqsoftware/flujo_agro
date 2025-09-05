@@ -357,6 +357,32 @@
 .documentos-tarea .small {
     font-size: 0.8rem;
 }
+
+/* Debugging para botones deshabilitados */
+.btn.disabled,
+.btn[disabled],
+button[disabled] {
+    background-color: #6c757d !important;
+    border-color: #6c757d !important;
+    opacity: 0.65 !important;
+    pointer-events: none !important;
+}
+
+.etapa-card.bloqueada .btn {
+    background-color: #6c757d !important;
+    border-color: #6c757d !important;
+    opacity: 0.5 !important;
+    pointer-events: none !important;
+}
+
+/* Asegurar que botones habilitados se vean correctamente */
+.btn.grabar-cambios-etapa:not([disabled]):not(.disabled) {
+    background-color: #007bff !important;
+    border-color: #007bff !important;
+    color: white !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
 </style>
 @endpush
 
@@ -1073,10 +1099,14 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Verificar estados de etapas desde BD al cargar la página
         if (detalleFlujoId) {
+            // Llamada inmediata para estados ya disponibles
+            verificarYActualizarEstadoEtapas();
+            
+            // Llamada con delay para asegurar que todo esté cargado
             setTimeout(() => {
                 verificarYActualizarEstadoEtapas();
                 verificarEstadoCompletado();
-            }, 1000); // Dar tiempo para que se cargue la interfaz
+            }, 1000);
         }
     }
 
@@ -1103,6 +1133,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Función para deshabilitar una etapa
     function deshabilitarEtapa(etapaElement) {
+        console.log('Deshabilitando etapa:', etapaElement.dataset.etapaId);
+        
         // Deshabilitar botón de colapso
         const collapseBtn = etapaElement.querySelector('.collapse-toggle');
         if (collapseBtn) {
@@ -1115,6 +1147,7 @@ document.addEventListener('DOMContentLoaded', function() {
         controles.forEach(control => {
             control.disabled = true;
             control.style.cursor = 'not-allowed';
+            control.style.pointerEvents = 'none';
         });
         
         // Agregar mensaje de información
@@ -1134,6 +1167,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Función para habilitar una etapa
     function habilitarEtapa(etapaElement) {
+        console.log('Habilitando etapa:', etapaElement.dataset.etapaId);
+        
         // Quitar clase de bloqueado
         etapaElement.classList.remove('bloqueada');
         
@@ -1153,13 +1188,23 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        const botones = etapaElement.querySelectorAll('.btn:not(.collapse-toggle)');
-        botones.forEach(boton => {
-            if (!boton.disabled && procesoIniciado) {
-                boton.disabled = false;
-                boton.style.cursor = '';
-            }
-        });
+        // Habilitar TODOS los botones cuando el proceso está iniciado, excepto los específicamente bloqueados
+        if (procesoIniciado) {
+            const botones = etapaElement.querySelectorAll('.btn:not(.collapse-toggle)');
+            botones.forEach(boton => {
+                // Solo habilitar si no está en una tarea/documento bloqueado por roles
+                if (!boton.closest('.tarea-bloqueada, .documento-bloqueado')) {
+                    boton.disabled = false;
+                    boton.style.cursor = '';
+                    boton.style.pointerEvents = '';
+                    
+                    // Específicamente para el botón "Grabar Cambios"
+                    if (boton.classList.contains('grabar-cambios-etapa')) {
+                        console.log('Habilitando botón grabar cambios para etapa:', etapaElement.dataset.etapaId);
+                    }
+                }
+            });
+        }
         
         // Quitar mensaje de información
         const infoDiv = etapaElement.querySelector('.etapa-bloqueada-info');
@@ -1440,16 +1485,28 @@ document.addEventListener('DOMContentLoaded', function() {
             const contador = etapaCard.querySelector('.contador-cambios-etapa');
             const boton = etapaCard.querySelector('.grabar-cambios-etapa');
             
+            console.log(`Actualizando contador para etapa ${etapaId}: ${cambiosEtapa.length} cambios pendientes`);
+            
             if (contador) {
                 contador.textContent = cambiosEtapa.length;
             }
             
             if (boton) {
+                console.log(`Botón grabar cambios encontrado para etapa ${etapaId}, disabled: ${boton.disabled}`);
+                
                 if (cambiosEtapa.length > 0) {
                     boton.style.display = 'inline-block';
+                    // Asegurar que el botón esté habilitado si la etapa no está bloqueada
+                    if (!etapaCard.classList.contains('bloqueada')) {
+                        boton.disabled = false;
+                        boton.style.pointerEvents = '';
+                        console.log(`Habilitando botón grabar cambios para etapa ${etapaId}`);
+                    }
                 } else {
                     boton.style.display = 'none';
                 }
+            } else {
+                console.warn(`No se encontró botón grabar-cambios-etapa para etapa ${etapaId}`);
             }
         }
     }
