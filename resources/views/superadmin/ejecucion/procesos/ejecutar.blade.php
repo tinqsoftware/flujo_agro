@@ -26,6 +26,34 @@
     background-color: #f8fff9;
 }
 
+.etapa-card.bloqueada {
+    border-color: #6c757d;
+    background-color: #f8f9fa;
+    opacity: 0.6;
+}
+
+.etapa-card.bloqueada .card-header {
+    background-color: #e9ecef !important;
+    cursor: not-allowed;
+}
+
+.etapa-card.bloqueada .collapse-toggle {
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+.etapa-card.bloqueada .tarea-checkbox,
+.etapa-card.bloqueada .documento-checkbox,
+.etapa-card.bloqueada .btn {
+    pointer-events: none;
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.etapa-card.bloqueada .grabar-cambios-etapa {
+    display: none !important;
+}
+
 .estado-etapa i.text-warning {
     color: #ffc107 !important;
 }
@@ -311,7 +339,35 @@
 
 <!-- Etapas del flujo -->
 @foreach($flujo->etapas as $index => $etapa)
-<div class="card mb-3 etapa-card" data-etapa-id="{{ $etapa->id }}">
+@php
+    // Lógica para determinar si la etapa está disponible
+    $etapaDisponible = true;
+    
+    if (!$etapa->paralelo) {
+        // Si la etapa no es paralela (paralelo = 0), verificar que las anteriores estén completadas
+        if ($index > 0) {
+            // Verificar que todas las etapas anteriores estén completadas
+            $etapasAnteriores = $flujo->etapas->slice(0, $index);
+            foreach ($etapasAnteriores as $etapaAnterior) {
+                // Si la etapa anterior también no es paralela, debe estar completada
+                if (!$etapaAnterior->paralelo) {
+                    // Aquí deberías verificar si la etapa anterior está completada
+                    // Por ahora, simplificamos asumiendo que si hay una etapa no paralela anterior,
+                    // esta etapa queda bloqueada hasta que se complete la anterior
+                    $etapaDisponible = false;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Determinar clases CSS
+    $clasesEtapa = 'card mb-3 etapa-card';
+    if (!$etapaDisponible) {
+        $clasesEtapa .= ' bloqueada';
+    }
+@endphp
+<div class="{{ $clasesEtapa }}" data-etapa-id="{{ $etapa->id }}" data-paralelo="{{ $etapa->paralelo ? '1' : '0' }}">
     <div class="card-header bg-light">
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center">
@@ -319,15 +375,31 @@
                     <i class="fas fa-circle text-secondary" id="estado-etapa-{{ $etapa->id }}"></i>
                 </div>
                 <div>
-                    <h6 class="mb-0">{{ $etapa->nro }}. {{ $etapa->nombre }}</h6>
+                    <h6 class="mb-0">
+                        {{ $etapa->nro }}. {{ $etapa->nombre }}
+                        @if($etapa->paralelo)
+                            <span class="badge bg-info ms-2" title="Etapa paralela - Puede ejecutarse simultáneamente">
+                                <i class="fas fa-layer-group"></i> Paralela
+                            </span>
+                        @else
+                            <span class="badge bg-warning ms-2" title="Etapa secuencial - Debe completarse en orden">
+                                <i class="fas fa-arrow-right"></i> Secuencial
+                            </span>
+                        @endif
+                    </h6>
                     <small class="text-muted">
-                        Pendiente • Progreso: <span class="progreso-etapa" data-etapa="{{ $etapa->id }}">0%</span>
+                        @if($etapaDisponible)
+                            Pendiente • Progreso: <span class="progreso-etapa" data-etapa="{{ $etapa->id }}">0%</span>
+                        @else
+                            <i class="fas fa-lock me-1"></i>Bloqueada - Completa las etapas anteriores
+                        @endif
                     </small>
                 </div>
             </div>
             <div>
                 <button class="btn btn-sm btn-outline-primary collapse-toggle collapsed" type="button" 
-                        data-target="etapa-content-{{ $etapa->id }}">
+                        data-target="etapa-content-{{ $etapa->id }}"
+                        @if(!$etapaDisponible) disabled title="Etapa bloqueada" @endif>>
                     <i class="fas fa-chevron-down"></i>
                 </button>
             </div>
@@ -736,12 +808,15 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('URL limpiada de parámetros vacíos');
     }
     
+    // Inicializar control de etapas bloqueadas
+    inicializarControlEtapas();
+    
     // Inicializar estado del flujo
     if (procesoIniciado) {
         actualizarProgreso();
         
         // Activar primera etapa si el proceso ya está iniciado
-        const primeraEtapa = document.querySelector('.etapa-card');
+        const primeraEtapa = document.querySelector('.etapa-card:not(.bloqueada)');
         if (primeraEtapa) {
             primeraEtapa.classList.add('activa');
             const estadoIcon = primeraEtapa.querySelector('.estado-etapa i');
@@ -759,6 +834,133 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Inicializar progreso de las etapas al cargar la página
     actualizarProgreso();
+
+    // Función para inicializar el control de etapas bloqueadas
+    function inicializarControlEtapas() {
+        // Verificar el estado inicial de las etapas
+        const etapas = document.querySelectorAll('.etapa-card');
+        
+        etapas.forEach((etapa, index) => {
+            const esParalela = etapa.dataset.paralelo === '1';
+            const estaBloqueada = etapa.classList.contains('bloqueada');
+            
+            console.log(`Etapa ${index + 1}: Paralela=${esParalela}, Bloqueada=${estaBloqueada}`);
+            
+            // Si la etapa está bloqueada, deshabilitarla completamente
+            if (estaBloqueada) {
+                deshabilitarEtapa(etapa);
+            }
+        });
+    }
+    
+    // Función para deshabilitar una etapa
+    function deshabilitarEtapa(etapaElement) {
+        // Deshabilitar botón de colapso
+        const collapseBtn = etapaElement.querySelector('.collapse-toggle');
+        if (collapseBtn) {
+            collapseBtn.disabled = true;
+            collapseBtn.title = 'Etapa bloqueada - Completa las etapas secuenciales anteriores';
+        }
+        
+        // Deshabilitar todos los controles dentro de la etapa
+        const controles = etapaElement.querySelectorAll('input, button, select, textarea');
+        controles.forEach(control => {
+            control.disabled = true;
+            control.style.cursor = 'not-allowed';
+        });
+        
+        // Agregar mensaje de información
+        const cardHeader = etapaElement.querySelector('.card-header');
+        if (cardHeader && !cardHeader.querySelector('.etapa-bloqueada-info')) {
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'etapa-bloqueada-info mt-2';
+            infoDiv.innerHTML = `
+                <small class="text-warning">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Esta etapa secuencial está bloqueada. Completa las etapas anteriores para poder acceder.
+                </small>
+            `;
+            cardHeader.appendChild(infoDiv);
+        }
+    }
+    
+    // Función para habilitar una etapa
+    function habilitarEtapa(etapaElement) {
+        // Quitar clase de bloqueado
+        etapaElement.classList.remove('bloqueada');
+        
+        // Habilitar botón de colapso
+        const collapseBtn = etapaElement.querySelector('.collapse-toggle');
+        if (collapseBtn) {
+            collapseBtn.disabled = false;
+            collapseBtn.title = '';
+        }
+        
+        // Habilitar controles específicos (no todos, solo los que deben estar habilitados)
+        const checksboxes = etapaElement.querySelectorAll('.tarea-checkbox, .documento-checkbox');
+        checksboxes.forEach(checkbox => {
+            if (!checkbox.closest('.tarea-bloqueada, .documento-bloqueado')) {
+                checkbox.disabled = false;
+                checkbox.style.cursor = '';
+            }
+        });
+        
+        const botones = etapaElement.querySelectorAll('.btn:not(.collapse-toggle)');
+        botones.forEach(boton => {
+            if (!boton.disabled && procesoIniciado) {
+                boton.disabled = false;
+                boton.style.cursor = '';
+            }
+        });
+        
+        // Quitar mensaje de información
+        const infoDiv = etapaElement.querySelector('.etapa-bloqueada-info');
+        if (infoDiv) {
+            infoDiv.remove();
+        }
+        
+        // Actualizar el texto del estado
+        const statusText = etapaElement.querySelector('.card-header small');
+        if (statusText && statusText.textContent.includes('Bloqueada')) {
+            statusText.innerHTML = 'Pendiente • Progreso: <span class="progreso-etapa">0%</span>';
+        }
+    }
+    
+    // Función para verificar y actualizar el estado de las etapas basado en el progreso
+    function verificarYActualizarEstadoEtapas() {
+        const etapas = document.querySelectorAll('.etapa-card');
+        
+        etapas.forEach((etapa, index) => {
+            const esParalela = etapa.dataset.paralelo === '1';
+            const etapaId = etapa.dataset.etapaId;
+            
+            if (!esParalela) {
+                // Para etapas secuenciales, verificar que las anteriores estén completadas
+                let puedeHabilitarse = true;
+                
+                // Revisar todas las etapas anteriores
+                for (let i = 0; i < index; i++) {
+                    const etapaAnterior = etapas[i];
+                    const esParalelaAnterior = etapaAnterior.dataset.paralelo === '1';
+                    
+                    if (!esParalelaAnterior && !etapaAnterior.classList.contains('completada')) {
+                        puedeHabilitarse = false;
+                        break;
+                    }
+                }
+                
+                // Aplicar el estado correspondiente
+                if (puedeHabilitarse && etapa.classList.contains('bloqueada')) {
+                    habilitarEtapa(etapa);
+                    console.log(`Etapa ${index + 1} habilitada por completar etapas anteriores`);
+                } else if (!puedeHabilitarse && !etapa.classList.contains('bloqueada')) {
+                    etapa.classList.add('bloqueada');
+                    deshabilitarEtapa(etapa);
+                    console.log(`Etapa ${index + 1} bloqueada por etapas anteriores incompletas`);
+                }
+            }
+        });
+    }
 
     // Función personalizada para manejar collapse/expand
     function initializeCustomCollapse() {
@@ -1222,6 +1424,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Actualizar contadores y progreso
                 actualizarContadoresYProgreso();
                 
+                // Verificar y actualizar estado de etapas
+                verificarYActualizarEstadoEtapas();
+                
                 // Mostrar mensaje de éxito
                 mostrarMensajeExito(data.completada ? 'Tarea completada' : 'Tarea regresada a estado inicial');
                 
@@ -1351,6 +1556,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Actualizar contadores y progreso
                 actualizarContadoresYProgreso();
+                
+                // Verificar y actualizar estado de etapas
+                verificarYActualizarEstadoEtapas();
                 
                 // Mostrar mensaje de éxito
                 mostrarMensajeExito(data.validado ? 'Documento validado' : 'Documento regresado a estado inicial');
@@ -1938,23 +2146,35 @@ document.addEventListener('DOMContentLoaded', function() {
         estadoIcon.classList.add('text-success');
         statusText.innerHTML = 'Completada • Progreso: <span class="progreso-etapa">100%</span>';
         
-        // Activar siguiente etapa si existe
-        const siguienteEtapa = etapaCard.nextElementSibling;
-        if (siguienteEtapa && siguienteEtapa.classList.contains('etapa-card') && 
-            !siguienteEtapa.classList.contains('activa') && 
-            !siguienteEtapa.classList.contains('completada')) {
-            siguienteEtapa.classList.add('activa');
-            const siguienteIcon = siguienteEtapa.querySelector('.estado-etapa i');
-            siguienteIcon.classList.remove('text-secondary');
-            siguienteIcon.classList.add('text-primary');
+        // Verificar y actualizar estado de etapas bloqueadas
+        verificarYActualizarEstadoEtapas();
+        
+        // Activar siguiente etapa disponible
+        const todasLasEtapas = document.querySelectorAll('.etapa-card');
+        const indiceActual = Array.from(todasLasEtapas).indexOf(etapaCard);
+        
+        // Buscar la siguiente etapa que pueda ser activada
+        for (let i = indiceActual + 1; i < todasLasEtapas.length; i++) {
+            const siguienteEtapa = todasLasEtapas[i];
             
-            // Expandir automáticamente la siguiente etapa
-            const collapseElement = siguienteEtapa.querySelector('.etapa-content');
-            const collapseButton = siguienteEtapa.querySelector('.collapse-toggle');
-            if (collapseElement && collapseButton && !collapseElement.classList.contains('show')) {
-                collapseElement.classList.add('show');
-                collapseButton.classList.remove('collapsed');
-                collapseButton.classList.add('expanded');
+            if (!siguienteEtapa.classList.contains('activa') && 
+                !siguienteEtapa.classList.contains('completada') &&
+                !siguienteEtapa.classList.contains('bloqueada')) {
+                
+                siguienteEtapa.classList.add('activa');
+                const siguienteIcon = siguienteEtapa.querySelector('.estado-etapa i');
+                siguienteIcon.classList.remove('text-secondary');
+                siguienteIcon.classList.add('text-primary');
+                
+                // Expandir automáticamente la siguiente etapa
+                const collapseElement = siguienteEtapa.querySelector('.etapa-content');
+                const collapseButton = siguienteEtapa.querySelector('.collapse-toggle');
+                if (collapseElement && collapseButton && !collapseElement.classList.contains('show')) {
+                    collapseElement.classList.add('show');
+                    collapseButton.classList.remove('collapsed');
+                    collapseButton.classList.add('expanded');
+                }
+                break; // Solo activar la primera etapa disponible
             }
         }
     }
@@ -2117,12 +2337,21 @@ document.addEventListener('DOMContentLoaded', function() {
         // Event listeners para checkboxes de tareas
         document.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', function(e) {
+                // Verificar si la etapa está bloqueada
+                const etapaCard = this.closest('.etapa-card');
+                if (etapaCard && etapaCard.classList.contains('bloqueada')) {
+                    // Revertir el cambio
+                    e.preventDefault();
+                    this.checked = !this.checked;
+                    mostrarNotificacion('Esta etapa está bloqueada. Completa las etapas secuenciales anteriores primero.', 'warning');
+                    return;
+                }
+                
                 const wasChecked = e.target.checked;
                 const previouslyChecked = this.dataset.previouslyChecked === 'true';
                 const tareaId = this.dataset.tareaId;
                 
                 // Encontrar la etapa padre
-                const etapaCard = this.closest('.card');
                 const etapaId = etapaCard ? etapaCard.querySelector('.grabar-cambios-etapa').dataset.etapaId : null;
                 
                 // Si se está desmarcando una tarea que estaba marcada originalmente, mostrar modal de confirmación
@@ -2141,7 +2370,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Guardar referencia para la confirmación
                     document.getElementById('confirmar-desmarcar-tarea').dataset.tareaCheckbox = this.id;
                     document.getElementById('confirmar-desmarcar-tarea').dataset.tareaId = tareaId;
-                    document.getElementById('confirmar-desmarcar-tarea').dataset.etapaId = etapaId;
+                    document.getElementById('confirmar-desmarcar-tarea').dataset.etapaId = etapaParent;
                     document.getElementById('confirmar-desmarcar-tarea').dataset.tipo = 'tarea';
                     
                     modal.show();
@@ -2150,8 +2379,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     actualizarVisualTarea(this, wasChecked);
                     
                     // Agregar a cambios pendientes por etapa
-                    if (etapaId) {
-                        agregarCambioPendienteEtapa(etapaId, 'tarea', tareaId, wasChecked);
+                    if (etapaParent) {
+                        agregarCambioPendienteEtapa(etapaParent, 'tarea', tareaId, wasChecked);
                     }
                 }
             });
@@ -2163,13 +2392,21 @@ document.addEventListener('DOMContentLoaded', function() {
         // Event listeners para checkboxes de documentos
         document.querySelectorAll('.documento-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', function() {
+                // Verificar si la etapa está bloqueada
+                const etapaCard = this.closest('.etapa-card');
+                if (etapaCard && etapaCard.classList.contains('bloqueada')) {
+                    // Revertir el cambio
+                    this.checked = !this.checked;
+                    mostrarNotificacion('Esta etapa está bloqueada. Completa las etapas secuenciales anteriores primero.', 'warning');
+                    return;
+                }
+                
                 const documentoId = this.dataset.documentoId;
                 const validado = this.checked;
                 const previouslyChecked = this.dataset.previouslyChecked === 'true';
                 
                 // Encontrar la etapa padre
-                const etapaCard = this.closest('.card');
-                const etapaId = etapaCard ? etapaCard.querySelector('.grabar-cambios-etapa').dataset.etapaId : null;
+                const etapaParent = etapaCard ? etapaCard.querySelector('.grabar-cambios-etapa').dataset.etapaId : null;
                 
                 // Si se está desmarcando un documento que estaba validado originalmente, mostrar modal de confirmación
                 if (!validado && previouslyChecked) {
