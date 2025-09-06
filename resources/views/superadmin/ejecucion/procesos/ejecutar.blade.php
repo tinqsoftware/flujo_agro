@@ -606,7 +606,7 @@ button[disabled] {
                                         Completada por: <strong>{{ $tarea->detalle->userCreate->name }}</strong>
                                         <span class="text-muted ms-2">
                                             <i class="fas fa-clock me-1"></i>
-                                            {{ $tarea->detalle->updated_at->format('d/m/Y') }}
+                                            {{ $tarea->detalle->updated_at->format('d/m/Y H:i') }}
                                         </span>
                                     </div>
                                 @endif
@@ -669,7 +669,7 @@ button[disabled] {
                                                                 {{ $documento->subido ? 'Validado' : 'Subido' }} por: <strong>{{ $documento->detalle->userCreate->name }}</strong>
                                                                 <span class="text-muted ms-2">
                                                                     <i class="fas fa-clock me-1"></i>
-                                                                    {{ $documento->detalle->updated_at->format('d/m/Y') }}
+                                                                    {{ $documento->detalle->updated_at->format('d/m/Y H:i') }}
                                                                 </span>
                                                             </div>
                                                         @endif
@@ -782,7 +782,7 @@ button[disabled] {
                                                         {{ $documento->subido ? 'Validado' : 'Subido' }} por: <strong>{{ $documento->detalle->userCreate->name }}</strong>
                                                         <span class="text-muted ms-2">
                                                             <i class="fas fa-clock me-1"></i>
-                                                            {{ $documento->detalle->updated_at->format('d/m/Y') }}
+                                                            {{ $documento->detalle->updated_at->format('d/m/Y H:i') }}
                                                         </span>
                                                     </div>
                                                 @endif
@@ -1441,19 +1441,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Limpiar estilos visuales de cambios pendientes en esta etapa
                     limpiarEstilosVisualesEtapa(etapaId);
                     
-                    // Restaurar botón
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="fas fa-save me-2"></i>Grabar Cambios de esta Etapa <span class="badge bg-light text-primary ms-1 contador-cambios-etapa">0</span>';
-                    
                     mostrarMensajeExito('Todos los cambios de esta etapa han sido grabados correctamente');
                     
-                    // Actualizar progreso
-                    actualizarProgreso();
-                    
-                    // Asegurar que la etapa se mantenga abierta después de actualizar
+                    // Recargar la página para mostrar los últimos cambios
                     setTimeout(() => {
-                        expandirEtapa(etapaId);
-                    }, 100); // Pequeño delay para que termine la actualización del progreso
+                        window.location.reload();
+                    }, 1500); // Delay de 1.5 segundos para que el usuario vea el mensaje de éxito
                 })
                 .catch(error => {
                     console.error('Error al grabar cambios de etapa:', error);
@@ -1472,6 +1465,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const cambiosEtapa = cambiosPendientesPorEtapa[etapaId] || [];
         const promesas = [];
         
+        console.log(`Grabando ${cambiosEtapa.length} cambios para etapa ${etapaId}:`, cambiosEtapa);
+        
         for (const cambio of cambiosEtapa) {
             if (cambio.tipo === 'tarea') {
                 promesas.push(actualizarTareaIndividual(cambio.id, cambio.completada));
@@ -1480,7 +1475,47 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        return Promise.all(promesas);
+        try {
+            const resultados = await Promise.all(promesas);
+            console.log('Todos los cambios procesados exitosamente:', resultados);
+            
+            // Actualizar contadores y progreso solo después de que todos los cambios se hayan guardado
+            actualizarContadoresYProgreso();
+            
+            // Verificar y actualizar estado de etapas
+            verificarYActualizarEstadoEtapas();
+            
+            // Verificar si se completó etapa o flujo
+            const algunResultadoConEstados = resultados.find(r => r && r.estados);
+            if (algunResultadoConEstados?.estados) {
+                console.log('Estados recibidos en batch:', algunResultadoConEstados.estados);
+                if (typeof algunResultadoConEstados.estados === 'object' && algunResultadoConEstados.estados.flujo_completado) {
+                    console.log('Flujo completado detectado en batch, mostrando animación');
+                    mostrarAnimacionComplecion(algunResultadoConEstados.estados.flujo_nombre);
+                } else if (algunResultadoConEstados.estados === true) {
+                    console.log('Etapa completada detectada en batch');
+                    const etapaCard = document.querySelector(`[data-etapa-id="${etapaId}"]`);
+                    marcarEtapaComoCompletada(etapaCard);
+                }
+            }
+            
+            return resultados;
+        } catch (error) {
+            console.error('Error en alguno de los cambios:', error);
+            
+            // Mostrar cuáles cambios fallaron específicamente
+            let mensajeError = 'Error al grabar algunos cambios: ';
+            if (error.message.includes('Invalid JSON')) {
+                mensajeError += 'El servidor devolvió una respuesta inválida';
+            } else if (error.message.includes('HTTP error')) {
+                mensajeError += 'Error de conexión con el servidor';
+            } else {
+                mensajeError += error.message;
+            }
+            
+            mostrarNotificacion(mensajeError + '. Revisa la consola para más detalles.', 'error');
+            throw error;
+        }
     }
 
     // Función para actualizar el contador de cambios pendientes de una etapa
@@ -1683,12 +1718,12 @@ document.addEventListener('DOMContentLoaded', function() {
     function actualizarTareaIndividual(tareaId, completada) {
         if (!procesoIniciado) {
             mostrarNotificacion('Debes iniciar la ejecución del flujo primero', 'warning');
-            return false;
+            return Promise.reject(new Error('Proceso no iniciado'));
         }
 
         if (!detalleFlujoId) {
             mostrarNotificacion('Error: No se encontró ID de ejecución', 'error');
-            return false;
+            return Promise.reject(new Error('Sin detalle_flujo_id'));
         }
 
         // Mostrar indicador de carga en la tarea
@@ -1697,7 +1732,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tareaItem.classList.add('border', 'border-info');
         
         // Enviar al servidor
-        fetch('{{ route('ejecucion.detalle.tarea.actualizar') }}', {
+        return fetch('{{ route('ejecucion.detalle.tarea.actualizar') }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1736,7 +1771,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const checkbox = document.querySelector(`[data-tarea-id="${tareaId}"]`);
                 if (!checkbox) {
                     console.error('No se encontró checkbox con tarea-id:', tareaId);
-                    return;
+                    return data;
                 }
                 
                 // Actualizar checkbox con el estado real del servidor
@@ -1800,27 +1835,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     checkboxChecked: checkbox.checked
                 });
                 
-                // Actualizar contadores y progreso
-                actualizarContadoresYProgreso();
+                // Limpiar estilos de cambio pendiente
+                tareaItem.classList.remove('cambio-pendiente-tarea');
                 
-                // Verificar y actualizar estado de etapas
-                verificarYActualizarEstadoEtapas();
-                
-                // Mostrar mensaje de éxito
-                mostrarMensajeExito(data.completada ? 'Tarea completada' : 'Tarea regresada a estado inicial');
-                
-                // Verificar si se completó etapa o flujo
-                if (data.estados) {
-                    console.log('Estados recibidos:', data.estados);
-                    if (typeof data.estados === 'object' && data.estados.flujo_completado) {
-                        console.log('Flujo completado detectado, mostrando animación');
-                        mostrarAnimacionComplecion(data.estados.flujo_nombre);
-                    } else if (data.estados === true) {
-                        console.log('Etapa completada detectada');
-                        const etapaCard = tareaItem.closest('.etapa-card');
-                        marcarEtapaComoCompletada(etapaCard);
-                    }
-                }
+                return data;
             } else {
                 // Revertir checkbox si hubo error del servidor
                 const checkbox = document.querySelector(`[data-tarea-id="${tareaId}"]`);
@@ -1828,7 +1846,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     checkbox.checked = !completada;
                 }
                 console.error('Server error:', data.message);
-                mostrarNotificacion('Error al actualizar la tarea: ' + (data.message || 'Error desconocido'), 'error');
+                throw new Error('Error del servidor: ' + (data.message || 'Error desconocido'));
             }
         })
         .catch(error => {
@@ -1841,33 +1859,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 checkbox.checked = !completada;
             }
             
-            // Mensaje de error más informativo
-            if (error.message.includes('Invalid JSON')) {
-                mostrarNotificacion('Error: El servidor devolvió una respuesta inválida. Revisa la consola para más detalles.', 'error');
-            } else if (error.message.includes('HTTP error')) {
-                mostrarNotificacion('Error de conexión con el servidor: ' + error.message, 'error');
-            } else {
-                mostrarNotificacion('Error inesperado: ' + error.message, 'error');
-            }
+            // Lanzar error para que Promise.all lo capture
+            throw error;
         })
         .finally(() => {
             // Restaurar estado visual original
             tareaItem.className = originalClass;
         });
-        
-        return true;
     }
 
     // Función para actualizar validación de documento individual
     function actualizarDocumentoIndividual(documentoId, validado) {
         if (!procesoIniciado) {
             mostrarNotificacion('Debes iniciar la ejecución del flujo primero', 'warning');
-            return false;
+            return Promise.reject(new Error('Proceso no iniciado'));
         }
 
         if (!detalleFlujoId) {
             mostrarNotificacion('Error: No se encontró ID de ejecución', 'error');
-            return false;
+            return Promise.reject(new Error('Sin detalle_flujo_id'));
         }
 
         // Mostrar indicador de carga en el documento
@@ -1876,7 +1886,7 @@ document.addEventListener('DOMContentLoaded', function() {
         documentoItem.classList.add('border', 'border-info');
         
         // Enviar al servidor
-        fetch('{{ route('ejecucion.detalle.documento.validar') }}', {
+        return fetch('{{ route('ejecucion.detalle.documento.validar') }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1926,6 +1936,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     documentoItem.classList.add('border-warning');
                 }
                 
+                // Limpiar estilos de cambio pendiente
+                documentoItem.classList.remove('cambio-pendiente-documento');
+                
                 console.log('Documento actualizado:', {
                     documentoId: documentoId,
                     estadoSolicitado: validado,
@@ -1933,27 +1946,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     checkboxChecked: checkbox ? checkbox.checked : 'not found'
                 });
                 
-                // Actualizar contadores y progreso
-                actualizarContadoresYProgreso();
-                
-                // Verificar y actualizar estado de etapas
-                verificarYActualizarEstadoEtapas();
-                
-                // Mostrar mensaje de éxito
-                mostrarMensajeExito(data.validado ? 'Documento validado' : 'Documento regresado a estado inicial');
-                
-                // Verificar si se completó etapa o flujo
-                if (data.estados) {
-                    console.log('Estados recibidos (documento):', data.estados);
-                    if (typeof data.estados === 'object' && data.estados.flujo_completado) {
-                        console.log('Flujo completado detectado por documento, mostrando animación');
-                        mostrarAnimacionComplecion(data.estados.flujo_nombre);
-                    } else if (data.estados === true) {
-                        console.log('Etapa completada detectada por documento');
-                        const etapaCard = documentoItem.closest('.etapa-card');
-                        marcarEtapaComoCompletada(etapaCard);
-                    }
-                }
+                return data;
             } else {
                 // Revertir checkbox si hubo error del servidor
                 const checkbox = document.querySelector(`[data-documento-id="${documentoId}"]`);
@@ -1961,7 +1954,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     checkbox.checked = !validado;
                 }
                 console.error('Documento server error:', data.message);
-                mostrarNotificacion('Error al actualizar el documento: ' + (data.message || 'Error desconocido'), 'error');
+                throw new Error('Error del servidor: ' + (data.message || 'Error desconocido'));
             }
         })
         .catch(error => {
@@ -1974,21 +1967,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 checkbox.checked = !validado;
             }
             
-            // Mensaje de error más informativo
-            if (error.message.includes('Invalid JSON')) {
-                mostrarNotificacion('Error: El servidor devolvió una respuesta inválida. Revisa la consola para más detalles.', 'error');
-            } else if (error.message.includes('HTTP error')) {
-                mostrarNotificacion('Error de conexión con el servidor: ' + error.message, 'error');
-            } else {
-                mostrarNotificacion('Error inesperado al validar documento: ' + error.message, 'error');
-            }
+            // Lanzar error para que Promise.all lo capture
+            throw error;
         })
         .finally(() => {
             // Restaurar estado visual original
             documentoItem.className = originalClass;
         });
-        
-        return true;
     }
 
     // Manejar subida de documentos
