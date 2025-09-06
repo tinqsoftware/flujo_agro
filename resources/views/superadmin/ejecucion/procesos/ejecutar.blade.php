@@ -2055,10 +2055,11 @@ document.addEventListener('DOMContentLoaded', function() {
                             <input class="form-check-input documento-checkbox" 
                                    type="checkbox" 
                                    id="documento-${documentoId}" 
-                                   data-documento-id="${documentoId}">
+                                   data-documento-id="${documentoId}"
+                                   checked>
                         </div>
-                        <span class="badge bg-warning">
-                            <i class="fas fa-clock me-1"></i>Pendiente Validación
+                        <span class="badge bg-success">
+                            <i class="fas fa-check me-1"></i>Subido - Listo para Validar
                         </span>
                     </div>
                 `;
@@ -2159,6 +2160,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             agregarCambioPendienteEtapa(etapaId, 'documento', documentoId, validado);
                         }
                     });
+                    
+                    // Como el checkbox está marcado automáticamente, agregar el cambio pendiente
+                    const etapaId = documentoItem.closest('.card').querySelector('.grabar-cambios-etapa')?.dataset.etapaId;
+                    if (etapaId) {
+                        agregarCambioPendienteEtapa(etapaId, 'documento', documentoId, true);
+                        // Actualizar visual del documento como validado
+                        actualizarVisualDocumento(newCheckbox, true);
+                    }
                 }
                 
                 // Cerrar modal
@@ -2166,7 +2175,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('uploadForm').reset();
                 
                 // Mostrar mensaje de éxito
-                mostrarMensajeExito('Documento subido correctamente. Presiona "Grabar Cambios" para validar.');
+                mostrarMensajeExito('Documento subido y marcado para validación. Presiona "Grabar Cambios" para confirmar.');
                 
                 console.log('Documento subido:', data);
             } else {
