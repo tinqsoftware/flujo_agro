@@ -56,28 +56,60 @@
 }
 
 .tarea-item.completada {
-    background-color: #d4edda;
-    border-color: #c3e6cb;
+    background-color: #f8f9fa;
+    border-color: #28a745;
+    border-left: 4px solid #28a745;
 }
 
 .tarea-item.pendiente {
-    background-color: #fff3cd;
-    border-color: #ffeaa7;
+    background-color: #f8f9fa;
+    border-color: #ffc107;
+    border-left: 4px solid #ffc107;
 }
 
 .documento-item {
     transition: all 0.2s ease;
     border: 1px solid #e9ecef !important;
+    background-color: #ffffff;
 }
 
 .documento-item.subido {
-    background-color: #d4edda;
-    border-color: #c3e6cb !important;
+    background-color: #f8f9fa;
+    border-color: #28a745 !important;
+    border-left: 3px solid #28a745 !important;
 }
 
 .documento-item.pendiente {
-    background-color: #fff3cd;
-    border-color: #ffeaa7 !important;
+    background-color: #f8f9fa;
+    border-color: #6c757d !important;
+    border-left: 3px solid #6c757d !important;
+}
+
+.completion-info {
+    background-color: #e9ecef;
+    border-radius: 0.25rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.completion-info.completed {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+.user-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: #007bff;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    font-weight: bold;
 }
 
 #pdf-viewer {
@@ -103,6 +135,70 @@
 .progreso-circular {
     width: 60px;
     height: 60px;
+}
+
+.task-progress-bar {
+    height: 4px;
+    background-color: #e9ecef;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.task-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+    transition: width 0.3s ease;
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 0.5rem;
+}
+
+.status-indicator.completed {
+    background-color: #28a745;
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2);
+}
+
+.status-indicator.pending {
+    background-color: #6c757d;
+    box-shadow: 0 0 0 2px rgba(108, 117, 125, 0.2);
+}
+
+/* Accordion personalizado con CSS puro */
+.etapa-collapse {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+}
+
+.etapa-collapse.show {
+    max-height: 2000px;
+    transition: max-height 0.3s ease-in;
+}
+
+.etapa-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.etapa-toggle:hover {
+    background-color: rgba(0, 123, 255, 0.1);
+    border-radius: 0.25rem;
+}
+
+.etapa-toggle i {
+    transition: transform 0.3s ease;
+}
+
+.etapa-toggle.expanded i {
+    transform: rotate(180deg);
 }
 </style>
 @endpush
@@ -307,7 +403,7 @@
                     <h6 class="mb-0">{{ $etapa->nro }}. {{ $etapa->nombre }}</h6>
                     <small class="text-muted">
                         @if(isset($detalleFlujoActivo))
-                            Estado será actualizado...
+                            <span id="estado-text-{{ $etapa->id }}">100% Completado</span>
                         @else
                             Sin ejecución activa
                         @endif
@@ -318,25 +414,24 @@
                 </div>
             </div>
             <div>
-                <button class="btn btn-sm btn-outline-primary" type="button" 
-                        data-bs-toggle="collapse" 
-                        data-bs-target="#etapa-content-{{ $etapa->id }}" 
-                        aria-expanded="false">
+                <button class="btn btn-sm btn-outline-primary etapa-toggle" type="button" 
+                        onclick="toggleEtapa({{ $etapa->id }})"
+                        id="toggle-btn-{{ $etapa->id }}">
                     <i class="fas fa-chevron-down"></i>
                 </button>
             </div>
         </div>
     </div>
     
-    <div class="collapse" id="etapa-content-{{ $etapa->id }}">
+    <div class="etapa-collapse" id="etapa-content-{{ $etapa->id }}">
         <div class="card-body">
             <div class="row">
                 <!-- Tareas -->
                 @if($etapa->tareas->count() > 0)
-                <div class="col-md-6">
+                <div class="col-md-12">
                     <div class="d-flex align-items-center mb-3">
                         <i class="fas fa-tasks text-primary me-2"></i>
-                        <h6 class="mb-0">Tareas ({{ $etapa->tareas->count() }})</h6>
+                        <h6 class="mb-0">Tareas y Documentos ({{ $etapa->tareas->count() }} tareas)</h6>
                     </div>
                     
                     <div class="tareas-list">
@@ -344,90 +439,123 @@
                         <div class="tarea-item {{ isset($tarea->completada) && $tarea->completada ? 'completada' : 'pendiente' }}" data-tarea-id="{{ $tarea->id }}">
                             <div class="d-flex align-items-start">
                                 <div class="me-3">
-                                    @if(isset($tarea->completada) && $tarea->completada)
-                                        <i class="fas fa-check-circle text-success"></i>
-                                    @else
-                                        <i class="fas fa-clock text-warning"></i>
-                                    @endif
+                                    <div class="status-indicator {{ isset($tarea->completada) && $tarea->completada ? 'completed' : 'pending' }}"></div>
                                 </div>
                                 <div class="flex-grow-1">
                                     <h6 class="mb-1 {{ isset($tarea->completada) && $tarea->completada ? 'text-decoration-line-through text-muted' : '' }}">
                                         {{ $tarea->nombre }}
                                     </h6>
                                     @if($tarea->descripcion)
-                                        <p class="small text-muted mb-0">{{ $tarea->descripcion }}</p>
+                                        <p class="small text-muted mb-2">{{ $tarea->descripcion }}</p>
                                     @endif
-                                    <div class="small text-muted mt-1">
+                                    <div class="small text-muted mb-2">
                                         Estado: 
                                         @if(isset($tarea->completada) && $tarea->completada)
                                             <span class="text-success fw-bold">Completada</span>
                                         @else
-                                            <span class="text-warning fw-bold">Pendiente</span>
+                                            <span class="text-secondary fw-bold">Pendiente</span>
                                         @endif
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-                        @endforeach
-                    </div>
-                </div>
-                @endif
 
-                <!-- Documentos -->
-                @php
-                    $documentosEtapa = collect();
-                    foreach($etapa->tareas as $tarea) {
-                        $documentosEtapa = $documentosEtapa->merge($tarea->documentos);
-                    }
-                @endphp
-                @if($documentosEtapa->count() > 0)
-                <div class="col-md-6">
-                    <div class="d-flex align-items-center mb-3">
-                        <i class="fas fa-file-pdf text-danger me-2"></i>
-                        <h6 class="mb-0">Documentos ({{ $documentosEtapa->count() }})</h6>
-                    </div>
-                    
-                    <div class="documentos-list">
-                        @foreach($documentosEtapa as $documento)
-                        <div class="documento-item mb-3 p-3 rounded {{ isset($documento->subido) && $documento->subido ? 'subido' : 'pendiente' }}" data-documento-id="{{ $documento->id }}">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-1">{{ $documento->nombre }}</h6>
-                                    @if($documento->descripcion)
-                                        <p class="text-muted small mb-2">{{ $documento->descripcion }}</p>
+                                    <!-- Información de finalización -->
+                                    @if(isset($tarea->completada) && $tarea->completada)
+                                        <div class="completion-info completed">
+                                            <div class="d-flex align-items-center">
+                                                <div class="user-avatar me-2" title="{{ $tarea->completado_por_nombre ?? 'Usuario' }}">
+                                                    {{ strtoupper(substr($tarea->completado_por_nombre ?? 'U', 0, 1)) }}
+                                                </div>
+                                                <div class="flex-grow-1">
+                                                    <div class="fw-bold">Completada por: {{ $tarea->completado_por_nombre ?? 'Sistema' }}</div>
+                                                    <div class="text-muted">
+                                                        @if(isset($tarea->fecha_completado))
+                                                            {{ \Carbon\Carbon::parse($tarea->fecha_completado)->format('d/m/Y H:i') }}
+                                                        @else
+                                                            Fecha no disponible
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     @endif
-                                    
-                                    <!-- Estado del documento -->
-                                    <div class="document-status mb-2" id="status-{{ $documento->id }}">
-                                        @if(isset($documento->subido) && $documento->subido)
-                                            <span class="badge bg-success">
-                                                <i class="fas fa-check me-1"></i>Documento Subido
-                                            </span>
-                                        @else
-                                            <span class="badge bg-warning text-dark">
-                                                <i class="fas fa-clock me-1"></i>Pendiente
-                                            </span>
-                                        @endif
-                                    </div>
-                                    
-                                    @if(isset($documento->url_archivo) && $documento->url_archivo)
-                                        <div class="small text-muted">
-                                            <i class="fas fa-paperclip me-1"></i>
-                                            Archivo disponible
+
+                                    <!-- Documentos de esta tarea -->
+                                    @if($tarea->documentos->count() > 0)
+                                        <div class="ms-3 mt-2">
+                                            <small class="text-muted fw-bold">
+                                                <i class="fas fa-file-pdf me-1"></i>Documentos de esta tarea ({{ $tarea->documentos->count() }}):
+                                            </small>
+                                            <div class="row g-2 mt-1">
+                                                @foreach($tarea->documentos as $documento)
+                                                <div class="col-12">
+                                                                <div class="documento-item p-2 rounded {{ isset($documento->subido) && $documento->subido ? 'subido' : 'pendiente' }}" data-documento-id="{{ $documento->id }}">
+                                                                    <div class="d-flex justify-content-between align-items-start">
+                                                                        <div class="flex-grow-1">
+                                                                            <div class="d-flex align-items-center mb-1">
+                                                                                <div class="status-indicator {{ isset($documento->subido) && $documento->subido ? 'completed' : 'pending' }} me-2"></div>
+                                                                                <h6 class="mb-0 small">{{ $documento->nombre }}</h6>
+                                                                            </div>
+                                                                            @if($documento->descripcion)
+                                                                                <p class="text-muted small mb-1">{{ $documento->descripcion }}</p>
+                                                                            @endif                                                                <!-- Estado del documento -->
+                                                                <div class="document-status mb-1" id="status-{{ $documento->id }}">
+                                                                    @if(isset($documento->subido) && $documento->subido)
+                                                                        <span class="badge bg-success" style="font-size: 0.7rem;">
+                                                                            <i class="fas fa-check me-1"></i>Documento Subido
+                                                                        </span>
+                                                                    @else
+                                                                        <span class="badge bg-secondary" style="font-size: 0.7rem;">
+                                                                            <i class="fas fa-clock me-1"></i>Pendiente
+                                                                        </span>
+                                                                    @endif
+                                                                </div>
+                                                                
+                                                                <!-- Información de completado del documento -->
+                                                                @if(isset($documento->subido) && $documento->subido)
+                                                                    <div class="completion-info completed">
+                                                                        <div class="d-flex align-items-center">
+                                                                            <div class="user-avatar me-2" title="{{ $documento->subido_por_nombre ?? 'Usuario' }}">
+                                                                                {{ strtoupper(substr($documento->subido_por_nombre ?? 'U', 0, 1)) }}
+                                                                            </div>
+                                                                            <div class="flex-grow-1">
+                                                                                <div class="fw-bold">Subido por: {{ $documento->subido_por_nombre ?? 'Sistema' }}</div>
+                                                                                <div class="text-muted">
+                                                                                    @if(isset($documento->fecha_subida))
+                                                                                        {{ \Carbon\Carbon::parse($documento->fecha_subida)->format('d/m/Y H:i') }}
+                                                                                    @else
+                                                                                        Fecha no disponible
+                                                                                    @endif
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                @endif
+                                                                
+                                                                @if(isset($documento->url_archivo) && $documento->url_archivo)
+                                                                    <div class="small text-muted">
+                                                                        <i class="fas fa-paperclip me-1"></i>
+                                                                        Archivo disponible
+                                                                    </div>
+                                                                @endif
+                                                            </div>
+                                                            
+                                                            @if(isset($documento->url_archivo) && $documento->url_archivo)
+                                                            <div class="flex-shrink-0">
+                                                                <button type="button" class="btn btn-outline-primary btn-sm ver-pdf" 
+                                                                        data-documento-id="{{ $documento->id }}"
+                                                                        data-url="{{ $documento->url_archivo }}"
+                                                                        data-nombre="{{ $documento->nombre }}">
+                                                                    <i class="fas fa-eye me-1"></i>Ver
+                                                                </button>
+                                                            </div>
+                                                            @endif
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                @endforeach
+                                            </div>
                                         </div>
                                     @endif
                                 </div>
-                                
-                                @if(isset($documento->url_archivo) && $documento->url_archivo)
-                                <div class="flex-shrink-0">
-                                    <button type="button" class="btn btn-outline-primary btn-sm ver-pdf" 
-                                            data-documento-id="{{ $documento->id }}"
-                                            data-url="{{ $documento->url_archivo }}"
-                                            data-nombre="{{ $documento->nombre }}">
-                                        <i class="fas fa-eye me-1"></i>Ver PDF
-                                    </button>
-                                </div>
-                                @endif
                             </div>
                         </div>
                         @endforeach
@@ -674,6 +802,20 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('No hay ejecución activa, mostrando estado base del flujo');
     }
 
+    // Auto-expandir primera etapa si hay contenido
+    const primeraEtapa = document.querySelector('.etapa-card');
+    if (primeraEtapa) {
+        const etapaId = primeraEtapa.getAttribute('data-etapa-id');
+        if (etapaId) {
+            toggleEtapa(etapaId);
+            console.log('Primera etapa expandida automáticamente');
+        }
+    }
+
+    // Logs de verificación del DOM
+    const etapas = document.querySelectorAll('.etapa-card');
+    console.log('Etapas encontradas en DOM:', etapas.length);
+
     // Ver PDF
     function verPDF() {
         const documentoId = this.dataset.documentoId;
@@ -733,29 +875,36 @@ document.addEventListener('DOMContentLoaded', function() {
                         const etapaElement = document.querySelector(`[data-etapa-id="${etapaData.id}"]`);
                         if (etapaElement) {
                             const estadoIcon = etapaElement.querySelector('.estado-etapa i');
-                            const statusText = etapaElement.querySelector('.card-header small');
                             
                             // Actualizar ícono y estado según progreso
+                            const estadoTextElement = etapaElement.querySelector(`#estado-text-${etapaData.id}`);
+                            
                             if (etapaData.progreso === 100) {
                                 estadoIcon.classList.remove('text-primary', 'text-warning', 'text-secondary', 'text-muted');
                                 estadoIcon.classList.add('text-success');
                                 estadoIcon.classList.remove('fa-circle', 'fa-play-circle');
                                 estadoIcon.classList.add('fa-check-circle');
-                                statusText.innerHTML = `Completada • Progreso: ${etapaData.progreso}%`;
+                                if (estadoTextElement) {
+                                    estadoTextElement.textContent = 'Completado al 100%';
+                                }
                                 etapaElement.classList.add('completada');
                             } else if (etapaData.progreso > 0) {
                                 estadoIcon.classList.remove('text-secondary', 'text-success', 'text-muted');
                                 estadoIcon.classList.add('text-warning');
                                 estadoIcon.classList.remove('fa-circle', 'fa-check-circle');
                                 estadoIcon.classList.add('fa-play-circle');
-                                statusText.innerHTML = `En progreso • Progreso: ${etapaData.progreso}%`;
+                                if (estadoTextElement) {
+                                    estadoTextElement.textContent = `En progreso: ${etapaData.progreso}%`;
+                                }
                                 etapaElement.classList.add('activa');
                             } else {
                                 estadoIcon.classList.remove('text-success', 'text-warning');
                                 estadoIcon.classList.add('text-secondary');
                                 estadoIcon.classList.remove('fa-check-circle', 'fa-play-circle');
                                 estadoIcon.classList.add('fa-circle');
-                                statusText.innerHTML = `Pendiente • Progreso: ${etapaData.progreso}%`;
+                                if (estadoTextElement) {
+                                    estadoTextElement.textContent = `Pendiente: ${etapaData.progreso}%`;
+                                }
                             }
                             
                             // Actualizar contador de tareas en el header si existe
@@ -838,42 +987,28 @@ document.addEventListener('DOMContentLoaded', function() {
             progresoElement.innerHTML = '<span class="text-danger">Error al cargar</span>';
         });
     }
-
-    // Auto-expandir primera etapa si hay contenido
-    const primeraEtapa = document.querySelector('.etapa-card .collapse');
-    if (primeraEtapa) {
-        primeraEtapa.classList.add('show');
-        const botonToggle = document.querySelector('.etapa-card [data-bs-toggle="collapse"] i');
-        if (botonToggle) {
-            botonToggle.classList.remove('fa-chevron-down');
-            botonToggle.classList.add('fa-chevron-up');
-        }
-        console.log('Primera etapa expandida');
-    } else {
-        console.log('No se encontró primera etapa');
-    }
-
-    // Logs de verificación del DOM
-    const etapas = document.querySelectorAll('.etapa-card');
-    console.log('Etapas encontradas en DOM:', etapas.length);
-
-    // Manejar toggle de etapas
-    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const icon = this.querySelector('i');
-            setTimeout(() => {
-                const target = document.querySelector(this.getAttribute('data-bs-target'));
-                if (target && target.classList.contains('show')) {
-                    icon.classList.remove('fa-chevron-down');
-                    icon.classList.add('fa-chevron-up');
-                } else {
-                    icon.classList.remove('fa-chevron-up');
-                    icon.classList.add('fa-chevron-down');
-                }
-            }, 50);
-        });
-    });
 });
+
+// Función para toggle de etapas con CSS puro
+function toggleEtapa(etapaId) {
+    const content = document.getElementById('etapa-content-' + etapaId);
+    const button = document.getElementById('toggle-btn-' + etapaId);
+    const icon = button.querySelector('i');
+    
+    if (content.classList.contains('show')) {
+        // Cerrar
+        content.classList.remove('show');
+        button.classList.remove('expanded');
+        icon.classList.remove('fa-chevron-up');
+        icon.classList.add('fa-chevron-down');
+    } else {
+        // Abrir
+        content.classList.add('show');
+        button.classList.add('expanded');
+        icon.classList.remove('fa-chevron-down');
+        icon.classList.add('fa-chevron-up');
+    }
+}
 
 // Función para re-ejecutar flujo completo (crear nueva ejecución)
 function reEjecutarFlujo(flujoId) {

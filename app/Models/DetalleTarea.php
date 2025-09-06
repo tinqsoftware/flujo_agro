@@ -37,4 +37,9 @@ class DetalleTarea extends Model
     {
         return $this->belongsTo(User::class, 'id_user_create');
     }
+
+    public function detalleDocumentos()
+    {
+        return $this->hasMany(DetalleDocumento::class, 'id_detalle_tarea');
+    }
 }

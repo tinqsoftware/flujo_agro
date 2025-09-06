@@ -377,6 +377,7 @@
                                                 <i class="fas fa-eye me-1"></i>Ver Detalles
                                             </a>
                                             <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
+                                                    data-detalle-flujo-id="{{ $detalleEjecucion->id }}"
                                                     data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
                                                     data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
                                                 <i class="fas fa-search me-1"></i>Previsualizar
@@ -585,6 +586,7 @@
                                                         <i class="fas fa-eye me-1"></i>Ver Estado
                                                     </a>
                                                     <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
+                                                            data-detalle-flujo-id="{{ $detalleEjecucion->id }}"
                                                             data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
                                                             data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
                                                         <i class="fas fa-search me-1"></i>Ver
@@ -607,6 +609,7 @@
                                                         </div>
                                                         <div class="col-6">
                                                             <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
+                                                                    data-detalle-flujo-id="{{ $detalleEjecucion->id }}"
                                                                     data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
                                                                     data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
                                                                 <i class="fas fa-search"></i>
@@ -622,6 +625,7 @@
                                                     <i class="fas fa-ban me-1"></i>Cancelada
                                                 </button>
                                                 <button type="button" class="btn btn-outline-primary btn-sm previsualizar-flujo" 
+                                                        data-detalle-flujo-id="{{ $detalleEjecucion->id }}"
                                                         data-flujo-id="{{ $detalleEjecucion->flujo->id }}"
                                                         data-flujo-nombre="{{ $detalleEjecucion->nombre ?? $detalleEjecucion->flujo->nombre }}">
                                                     <i class="fas fa-search me-1"></i>Previsualizar
@@ -1544,6 +1548,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Manejar botones de previsualizar flujo
     document.querySelectorAll('.previsualizar-flujo').forEach(btn => {
         btn.addEventListener('click', function() {
+            const detalleFlujoId = this.dataset.detalleFlujoId;
             const flujoId = this.dataset.flujoId;
             const flujoNombre = this.dataset.flujoNombre;
             
@@ -1555,13 +1560,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const modal = new bootstrap.Modal(document.getElementById('modalPrevisualizarFlujo'));
             modal.show();
             
-            // Cargar contenido del flujo
-            cargarPrevisualizacionFlujo(flujoId);
+            // Cargar contenido del flujo usando el detalle_flujo_id
+            cargarPrevisualizacionFlujo(detalleFlujoId);
         });
     });
 
     // Función para cargar la previsualización del flujo
-    function cargarPrevisualizacionFlujo(flujoId) {
+    function cargarPrevisualizacionFlujo(detalleFlujoId) {
         const contenido = document.getElementById('contenido-previsualizacion');
         
         // Mostrar loading
@@ -1572,7 +1577,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         `;
 
-        fetch(`/ejecucion/${flujoId}/previsualizar`)
+        fetch(`/ejecucion/detalle/${detalleFlujoId}/previsualizar`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -1635,22 +1640,56 @@ document.addEventListener('DOMContentLoaded', function() {
 
         flujo.etapas.forEach((etapa, index) => {
             const totalTareas = etapa.tareas ? etapa.tareas.length : 0;
-            const totalDocumentos = etapa.documentos ? etapa.documentos.length : 0;
+            
+            // Contar documentos dentro de las tareas de esta etapa
+            let totalDocumentos = 0;
+            let documentosCompletados = 0;
+            
+            etapa.tareas.forEach(tarea => {
+                if (tarea.documentos && tarea.documentos.length > 0) {
+                    totalDocumentos += tarea.documentos.length;
+                    // Contar documentos completados
+                    documentosCompletados += tarea.documentos.filter(documento => 
+                        documento.detalle && documento.detalle.estado === 3).length;
+                }
+            });
+            
+            // Contar tareas completadas (estado = 3)
+            const tareasCompletadas = etapa.tareas ? etapa.tareas.filter(tarea => 
+                tarea.detalle && tarea.detalle.estado === 3).length : 0;
+            
+            // Determinar estado general de la etapa
+            const totalElementos = totalTareas + totalDocumentos;
+            const totalCompletados = tareasCompletadas + documentosCompletados;
+            const porcentajeEtapa = totalElementos > 0 ? Math.round((totalCompletados / totalElementos) * 100) : 0;
+            
+            // Badge de estado de la etapa
+            let estadoEtapaBadge = '';
+            if (porcentajeEtapa === 100) {
+                estadoEtapaBadge = '<span class="badge bg-success ms-2">Completada</span>';
+            } else if (porcentajeEtapa > 0) {
+                estadoEtapaBadge = `<span class="badge bg-warning ms-2">${porcentajeEtapa}% Progreso</span>`;
+            } else {
+                estadoEtapaBadge = '<span class="badge bg-secondary ms-2">Pendiente</span>';
+            }
             
             html += `
                 <div class="card mb-3">
                     <div class="card-header">
                         <div class="d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0">
-                                <span class="badge bg-primary me-2">${etapa.nro}</span>
-                                ${etapa.nombre}
-                            </h6>
                             <div>
-                                <span class="badge bg-info me-1">${totalTareas} tareas</span>
-                                <span class="badge bg-warning">${totalDocumentos} documentos</span>
+                                <h6 class="mb-0">
+                                    <span class="badge bg-primary me-2">${etapa.nro}</span>
+                                    ${etapa.nombre}
+                                    ${estadoEtapaBadge}
+                                </h6>
+                                ${etapa.descripcion ? `<small class="text-muted">${etapa.descripcion}</small>` : ''}
+                            </div>
+                            <div>
+                                <span class="badge bg-info me-1">${tareasCompletadas}/${totalTareas} tareas</span>
+                                <span class="badge bg-warning">${documentosCompletados}/${totalDocumentos} documentos</span>
                             </div>
                         </div>
-                        ${etapa.descripcion ? `<small class="text-muted">${etapa.descripcion}</small>` : ''}
                     </div>
                     <div class="card-body">
                         <div class="row">
@@ -1659,55 +1698,67 @@ document.addEventListener('DOMContentLoaded', function() {
             // Mostrar tareas si existen
             if (totalTareas > 0) {
                 html += `
-                    <div class="col-md-6">
+                    <div class="col-12">
                         <h6 class="text-primary">
-                            <i class="fas fa-tasks me-1"></i>Tareas (${totalTareas})
+                            <i class="fas fa-tasks me-1"></i>Tareas y Documentos (${tareasCompletadas}/${totalTareas} tareas, ${documentosCompletados}/${totalDocumentos} documentos)
                         </h6>
                         <div class="list-group list-group-flush">
                 `;
                 
                 etapa.tareas.forEach(tarea => {
+                    // Determinar estado de la tarea
+                    const estadoTarea = tarea.detalle ? tarea.detalle.estado : 1;
+                    const estadoBadge = estadoTarea === 3 ? 
+                        '<span class="badge bg-success ms-2">Completada</span>' : 
+                        '<span class="badge bg-secondary ms-2">Pendiente</span>';
+                    
                     html += `
                         <div class="list-group-item border-0 px-0">
-                            <div class="d-flex align-items-start">
-                                <i class="fas fa-circle text-secondary me-2 mt-1" style="font-size: 0.5rem;"></i>
-                                <div class="flex-grow-1">
-                                    <strong>${tarea.nombre}</strong>
-                                    ${tarea.descripcion ? `<br><small class="text-muted">${tarea.descripcion}</small>` : ''}
+                            <div class="d-flex align-items-start justify-content-between">
+                                <div class="d-flex align-items-start">
+                                    <i class="fas fa-circle ${estadoTarea === 3 ? 'text-success' : 'text-secondary'} me-2 mt-1" style="font-size: 0.5rem;"></i>
+                                    <div class="flex-grow-1">
+                                        <strong>${tarea.nombre}</strong>
+                                        ${tarea.descripcion ? `<br><small class="text-muted">${tarea.descripcion}</small>` : ''}
+                                    </div>
+                                </div>
+                                <div>${estadoBadge}</div>
+                            </div>
+                    `;
+                    
+                    // Mostrar documentos de esta tarea si existen
+                    if (tarea.documentos && tarea.documentos.length > 0) {
+                        html += `
+                            <div class="ms-4 mt-2">
+                                <small class="text-muted"><i class="fas fa-file-pdf me-1"></i>Documentos de esta tarea:</small>
+                                <div class="ms-3 mt-1">
+                        `;
+                        
+                        tarea.documentos.forEach(documento => {
+                            // Determinar estado del documento
+                            const estadoDocumento = documento.detalle ? documento.detalle.estado : 1;
+                            const docBadge = estadoDocumento === 3 ? 
+                                '<span class="badge bg-success ms-2" style="font-size: 0.65rem;">Completado</span>' : 
+                                '<span class="badge bg-warning ms-2" style="font-size: 0.65rem;">Pendiente</span>';
+                            
+                            html += `
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-file-pdf ${estadoDocumento === 3 ? 'text-success' : 'text-danger'} me-2" style="font-size: 0.8rem;"></i>
+                                        <small>${documento.nombre}</small>
+                                    </div>
+                                    <div>${docBadge}</div>
+                                </div>
+                            `;
+                        });
+                        
+                        html += `
                                 </div>
                             </div>
-                        </div>
-                    `;
-                });
-                
-                html += `
-                        </div>
-                    </div>
-                `;
-            }
-
-            // Mostrar documentos si existen
-            if (totalDocumentos > 0) {
-                html += `
-                    <div class="col-md-6">
-                        <h6 class="text-primary">
-                            <i class="fas fa-file-pdf me-1"></i>Documentos (${totalDocumentos})
-                        </h6>
-                        <div class="list-group list-group-flush">
-                `;
-                
-                etapa.documentos.forEach(documento => {
-                    html += `
-                        <div class="list-group-item border-0 px-0">
-                            <div class="d-flex align-items-start">
-                                <i class="fas fa-file-pdf text-danger me-2 mt-1"></i>
-                                <div class="flex-grow-1">
-                                    <strong>${documento.nombre}</strong>
-                                    ${documento.descripcion ? `<br><small class="text-muted">${documento.descripcion}</small>` : ''}
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                        `;
+                    }
+                    
+                    html += `</div>`;
                 });
                 
                 html += `
@@ -1745,32 +1796,96 @@ document.addEventListener('DOMContentLoaded', function() {
                         <i class="fas fa-chart-bar me-1"></i>Resumen del Flujo
                     </h6>
                     <div class="row text-center">
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="p-3">
                                 <i class="fas fa-list-ol fa-2x text-primary mb-2"></i>
                                 <h5>${flujo.etapas.length}</h5>
                                 <small class="text-muted">Etapas</small>
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="p-3">
                                 <i class="fas fa-tasks fa-2x text-info mb-2"></i>
                                 <h5>${flujo.etapas.reduce((total, etapa) => total + (etapa.tareas ? etapa.tareas.length : 0), 0)}</h5>
                                 <small class="text-muted">Tareas Totales</small>
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
+                            <div class="p-3">
+                                <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                                <h5>${flujo.etapas.reduce((total, etapa) => {
+                                    const tareasCompletadas = etapa.tareas ? etapa.tareas.filter(tarea => 
+                                        tarea.detalle && tarea.detalle.estado === 3).length : 0;
+                                    return total + tareasCompletadas;
+                                }, 0)}</h5>
+                                <small class="text-muted">Tareas Completadas</small>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
                             <div class="p-3">
                                 <i class="fas fa-file-pdf fa-2x text-warning mb-2"></i>
-                                <h5>${flujo.etapas.reduce((total, etapa) => total + (etapa.documentos ? etapa.documentos.length : 0), 0)}</h5>
+                                <h5>${flujo.etapas.reduce((total, etapa) => {
+                                    let totalDocumentos = 0;
+                                    etapa.tareas.forEach(tarea => {
+                                        if (tarea.documentos && tarea.documentos.length > 0) {
+                                            totalDocumentos += tarea.documentos.length;
+                                        }
+                                    });
+                                    return total + totalDocumentos;
+                                }, 0)}</h5>
                                 <small class="text-muted">Documentos Totales</small>
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="p-3">
-                                <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
-                                <h5>100%</h5>
-                                <small class="text-muted">Configurado</small>
+                                <i class="fas fa-file-check fa-2x text-success mb-2"></i>
+                                <h5>${flujo.etapas.reduce((total, etapa) => {
+                                    let documentosCompletados = 0;
+                                    etapa.tareas.forEach(tarea => {
+                                        if (tarea.documentos && tarea.documentos.length > 0) {
+                                            documentosCompletados += tarea.documentos.filter(documento => 
+                                                documento.detalle && documento.detalle.estado === 3).length;
+                                        }
+                                    });
+                                    return total + documentosCompletados;
+                                }, 0)}</h5>
+                                <small class="text-muted">Documentos Completados</small>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="p-3">
+                                <i class="fas fa-percentage fa-2x text-primary mb-2"></i>
+                                <h5>${(() => {
+                                    const totalTareas = flujo.etapas.reduce((total, etapa) => total + (etapa.tareas ? etapa.tareas.length : 0), 0);
+                                    const totalDocumentos = flujo.etapas.reduce((total, etapa) => {
+                                        let docCount = 0;
+                                        etapa.tareas.forEach(tarea => {
+                                            if (tarea.documentos && tarea.documentos.length > 0) {
+                                                docCount += tarea.documentos.length;
+                                            }
+                                        });
+                                        return total + docCount;
+                                    }, 0);
+                                    const tareasCompletadas = flujo.etapas.reduce((total, etapa) => {
+                                        const completadas = etapa.tareas ? etapa.tareas.filter(tarea => 
+                                            tarea.detalle && tarea.detalle.estado === 3).length : 0;
+                                        return total + completadas;
+                                    }, 0);
+                                    const documentosCompletados = flujo.etapas.reduce((total, etapa) => {
+                                        let docCompletados = 0;
+                                        etapa.tareas.forEach(tarea => {
+                                            if (tarea.documentos && tarea.documentos.length > 0) {
+                                                docCompletados += tarea.documentos.filter(documento => 
+                                                    documento.detalle && documento.detalle.estado === 3).length;
+                                            }
+                                        });
+                                        return total + docCompletados;
+                                    }, 0);
+                                    const totalElementos = totalTareas + totalDocumentos;
+                                    const totalCompletados = tareasCompletadas + documentosCompletados;
+                                    return totalElementos > 0 ? Math.round((totalCompletados / totalElementos) * 100) : 0;
+                                })()}%</h5>
+                                <small class="text-muted">Progreso General</small>
                             </div>
                         </div>
                     </div>

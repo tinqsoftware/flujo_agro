@@ -139,6 +139,9 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::post('ejecucion/detalle/{detalleFlujo}/reactivar', [Ejecucion::class, 'reactivarEjecucion'])->name('ejecucion.detalle.reactivar');
         Route::post('ejecucion/detalle/{detalleFlujo}/cancelar', [Ejecucion::class, 'cancelarEjecucion'])->name('ejecucion.detalle.cancelar');
         
+        // Ruta para previsualizar flujo específico de una ejecución
+        Route::get('ejecucion/detalle/{detalleFlujo}/previsualizar', [Ejecucion::class, 'previsualizarDetalle'])->name('ejecucion.detalle.previsualizar');
+        
         // Ruta para re-ejecutar flujo (crear nueva ejecución completa)
         Route::post('ejecucion/{flujo}/re-ejecutar', [Ejecucion::class, 'reEjecutarFlujo'])->name('ejecucion.re-ejecutar');
 

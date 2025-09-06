@@ -185,6 +185,12 @@ class Ejecucion extends Controller
                             $tarea->detalle_id = $detalleTarea->id;
                             $tarea->detalle_flujo_id = $detalleFlujoActivo->id;
                             $tarea->detalle = $detalleTarea;
+                            
+                            // Agregar información de completado
+                            if ($detalleTarea->estado == 3) {
+                                $tarea->completado_por_nombre = $detalleTarea->userCreate ? $detalleTarea->userCreate->name : 'Sistema';
+                                $tarea->fecha_completado = $detalleTarea->updated_at;
+                            }
                         } else {
                             // Si no tiene detalle o tiene estado 66, marcar como no incluida
                             $tarea->completada = false;
@@ -212,6 +218,12 @@ class Ejecucion extends Controller
                             $documento->detalle_id = $detalleDocumento->id;
                             $documento->detalle_flujo_id = $detalleFlujoActivo->id;
                             $documento->detalle = $detalleDocumento;
+                            
+                            // Agregar información de subida
+                            if ($detalleDocumento->estado == 3) {
+                                $documento->subido_por_nombre = $detalleDocumento->userCreate ? $detalleDocumento->userCreate->name : 'Sistema';
+                                $documento->fecha_subida = $detalleDocumento->updated_at;
+                            }
                         } else {
                             // Si no tiene detalle o tiene estado 66, marcar como no incluido
                             $documento->subido = false;
@@ -326,8 +338,7 @@ class Ejecucion extends Controller
                 'etapas' => function($query) {
                     $query->orderBy('nro');
                 },
-                'etapas.tareas',
-                'etapas.documentos'
+                'etapas.tareas.documentos' // Cargar documentos de las tareas
             ])->first();
 
             if (!$flujo) {
@@ -364,35 +375,46 @@ class Ejecucion extends Controller
                         $tarea->detalle_id = $detalleTarea->id;
                         $tarea->detalle_flujo_id = $detalleFlujo->id;
                         $tarea->detalle = $detalleTarea;
+                        
+                        // Agregar información de completado
+                        if ($detalleTarea->estado == 3) {
+                            $tarea->completado_por_nombre = $detalleTarea->userCreate ? $detalleTarea->userCreate->name : 'Sistema';
+                            $tarea->fecha_completado = $detalleTarea->updated_at;
+                        }
                     } else {
                         $tarea->completada = false;
                         $tarea->detalle = null;
                     }
-                }
-                
-                foreach ($etapa->documentos as $documento) {
-                    // Buscar DetalleDocumento vinculado a esta ejecución específica
-                    $detalleDocumento = null;
-                    if ($detalleEtapa) {
-                        $detalleDocumento = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)
-                            ->whereHas('detalleTarea', function($query) use ($detalleEtapa) {
-                                $query->where('id_detalle_etapa', $detalleEtapa->id);
-                            })
-                            ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo
-                            ->first();
-                    }
-                    
-                    if ($detalleDocumento) {
-                        $documento->subido = ($detalleDocumento->estado == 3);
-                        $documento->url_archivo = ($detalleDocumento && $detalleDocumento->ruta_doc) ? 
-                            Storage::url($detalleDocumento->ruta_doc) : null;
-                        $documento->detalle_id = $detalleDocumento->id;
-                        $documento->detalle_flujo_id = $detalleFlujo->id;
-                        $documento->detalle = $detalleDocumento;
-                    } else {
-                        $documento->subido = false;
-                        $documento->url_archivo = null;
-                        $documento->detalle = null;
+
+                    // Cargar documentos de esta tarea con sus estados específicos
+                    foreach ($tarea->documentos as $documento) {
+                        // Buscar DetalleDocumento vinculado a esta tarea específica
+                        $detalleDocumento = null;
+                        if ($detalleTarea) {
+                            $detalleDocumento = DetalleDocumento::with('userCreate')->where('id_documento', $documento->id)
+                                ->where('id_detalle_tarea', $detalleTarea->id)
+                                ->whereNotIn('estado', [66, 99]) // Excluir documentos que no influyen en flujo
+                                ->first();
+                        }
+                        
+                        if ($detalleDocumento) {
+                            $documento->subido = ($detalleDocumento->estado == 3);
+                            $documento->url_archivo = ($detalleDocumento && $detalleDocumento->ruta_doc) ? 
+                                Storage::url($detalleDocumento->ruta_doc) : null;
+                            $documento->detalle_id = $detalleDocumento->id;
+                            $documento->detalle_flujo_id = $detalleFlujo->id;
+                            $documento->detalle = $detalleDocumento;
+                            
+                            // Agregar información de subida
+                            if ($detalleDocumento->estado == 3) {
+                                $documento->subido_por_nombre = $detalleDocumento->userCreate ? $detalleDocumento->userCreate->name : 'Sistema';
+                                $documento->fecha_subida = $detalleDocumento->updated_at;
+                            }
+                        } else {
+                            $documento->subido = false;
+                            $documento->url_archivo = null;
+                            $documento->detalle = null;
+                        }
                     }
                 }
             }
@@ -626,6 +648,112 @@ class Ejecucion extends Controller
         } catch (\Exception $e) {
             Log::error('Error al cargar previsualización de flujo', [
                 'flujo_id' => $flujo->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json(['error' => 'Error interno del servidor'], 500);
+        }
+    }
+
+    /**
+     * Get specific execution preview information with real status.
+     */
+    public function previsualizarDetalle(DetalleFlujo $detalleFlujo)
+    {
+        try {
+            $user = Auth::user();
+            $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+
+            // Verificar permisos de empresa (SUPERADMIN puede ver todos)
+            if (!$isSuper && $detalleFlujo->id_emp != $user->id_emp) {
+                return response()->json(['error' => 'Sin permisos para ver esta ejecución'], 403);
+            }
+
+            // Cargar el flujo con todas sus relaciones y los detalles específicos de esta ejecución
+            $flujo = $detalleFlujo->flujo;
+            $flujo->load([
+                'tipo',
+                'empresa',
+                'etapas' => function($query) {
+                    $query->where('etapas.estado', 1)->orderBy('nro');
+                },
+                'etapas.tareas' => function($query) {
+                    $query->where('tareas.estado', 1)->orderBy('id');
+                },
+                'etapas.documentos' => function($query) {
+                    $query->where('documentos.estado', 1)->orderBy('id');
+                }
+            ]);
+
+            // Cargar los detalles de ejecución específicos
+            $detalleFlujo->load([
+                'detalleEtapas.detalleTareas.tarea',
+                'detalleEtapas.detalleTareas.detalleDocumentos.documento',
+                'detalleEtapas.etapa'
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'flujo' => [
+                    'id' => $flujo->id,
+                    'nombre' => $flujo->nombre,
+                    'descripcion' => $flujo->descripcion,
+                    'tipo' => $flujo->tipo ? [
+                        'id' => $flujo->tipo->id,
+                        'nombre' => $flujo->tipo->nombre
+                    ] : null,
+                    'empresa' => $flujo->empresa ? [
+                        'id' => $flujo->empresa->id,
+                        'nombre' => $flujo->empresa->nombre
+                    ] : null,
+                    'etapas' => $flujo->etapas->map(function($etapa) use ($detalleFlujo) {
+                        // Buscar el detalle de etapa correspondiente
+                        $detalleEtapa = $detalleFlujo->detalleEtapas->where('id_etapa', $etapa->id)->first();
+                        
+                        return [
+                            'id' => $etapa->id,
+                            'nombre' => $etapa->nombre,
+                            'nro' => $etapa->nro,
+                            'descripcion' => $etapa->descripcion,
+                            'tareas' => $etapa->tareas->map(function($tarea) use ($detalleEtapa) {
+                                // Buscar el detalle de tarea correspondiente
+                                $detalleTarea = $detalleEtapa ? 
+                                    $detalleEtapa->detalleTareas->where('id_tarea', $tarea->id)->first() : null;
+                                
+                                return [
+                                    'id' => $tarea->id,
+                                    'nombre' => $tarea->nombre,
+                                    'descripcion' => $tarea->descripcion,
+                                    'detalle' => $detalleTarea ? [
+                                        'estado' => $detalleTarea->estado ? 3 : 1  // boolean to integer conversion
+                                    ] : null,
+                                    'documentos' => $tarea->documentos()->where('documentos.estado', 1)->get()->map(function($documento) use ($detalleTarea) {
+                                        // Buscar el detalle de documento correspondiente dentro de esta tarea específica
+                                        $detalleDocumento = $detalleTarea ? 
+                                            $detalleTarea->detalleDocumentos->where('id_documento', $documento->id)->first() : null;
+                                        
+                                        return [
+                                            'id' => $documento->id,
+                                            'nombre' => $documento->nombre,
+                                            'descripcion' => $documento->descripcion,
+                                            'detalle' => $detalleDocumento ? [
+                                                'estado' => $detalleDocumento->estado ? 3 : 1  // boolean to integer conversion
+                                            ] : null
+                                        ];
+                                    })
+                                ];
+                            }),
+                            // Para compatibilidad, mantener documentos a nivel de etapa (aunque normalmente estarán vacíos)
+                            'documentos' => []  // Los documentos están ahora en las tareas
+                        ];
+                    })
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error al cargar previsualización de detalle de flujo', [
+                'detalle_flujo_id' => $detalleFlujo->id ?? null,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
