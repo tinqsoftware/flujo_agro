@@ -923,6 +923,11 @@ class Ejecucion extends Controller
             $etapa->detalle_etapa = $detalleEtapa;
             $etapa->estado_ejecucion = $detalleEtapa ? $detalleEtapa->estado : 1;
 
+            $tareasCompletadas = 0;
+            $totalTareas = 0;
+            $documentosCompletados = 0;
+            $totalDocumentos = 0;
+
             foreach ($etapa->tareas as $tarea) {
                 // Buscar DetalleTarea vinculado a esta ejecución específica a través del detalle_etapa
                 $detalleTarea = null;
@@ -940,12 +945,21 @@ class Ejecucion extends Controller
                     $tarea->detalle_id = $detalleTarea->id;
                     $tarea->detalle_flujo_id = $detalleFlujo->id;
                     $tarea->detalle = $detalleTarea; // Agregar referencia al detalle completo
+                    
+                    // Contar para progreso
+                    $totalTareas++;
+                    if ($detalleTarea->estado == 3) {
+                        $tareasCompletadas++;
+                    }
                 } else {
                     // Si no existe detalle, mostrar como no completada (estado inicial)
                     $tarea->completada = false;
                     $tarea->detalle_id = null;
                     $tarea->detalle_flujo_id = $detalleFlujo->id;
                     $tarea->detalle = null;
+                    
+                    // Contar para progreso (tarea existe pero no completada)
+                    $totalTareas++;
                 }
             }
             
@@ -970,6 +984,12 @@ class Ejecucion extends Controller
                     $documento->detalle_id = $detalleDocumento->id;
                     $documento->detalle_flujo_id = $detalleFlujo->id;
                     $documento->detalle = $detalleDocumento; // Agregar referencia al detalle completo
+                    
+                    // Contar para progreso
+                    $totalDocumentos++;
+                    if ($detalleDocumento->estado == 3) {
+                        $documentosCompletados++;
+                    }
                 } else {
                     // Si no existe detalle, mostrar como no subido (estado inicial)
                     $documento->subido = false;
@@ -977,8 +997,30 @@ class Ejecucion extends Controller
                     $documento->detalle_id = null;
                     $documento->detalle_flujo_id = $detalleFlujo->id;
                     $documento->detalle = null;
+                    
+                    // Contar para progreso (documento existe pero no completado)
+                    $totalDocumentos++;
                 }
             }
+
+            // Calcular progreso de la etapa
+            $totalItems = $totalTareas + $totalDocumentos;
+            $itemsCompletados = $tareasCompletadas + $documentosCompletados;
+            
+            if ($totalItems > 0) {
+                $etapa->progreso_porcentaje = round(($itemsCompletados / $totalItems) * 100);
+            } else {
+                $etapa->progreso_porcentaje = 0;
+            }
+            
+            // Log para debug
+            Log::debug("Progreso etapa {$etapa->id}", [
+                'tareas_completadas' => $tareasCompletadas,
+                'total_tareas' => $totalTareas,
+                'documentos_completados' => $documentosCompletados,
+                'total_documentos' => $totalDocumentos,
+                'progreso_porcentaje' => $etapa->progreso_porcentaje
+            ]);
         }
 
         // Agregar información de la ejecución al flujo

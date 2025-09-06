@@ -1,7 +1,7 @@
 @extends('layouts.dashboard')
-@section('title', $flujo->nombre)
+@section('title', $detalleFlujo->nombre ?? $flujo->nombre)
 @section('page-title','Ejecución de Flujo')
-@section('page-subtitle', $flujo->nombre)
+@section('page-subtitle', $detalleFlujo->nombre ?? $flujo->nombre)
 
 @section('header-actions')
     <a href="{{ route('ejecucion.index') }}" class="btn btn-light">
@@ -394,7 +394,7 @@ button[disabled] {
             <div class="card-body">
                 <h4 class="card-title mb-1">Ejecución de Flujos</h4>
                 <div class="d-flex align-items-center mb-2">
-                    <span class="me-3">Flujo: <strong>{{ $flujo->nombre }}</strong></span>
+                    <span class="me-3">Flujo Nombre: <strong>{{ $detalleFlujo->nombre ?? $flujo->nombre }}</strong></span>
                     <span class="me-3">Tipo: <strong>{{ $flujo->tipo->nombre ?? 'Sin tipo' }}</strong></span>
                     @if(!$flujo->proceso_iniciado)
                         <span class="badge bg-warning text-dark">Sin Iniciar</span>
@@ -421,7 +421,7 @@ button[disabled] {
         <div class="d-flex justify-content-between align-items-center">
             <div>
                 <h5 class="mb-1">Control de Ejecución</h5>
-                <p class="text-muted mb-0">Flujo: {{ $flujo->nombre }} • {{ $flujo->etapas->count() }} etapas</p>
+                <p class="text-muted mb-0">Flujo: {{ $detalleFlujo->nombre ?? $flujo->nombre }} • {{ $flujo->etapas->count() }} etapas</p>
             </div>
             <div>
                 @if(!$flujo->proceso_iniciado)
@@ -536,9 +536,9 @@ button[disabled] {
                             <i class="fas fa-check-circle text-success me-1"></i>Completada • Progreso: <span class="progreso-etapa" data-etapa="{{ $etapa->id }}">100%</span>
                         @elseif($etapaDisponible)
                             @if($estadoEtapaActual == 2)
-                                <i class="fas fa-play-circle text-primary me-1"></i>En Progreso • Progreso: <span class="progreso-etapa" data-etapa="{{ $etapa->id }}">0%</span>
+                                <i class="fas fa-play-circle text-primary me-1"></i>En Progreso • Progreso: <span class="progreso-etapa" data-etapa="{{ $etapa->id }}">{{ $etapa->progreso_porcentaje ?? 0 }}%</span>
                             @else
-                                Pendiente • Progreso: <span class="progreso-etapa" data-etapa="{{ $etapa->id }}">0%</span>
+                                Pendiente • Progreso: <span class="progreso-etapa" data-etapa="{{ $etapa->id }}">{{ $etapa->progreso_porcentaje ?? 0 }}%</span>
                             @endif
                         @else
                             <i class="fas fa-lock me-1"></i>Bloqueada - Completa las etapas secuenciales anteriores
@@ -1289,6 +1289,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const etapaId = etapaElement.dataset.etapaId;
         const estadoIcon = etapaElement.querySelector('.estado-etapa i');
         const statusText = etapaElement.querySelector('.card-header small');
+        const progresoElement = etapaElement.querySelector('.progreso-etapa');
+        
+        // Obtener el progreso actual del elemento (puede venir del servidor)
+        let progresoActual = '0';
+        if (progresoElement) {
+            progresoActual = progresoElement.textContent.replace('%', '') || '0';
+        }
         
         // Remover clases anteriores
         etapaElement.classList.remove('completada', 'activa');
@@ -1300,14 +1307,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 etapaElement.classList.add('completada');
                 estadoIcon.classList.add('text-success');
                 if (statusText) {
-                    statusText.innerHTML = '<i class="fas fa-check-circle text-success me-1"></i>Completada • Progreso: <span class="progreso-etapa">100%</span>';
+                    statusText.innerHTML = '<i class="fas fa-check-circle text-success me-1"></i>Completada • Progreso: <span class="progreso-etapa" data-etapa="' + etapaId + '">100%</span>';
                 }
                 break;
             case 2: // En progreso
                 etapaElement.classList.add('activa');
                 estadoIcon.classList.add('text-primary');
                 if (statusText) {
-                    statusText.innerHTML = '<i class="fas fa-play-circle text-primary me-1"></i>En Progreso • ';
+                    statusText.innerHTML = '<i class="fas fa-play-circle text-primary me-1"></i>En Progreso • Progreso: <span class="progreso-etapa" data-etapa="' + etapaId + '">' + progresoActual + '%</span>';
                 }
                 break;
             case 1: // Pendiente
@@ -1315,7 +1322,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!etapaElement.classList.contains('bloqueada')) {
                     estadoIcon.classList.add('text-warning');
                     if (statusText) {
-                        statusText.innerHTML = 'Pendiente • Progreso: <span class="progreso-etapa">0%</span>';
+                        statusText.innerHTML = 'Pendiente • Progreso: <span class="progreso-etapa" data-etapa="' + etapaId + '">' + progresoActual + '%</span>';
                     }
                 }
                 break;
@@ -2232,14 +2239,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 data.etapas.forEach(etapaData => {
                     const etapaElement = document.querySelector(`[data-etapa-id="${etapaData.id}"]`);
                     if (etapaElement) {
-                        const progresoElement = etapaElement.querySelector('.progreso-etapa');
                         const estadoIcon = etapaElement.querySelector('.estado-etapa i');
                         const statusText = etapaElement.querySelector('.card-header small');
-                        
-                        // Validar que los elementos existan antes de usarlos
-                        if (progresoElement) {
-                            progresoElement.textContent = etapaData.progreso + '%';
-                        }
                         
                         // Actualizar contadores de tareas y documentos con validaciones
                         const tareasListElement = etapaElement.querySelector('.tareas-list');
@@ -2268,7 +2269,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 estadoIcon.classList.add('text-success');
                             }
                             if (statusText) {
-                                statusText.innerHTML = `Completada • Progreso: <span class="progreso-etapa">${etapaData.progreso}%</span>`;
+                                statusText.innerHTML = `<i class="fas fa-check-circle text-success me-1"></i>Completada • Progreso: <span class="progreso-etapa" data-etapa="${etapaData.id}">${etapaData.progreso}%</span>`;
                             }
                             
                             // Activar siguiente etapa
@@ -2284,10 +2285,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         } else if (etapaData.progreso > 0) {
                             if (estadoIcon) {
                                 estadoIcon.classList.remove('text-secondary');
-                                estadoIcon.classList.add('text-warning');
+                                estadoIcon.classList.add('text-primary');
                             }
                             if (statusText) {
-                                statusText.innerHTML = `En progreso • Progreso: <span class="progreso-etapa">${etapaData.progreso}%</span>`;
+                                statusText.innerHTML = `<i class="fas fa-play-circle text-primary me-1"></i>En Progreso • Progreso: <span class="progreso-etapa" data-etapa="${etapaData.id}">${etapaData.progreso}%</span>`;
+                            }
+                        } else {
+                            // Etapa pendiente (progreso = 0)
+                            if (statusText) {
+                                statusText.innerHTML = `Pendiente • Progreso: <span class="progreso-etapa" data-etapa="${etapaData.id}">${etapaData.progreso}%</span>`;
                             }
                         }
                     } else {
