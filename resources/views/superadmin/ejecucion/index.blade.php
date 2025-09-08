@@ -135,8 +135,8 @@
                                     <!-- Progreso -->
                                     <div class="mb-3">
                                         @php
-                                            // Usar el progreso calculado en el controlador que incluye tareas y documentos
-                                            $porcentajeProgreso = $detalleEjecucion->flujo->progreso_porcentaje ?? 0;
+                                            // Usar el progreso específico de esta ejecución calculado con calcularProgresoSimple()
+                                            $porcentajeProgreso = $detalleEjecucion->progreso_porcentaje ?? $detalleEjecucion->flujo->progreso_porcentaje ?? 0;
                                         @endphp
                                         <div class="d-flex justify-content-between align-items-center">
                                             <small class="text-muted">Progreso</small>
@@ -325,8 +325,8 @@
                                         <!-- Estado completado -->
                                         <div class="mb-3">
                                             @php
-                                                // Usar el progreso calculado en el controlador
-                                                $porcentajeProgreso = $detalleEjecucion->flujo->progreso_porcentaje ?? 100;
+                                                // Usar el progreso específico de esta ejecución
+                                                $porcentajeProgreso = $detalleEjecucion->progreso_porcentaje ?? $detalleEjecucion->flujo->progreso_porcentaje ?? 100;
                                             @endphp
                                             <div class="d-flex justify-content-between align-items-center">
                                                 <small class="text-muted">Estado</small>
@@ -463,8 +463,8 @@
                                         <!-- Progreso -->
                                         <div class="mb-3">
                                             @php
-                                                // Usar el progreso calculado en el controlador que incluye tareas y documentos
-                                                $porcentajeProgreso = $detalleEjecucion->flujo->progreso_porcentaje ?? 0;
+                                                // Usar el progreso específico de esta ejecución
+                                                $porcentajeProgreso = $detalleEjecucion->progreso_porcentaje ?? $detalleEjecucion->flujo->progreso_porcentaje ?? 0;
                                                 
                                                 if($detalleEjecucion->estado == 4) {
                                                     // Pausada

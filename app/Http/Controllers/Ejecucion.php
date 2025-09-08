@@ -95,8 +95,11 @@ class Ejecucion extends Controller
                     return $etapa->documentos()->where('documentos.estado', 1)->count();
                 });
                 
-                // Calcular progreso usando lógica simplificada
-                $progresoPorcentaje = $this->calcularProgresoSimple($detalleFlujo);
+                // Calcular progreso usando exactamente la misma lógica que ejecutar.blade.php
+                // Llamar al método progreso() que es el mismo que usa el JavaScript
+                $progresoResponse = $this->progreso($detalleFlujo);
+                $progresoData = json_decode($progresoResponse->getContent(), true);
+                $progresoPorcentaje = $progresoData['progreso_general'] ?? 0;
                 
                 $flujo->total_etapas = $totalEtapas;
                 $flujo->total_documentos = $totalDocumentos;
@@ -104,6 +107,9 @@ class Ejecucion extends Controller
                 $flujo->detalle_flujo_id = $detalleFlujo->id;
                 $flujo->fecha_ejecucion = $detalleFlujo->updated_at;
                 $flujo->progreso_porcentaje = $progresoPorcentaje;
+                
+                // TAMBIÉN asignar el progreso al DetalleFlujo para asegurar que esté disponible
+                $detalleFlujo->progreso_porcentaje = $progresoPorcentaje;
             }
             return $detalleFlujo;
         });
@@ -114,8 +120,13 @@ class Ejecucion extends Controller
             $empresas = Empresa::where('estado', 1)->orderBy('nombre')->get(['id', 'nombre']);
         }
 
+        // Separar ejecuciones por estado para la vista
+        $ejecucionesEnProceso = $ejecucionesActivas->where('estado', 2);
+        $ejecucionesTerminadas = $ejecucionesActivas->where('estado', 3);
+        $ejecucionesPausadasYCanceladas = $ejecucionesActivas->whereIn('estado', [4, 99]);
+
         return view('superadmin.ejecucion.index', compact(
-            'flujos', 'ejecucionesActivas', 'isSuper', 'estado', 'q', 'empresas', 'empresa_id'
+            'flujos', 'ejecucionesActivas', 'ejecucionesEnProceso', 'ejecucionesTerminadas', 'ejecucionesPausadasYCanceladas', 'isSuper', 'estado', 'q', 'empresas', 'empresa_id'
         ));
     }
 
