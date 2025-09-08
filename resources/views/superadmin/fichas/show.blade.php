@@ -170,8 +170,15 @@
                                             @break
                                             
                                         @case('radio')
-                                            @if($atributo->json && is_array($atributo->json))
-                                                @foreach($atributo->json as $index => $opcion)
+                                            @php
+                                                $opciones = $atributo->json;
+                                                if (is_string($opciones)) {
+                                                    $opciones = json_decode($opciones, true) ?: [];
+                                                }
+                                                $opciones = is_array($opciones) ? $opciones : [];
+                                            @endphp
+                                            @if(count($opciones) > 0)
+                                                @foreach($opciones as $index => $opcion)
                                                     <div class="form-check">
                                                         <input class="form-check-input preview-radio" type="radio" 
                                                                name="radio_{{ $atributo->id }}" 
@@ -182,23 +189,44 @@
                                                         </label>
                                                     </div>
                                                 @endforeach
+                                            @else
+                                                <div class="text-muted">
+                                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                                    No hay opciones configuradas
+                                                </div>
                                             @endif
                                             @break
                                             
                                         @case('desplegable')
+                                            @php
+                                                $opciones = $atributo->json;
+                                                if (is_string($opciones)) {
+                                                    $opciones = json_decode($opciones, true) ?: [];
+                                                }
+                                                $opciones = is_array($opciones) ? $opciones : [];
+                                            @endphp
                                             <select class="form-select preview-select">
                                                 <option value="">Seleccionar opción</option>
-                                                @if($atributo->json && is_array($atributo->json))
-                                                    @foreach($atributo->json as $opcion)
+                                                @if(count($opciones) > 0)
+                                                    @foreach($opciones as $opcion)
                                                         <option value="{{ $opcion }}">{{ $opcion }}</option>
                                                     @endforeach
+                                                @else
+                                                    <option disabled>No hay opciones configuradas</option>
                                                 @endif
                                             </select>
                                             @break
                                             
                                         @case('checkbox')
-                                            @if($atributo->json && is_array($atributo->json))
-                                                @foreach($atributo->json as $index => $opcion)
+                                            @php
+                                                $opciones = $atributo->json;
+                                                if (is_string($opciones)) {
+                                                    $opciones = json_decode($opciones, true) ?: [];
+                                                }
+                                                $opciones = is_array($opciones) ? $opciones : [];
+                                            @endphp
+                                            @if(count($opciones) > 0)
+                                                @foreach($opciones as $index => $opcion)
                                                     <div class="form-check">
                                                         <input class="form-check-input preview-checkbox" type="checkbox" 
                                                                id="checkbox_{{ $atributo->id }}_{{ $index }}"
@@ -208,6 +236,11 @@
                                                         </label>
                                                     </div>
                                                 @endforeach
+                                            @else
+                                                <div class="text-muted">
+                                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                                    No hay opciones configuradas
+                                                </div>
                                             @endif
                                             @break
                                             
