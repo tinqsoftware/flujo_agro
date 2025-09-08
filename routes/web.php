@@ -52,12 +52,12 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         //Route::resource('fichas', FichaController::class)->only(['index','create','store','show']);
         Route::resource('fichas', FichaController::class)->only(['index','create','store']);
 
-
+        Route::get('/fichas/{ficha}', [FichaController::class, 'show'])->name('fichas.show');
         //Route::post('/fichas', [FichaController::class, 'storeFicha'])->name('fichas.store');
-        Route::get('/fichas/{ficha}/edit', [FichaController::class, 'editFicha'])->name('fichas.edit');
-        Route::put('/fichas/{ficha}', [FichaController::class, 'updateFicha'])->name('fichas.update');
-        Route::delete('/fichas/{ficha}', [FichaController::class, 'destroyFicha'])->name('fichas.destroy');
-        Route::patch('/fichas/{ficha}/toggle-estado', [FichaController::class, 'toggleFichaEstado'])->name('fichas.toggle-estado');
+        Route::get('/fichas/{ficha}/edit', [FichaController::class, 'edit'])->name('fichas.edit');
+        Route::put('/fichas/{ficha}', [FichaController::class, 'update'])->name('fichas.update');
+        Route::delete('/fichas/{ficha}', [FichaController::class, 'destroy'])->name('fichas.destroy');
+        Route::patch('/fichas/{ficha}/toggle-estado', [FichaController::class, 'toggleEstado'])->name('fichas.toggle-estado');
 
         // AJAX
         Route::get('/fichas/flujos-by-empresa', [FichaController::class, 'flujosByEmpresa'])->name('fichas.flujosByEmpresa');

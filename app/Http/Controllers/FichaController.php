@@ -7,7 +7,7 @@ use App\Models\Ficha;
 use App\Models\Flujo;
 use App\Models\Etapa;
 use App\Models\AtributoFicha;
-use DB;
+use Illuminate\Support\Facades\DB;
 use App\Models\User;
 use App\Models\Rol;
 use Illuminate\Validation\Rule;
@@ -172,68 +172,236 @@ class FichaController extends Controller
         return redirect()->route('fichas.index')->with('success', 'Ficha creada correctamente.');
     }
 
-    public function editFicha(Ficha $empresa)
+    public function show(Ficha $ficha)
     {
-        $administradores = User::whereHas('rol', function($query) {
-            $query->where('nombre', 'ADMINISTRADOR');
-        })->get();
+        $user = Auth::user();
         
-        return view('superadmin.empresas.edit', compact('empresa', 'administradores'));
+        // Verificar permisos
+        if ($user->rol->nombre !== 'SUPERADMIN' && $ficha->id_emp !== $user->id_emp) {
+            abort(403, 'No tienes permisos para ver esta ficha.');
+        }
+
+        // Cargar atributos de la ficha ordenados por número
+        $atributos = AtributoFicha::where('id_ficha', $ficha->id)
+            ->where('nro', '>', 0) // Excluir meta atributos
+            ->orderBy('nro')
+            ->get();
+
+        // Si es ficha de Flujo/Etapa, cargar contexto
+        $contexto = null;
+        if (in_array($ficha->tipo, ['Flujo', 'Etapa'])) {
+            $metaAtributo = AtributoFicha::where('id_ficha', $ficha->id)
+                ->where('nro', 0)
+                ->where('titulo', '_contexto')
+                ->first();
+            
+            if ($metaAtributo && $metaAtributo->json) {
+                $contexto = $metaAtributo->json; // Ya viene como array por el cast del modelo
+            }
+        }
+
+        // Cargar datos adicionales para el contexto
+        $flujo = null;
+        $etapa = null;
+        if ($contexto) {
+            if (isset($contexto['id_flujo'])) {
+                $flujo = Flujo::find($contexto['id_flujo']);
+            }
+            if (isset($contexto['id_etapa'])) {
+                $etapa = Etapa::find($contexto['id_etapa']);
+            }
+        }
+
+        return view('superadmin.fichas.show', compact('ficha', 'atributos', 'contexto', 'flujo', 'etapa'));
     }
 
-    public function updateFicha(Request $request, Ficha $empresa)
+    public function edit(Ficha $ficha)
     {
-        $request->validate([
-            'nombre' => 'required|string|max:255',
-            'descripcion' => 'required|string',
-            'id_user_admin' => 'required|exists:users,id',
-            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
-        ]);
+        $user = Auth::user();
+        
+        // Verificar permisos
+        if ($user->rol->nombre !== 'SUPERADMIN' && $ficha->id_emp !== $user->id_emp) {
+            abort(403, 'No tienes permisos para editar esta ficha.');
+        }
 
-        $data = [
-            'nombre' => $request->nombre,
-            'descripcion' => $request->descripcion,
-            'id_user_admin' => $request->id_user_admin,
-            'estado' => $request->has('estado'),
-            'editable' => $request->has('editable')
+        // Obtener datos necesarios para el formulario
+        if ($user->rol->nombre === 'SUPERADMIN') {
+            $empresas = Empresa::where('estado', true)->orderBy('nombre')->get();
+        } else {
+            $empresas = Empresa::where('id', $user->id_emp)->where('estado', true)->orderBy('nombre')->get();
+        }
+
+        $tipos = ['Producto','Cliente','Proveedor','Flujo','Etapa'];
+        $tiposCampo = [
+            'texto' => 'Texto',
+            'cajatexto' => 'Caja de Texto',
+            'decimal' => 'Decimal',
+            'entero' => 'Entero',
+            'radio' => 'Radio Button',
+            'desplegable' => 'Desplegable',
+            'checkbox' => 'Checkbox',
+            'fecha' => 'Fecha',
+            'imagen' => 'Imagen',
         ];
 
-        if ($request->hasFile('logo')) {
-            // Eliminar logo anterior si existe
-            if ($empresa->ruta_logo) {
-                Storage::disk('public')->delete($empresa->ruta_logo);
+        // Cargar atributos de la ficha
+        $atributos = AtributoFicha::where('id_ficha', $ficha->id)
+            ->where('nro', '>', 0) // Excluir meta atributos
+            ->orderBy('nro')
+            ->get();
+
+        // Si es ficha de Flujo/Etapa, cargar contexto
+        $contexto = null;
+        if (in_array($ficha->tipo, ['Flujo', 'Etapa'])) {
+            $metaAtributo = AtributoFicha::where('id_ficha', $ficha->id)
+                ->where('nro', 0)
+                ->where('titulo', '_contexto')
+                ->first();
+            
+            if ($metaAtributo && $metaAtributo->json) {
+                $contexto = $metaAtributo->json; // Ya viene como array por el cast del modelo
             }
-            $data['ruta_logo'] = $request->file('logo')->store('logos', 'public');
         }
 
-        $empresa->update($data);
-
-        return redirect()->route('empresas')->with('success', 'Empresa actualizada exitosamente');
+        return view('superadmin.fichas.edit', compact('ficha', 'empresas', 'tipos', 'tiposCampo', 'atributos', 'contexto'));
     }
 
-    public function destroyFicha(Ficha $empresa)
+    public function update(Request $request, Ficha $ficha)
     {
-        if ($empresa->ruta_logo) {
-            Storage::disk('public')->delete($empresa->ruta_logo);
+        $user = Auth::user();
+        
+        // Verificar permisos
+        if ($user->rol->nombre !== 'SUPERADMIN' && $ficha->id_emp !== $user->id_emp) {
+            abort(403, 'No tienes permisos para editar esta ficha.');
         }
-        
-        $empresa->delete();
-        
-        return redirect()->route('empresas')->with('success', 'Empresa eliminada exitosamente');
+
+        $empresaId = $request->input('id_emp') ?: $ficha->id_emp;
+        $tipoFicha = $request->input('tipo');
+        $soloUnicos = ['Producto','Cliente','Proveedor'];
+
+        // Reglas de validación
+        $rules = [
+            'nombre'            => ['required','string','max:255'],
+            'id_emp'            => ['nullable','exists:empresa,id'],
+            'tipo'              => ['required', Rule::in(['Producto','Cliente','Proveedor','Flujo','Etapa'])],
+            'campos'            => ['required','array','min:1'],
+            'campos.*.nombre'   => ['required','string','max:255'],
+            'campos.*.tipo'     => ['required', Rule::in([
+                'texto','cajatexto','decimal','entero','radio','desplegable','checkbox','fecha','imagen'
+            ])],
+            'campos.*.nro'      => ['required','integer','min:1'],
+            'id_flujo'          => ['nullable','integer'],
+            'id_etapa'          => ['nullable','integer'],
+            'campos.*.ancho'       => ['nullable','integer','min:1','max:200'],
+            'campos.*.opciones'    => ['nullable','string'],
+            'campos.*.obligatorio' => ['nullable','in:1'],
+        ];
+
+        // Unicidad por empresa (si cambió el tipo)
+        if (in_array($tipoFicha, $soloUnicos, true) && $ficha->tipo !== $tipoFicha) {
+            $rules['tipo'][] = Rule::unique('ficha','tipo')
+                ->where(fn($q) => $q->where('id_emp', $empresaId));
+        }
+
+        // Para ficha tipo Flujo / Etapa
+        if ($tipoFicha === 'Flujo') {
+            $rules['id_flujo'] = ['required','exists:flujos,id'];
+        }
+        if ($tipoFicha === 'Etapa') {
+            $rules['id_flujo'] = ['required','exists:flujos,id'];
+            $rules['id_etapa'] = ['required','exists:etapas,id'];
+        }
+
+        $validated = $request->validate($rules);
+
+        // Validación manual fina por tipo de campo
+        foreach ($validated['campos'] as $idx => $c) {
+            $t = $c['tipo'];
+            if (in_array($t, ['texto','cajatexto','decimal','entero'], true)) {
+                if (!isset($c['ancho']) || $c['ancho'] === '') {
+                    return back()->withErrors(["campos.$idx.ancho" => 'El ancho es obligatorio para este tipo de campo.'])
+                                ->withInput();
+                }
+            }
+            if (in_array($t, ['radio','desplegable','checkbox'], true)) {
+                $ops = $c['opciones'] ?? '[]';
+                $arr = is_string($ops) ? json_decode($ops, true) : (array)$ops;
+                if (count(array_filter($arr, fn($v)=>trim((string)$v) !== '')) < 2) {
+                    return back()->withErrors(["campos.$idx.opciones" => 'Debe registrar al menos 2 opciones.'])
+                                ->withInput();
+                }
+            }
+        }
+
+        DB::transaction(function () use ($validated, $empresaId, $tipoFicha, $ficha) {
+            // 1) Actualizar ficha
+            $ficha->update([
+                'nombre' => $validated['nombre'],
+                'id_emp' => $empresaId,
+                'tipo' => $tipoFicha,
+            ]);
+
+            // 2) Eliminar atributos existentes
+            AtributoFicha::where('id_ficha', $ficha->id)->delete();
+
+            // 3) Crear nuevos atributos
+            foreach ($validated['campos'] as $c) {
+                $attr = new AtributoFicha();
+                $attr->id_ficha       = $ficha->id;
+                $attr->nro            = (int)$c['nro'];
+                $attr->titulo         = $c['nombre'];
+                $attr->tipo           = $c['tipo'];
+                $attr->ancho          = $c['ancho'] ?? null;
+                $attr->obligatorio    = !empty($c['obligatorio']) ? 1 : 0;
+
+                $json = null;
+                if (isset($c['opciones']) && $c['opciones'] !== '') {
+                    $json = is_string($c['opciones']) ? $c['opciones'] : json_encode($c['opciones']);
+                }
+                $attr->json           = $json;
+                $attr->estado         = 1;
+                $attr->id_user_create = Auth::id();
+                $attr->save();
+            }
+
+            // 4) Guardar contexto si es Flujo/Etapa
+            if (in_array($tipoFicha, ['Flujo','Etapa'], true)) {
+                $context = [
+                    'id_flujo' => $validated['id_flujo'] ?? null,
+                    'id_etapa' => $validated['id_etapa'] ?? null,
+                ];
+                $meta = new AtributoFicha();
+                $meta->id_ficha       = $ficha->id;
+                $meta->nro            = 0;
+                $meta->titulo         = '_contexto';
+                $meta->tipo           = 'meta';
+                $meta->json           = json_encode($context);
+                $meta->estado         = 1;
+                $meta->id_user_create = Auth::id();
+                $meta->save();
+            }
+        });
+
+        return redirect()->route('fichas.index')->with('success', 'Ficha actualizada correctamente.');
     }
 
-    public function toggleFichaEstado(Ficha $empresa)
+    public function destroy(Ficha $ficha)
     {
-        $empresa->update(['estado' => !$empresa->estado]);
+        $user = Auth::user();
         
-        $estado = $empresa->estado ? 'activada' : 'desactivada';
-        return response()->json([
-            'success' => true,
-            'message' => "Empresa {$estado} exitosamente"
-        ]);
+        // Verificar permisos
+        if ($user->rol->nombre !== 'SUPERADMIN' && $ficha->id_emp !== $user->id_emp) {
+            abort(403, 'No tienes permisos para eliminar esta ficha.');
+        }
+
+        // Eliminar atributos y la ficha
+        DB::transaction(function () use ($ficha) {
+            AtributoFicha::where('id_ficha', $ficha->id)->delete();
+            $ficha->delete();
+        });
+
+        return redirect()->route('fichas.index')->with('success', 'Ficha eliminada correctamente.');
     }
-
-
 
     // === AJAX ===
 

@@ -101,30 +101,20 @@
                             </div>
                         </td>
                         <td>
-                            <div class="btn-group btn-group-sm">
-                                <button type="button" class="btn btn-outline-primary dropdown-toggle" 
-                                        data-bs-toggle="dropdown">
+                            <div class="custom-dropdown">
+                                <button type="button" class="btn btn-outline-primary btn-sm dropdown-btn" 
+                                        onclick="toggleDropdown(this)">
                                     <i class="fas fa-cog"></i>
+                                    <i class="fas fa-chevron-down ms-1"></i>
                                 </button>
-                                <ul class="dropdown-menu">
-                                    <li>
-                                        <a class="dropdown-item" href="#">
-                                            <i class="fas fa-eye me-2"></i>Ver detalles
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a class="dropdown-item" href="{{ route('fichas.edit', $ficha) }}">
-                                            <i class="fas fa-edit me-2"></i>Editar
-                                        </a>
-                                    </li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li>
-                                        <a class="dropdown-item text-danger" href="#" 
-                                           onclick="confirmarEliminacion({{ $ficha->id }}, '{{ $ficha->nombre }}')">
-                                            <i class="fas fa-trash me-2"></i>Eliminar
-                                        </a>
-                                    </li>
-                                </ul>
+                                <div class="custom-dropdown-menu">
+                                    <a class="dropdown-item" href="{{ route('fichas.show', $ficha) }}">
+                                        <i class="fas fa-eye me-2"></i>Ver detalles
+                                    </a>
+                                    <a class="dropdown-item" href="{{ route('fichas.edit', $ficha) }}">
+                                        <i class="fas fa-edit me-2"></i>Editar
+                                    </a>
+                                </div>
                             </div>
                         </td>
                     </tr>
@@ -151,57 +141,141 @@
         @endif
     </div>
 </div>
-
-<!-- Modal de confirmación de eliminación -->
-<div class="modal fade" id="confirmarEliminacionModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-exclamation-triangle text-warning me-2"></i>
-                    Confirmar Eliminación
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p>¿Estás seguro de que deseas eliminar la ficha <strong id="nombreFicha"></strong>?</p>
-                <div class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    Esta acción eliminará:
-                    <ul class="mb-0 mt-2">
-                        <li>Todos los usuarios de la ficha</li>
-                        <li>Todos los flujos y procesos</li>
-                        <li>Todos los documentos asociados</li>
-                    </ul>
-                </div>
-                <p class="text-danger"><strong>Esta acción no se puede deshacer.</strong></p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-2"></i>Cancelar
-                </button>
-                <form id="formEliminar" method="POST" style="display: inline;">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="btn btn-danger">
-                        <i class="fas fa-trash me-2"></i>Eliminar Ficha
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
 @endsection
+
+@push('styles')
+<style>
+.custom-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.custom-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 1050;
+    min-width: 160px;
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.25);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.2s ease;
+    margin-top: 2px;
+    /* Evitar que se corte */
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.custom-dropdown.show .custom-dropdown-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.dropdown-item {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 1rem;
+    clear: both;
+    font-weight: 400;
+    color: #212529;
+    text-decoration: none;
+    white-space: nowrap;
+    background-color: transparent;
+    border: 0;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+    color: #1e2125;
+    background-color: #e9ecef;
+    text-decoration: none;
+}
+
+.dropdown-item.text-danger {
+    color: #dc3545;
+}
+
+.dropdown-item.text-danger:hover {
+    color: #fff;
+    background-color: #dc3545;
+}
+
+.dropdown-divider {
+    height: 0;
+    margin: 0.5rem 0;
+    overflow: hidden;
+    border-top: 1px solid #dee2e6;
+}
+
+.dropdown-btn .fa-chevron-down {
+    transition: transform 0.2s ease;
+}
+
+.custom-dropdown.show .dropdown-btn .fa-chevron-down {
+    transform: rotate(180deg);
+}
+</style>
+@endpush
 
 @push('scripts')
 <script>
-function confirmarEliminacion(ficha, nombreFicha) {
-    document.getElementById('nombreFicha').textContent = nombreFicha;
-    document.getElementById('formEliminar').action = `/fichas/${fichaId}`;
+// Manejo del dropdown personalizado
+function toggleDropdown(button) {
+    const dropdown = button.closest('.custom-dropdown');
+    const isOpen = dropdown.classList.contains('show');
     
-    const modal = new bootstrap.Modal(document.getElementById('confirmarEliminacionModal'));
-    modal.show();
+    // Cerrar todos los dropdowns abiertos
+    closeAllDropdowns();
+    
+    // Si no estaba abierto, abrirlo
+    if (!isOpen) {
+        dropdown.classList.add('show');
+        
+        // Ajustar posición si se sale de la pantalla
+        const menu = dropdown.querySelector('.custom-dropdown-menu');
+        const rect = menu.getBoundingClientRect();
+        const windowHeight = window.innerHeight;
+        
+        // Si el dropdown se sale por abajo, mostrarlo hacia arriba
+        if (rect.bottom > windowHeight) {
+            menu.style.top = 'auto';
+            menu.style.bottom = '100%';
+            menu.style.marginTop = '0';
+            menu.style.marginBottom = '2px';
+        } else {
+            menu.style.top = '100%';
+            menu.style.bottom = 'auto';
+            menu.style.marginTop = '2px';
+            menu.style.marginBottom = '0';
+        }
+    }
 }
+
+function closeAllDropdowns() {
+    document.querySelectorAll('.custom-dropdown.show').forEach(dropdown => {
+        dropdown.classList.remove('show');
+    });
+}
+
+// Cerrar dropdown al hacer clic fuera
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('.custom-dropdown')) {
+        closeAllDropdowns();
+    }
+});
+
+// Cerrar dropdown al presionar ESC
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeAllDropdowns();
+    }
+});
 
 function toggleEstado(fichaId, estado) {
     fetch(`/fichas/${fichaId}/toggle-estado`, {
