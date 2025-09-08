@@ -1,7 +1,7 @@
 @extends('layouts.dashboard')
 @section('title', $detalleFlujo->nombre ?? $flujo->nombre)
-@section('page-title','Ejecución de Flujo')
-@section('page-subtitle', $detalleFlujo->nombre ?? $flujo->nombre)
+@section('page-title',$detalleFlujo->nombre ?? $flujo->nombre)
+@section('page-subtitle', '(nombre de ejecución)')
 
 @section('header-actions')
     <a href="{{ route('ejecucion.index') }}" class="btn btn-light">
@@ -404,13 +404,12 @@ button[disabled] {
 @section('content-area')
 <!-- Header del flujo con progreso -->
 <div class="row mb-4">
-    <div class="col-md-8">
-        <div class="card border-0 bg-primary text-white">
-            <div class="card-body">
-                <h4 class="card-title mb-1">Ejecución de Flujos</h4>
-                <div class="d-flex align-items-center mb-2">
-                    <span class="me-3">Flujo Nombre: <strong>{{ $detalleFlujo->nombre ?? $flujo->nombre }}</strong></span>
-                    <span class="me-3">Tipo: <strong>{{ $flujo->tipo->nombre ?? 'Sin tipo' }}</strong></span>
+    <div class="col-md-8 d-flex">
+        <div class="card border-0 bg-primary text-white h-100 w-100">
+            <div class="card-body d-flex justify-content-center align-items-center">
+                <div class="d-flex flex-column flex-md-row align-items-center justify-content-center text-center gap-3 m-0">
+                    <span>Flujo: <strong>{{ $flujo->nombre }}</strong></span>
+                    <span>Tipo: <strong>{{ $flujo->tipo->nombre ?? 'Sin tipo' }}</strong></span>
                     @if(!$flujo->proceso_iniciado)
                         <span class="badge bg-warning text-dark">Sin Iniciar</span>
                     @else
@@ -420,9 +419,9 @@ button[disabled] {
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card border-0 text-center">
-            <div class="card-body">
+    <div class="col-md-4 d-flex">
+        <div class="card border-0 text-center h-100 w-100">
+            <div class="card-body d-flex flex-column justify-content-center">
                 <h5 class="text-primary mb-1">Progreso</h5>
                 <h2 class="mb-0" id="progreso-general">0%</h2>
             </div>
@@ -435,8 +434,8 @@ button[disabled] {
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center">
             <div>
-                <h5 class="mb-1">Control de Ejecución</h5>
-                <p class="text-muted mb-0">Flujo: {{ $detalleFlujo->nombre ?? $flujo->nombre }} • {{ $flujo->etapas->count() }} etapas</p>
+                <h5 class="mb-1">Flujo: {{ $flujo->etapas->count() }} etapas</h5>
+               
             </div>
             <div>
                 @if(!$flujo->proceso_iniciado)
