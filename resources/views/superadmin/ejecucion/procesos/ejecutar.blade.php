@@ -318,6 +318,21 @@
     transform: translateY(-1px);
 }
 
+/* Estilo para tareas completadas automáticamente */
+.tarea-completada {
+    background-color: #d1edff !important;
+    border: 2px solid #28a745 !important;
+    border-radius: 8px;
+}
+
+.tarea-completada .tarea-checkbox {
+    accent-color: #28a745;
+}
+
+.tarea-completada .tarea-container {
+    background-color: #d1edff !important;
+}
+
 .documentos-sin-tarea {
     border-top: 2px solid #e9ecef;
     padding-top: 20px;
@@ -585,7 +600,12 @@ button[disabled] {
                                        id="tarea-{{ $tarea->id }}" 
                                        data-tarea-id="{{ $tarea->id }}"
                                        {{ $tarea->completada ? 'checked' : '' }}
-                                       {{ !$puedeModificar ? 'disabled' : '' }}>
+                                       @if($documentosTarea->count() > 0)
+                                           disabled
+                                           title="Los checkboxes son solo visuales - El estado se controla automáticamente por la subida de documentos"
+                                       @else
+                                           title="Marcar como completada"
+                                       @endif>
                             </div>
                             <div class="flex-grow-1">
                                 <label class="form-check-label fw-bold {{ $tarea->completada ? 'text-decoration-line-through text-muted' : '' }}" 
@@ -656,7 +676,9 @@ button[disabled] {
                                                                        type="checkbox" 
                                                                        id="documento-{{ $documento->id }}" 
                                                                        data-documento-id="{{ $documento->id }}"
-                                                                       {{ $documento->subido ? 'checked' : '' }}>
+                                                                       {{ $documento->subido ? 'checked' : '' }}
+                                                                       disabled
+                                                                       title="Los checkboxes son solo visuales - El estado se controla por la subida de archivos">
                                                             </div>
                                                             <span class="badge {{ $documento->subido ? 'bg-success' : 'bg-warning' }}">
                                                                 <i class="fas fa-{{ $documento->subido ? 'check' : 'clock' }} me-1"></i>
@@ -769,7 +791,9 @@ button[disabled] {
                                                                type="checkbox" 
                                                                id="documento-{{ $documento->id }}" 
                                                                data-documento-id="{{ $documento->id }}"
-                                                               {{ $documento->subido ? 'checked' : '' }}>
+                                                               {{ $documento->subido ? 'checked' : '' }}
+                                                               disabled
+                                                               title="Los checkboxes son solo visuales - El estado se controla por la subida de archivos">
                                                     </div>
                                                     <span class="badge {{ $documento->subido ? 'bg-success' : 'bg-warning' }}">
                                                         <i class="fas fa-{{ $documento->subido ? 'check' : 'clock' }} me-1"></i>
@@ -1112,6 +1136,28 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Inicializar progreso de las etapas al cargar la página
     actualizarProgreso();
+
+    // Verificar estado de todas las tareas al cargar la página
+    function verificarTodasLasTareasAlCargar() {
+        console.log('Verificando estado de todas las tareas al cargar...');
+        const todasLasTareas = document.querySelectorAll('[data-tarea-id]');
+        
+        todasLasTareas.forEach(tareaElement => {
+            setTimeout(() => verificarYActualizarEstadoTarea(tareaElement), 200);
+        });
+    }
+
+    // Ejecutar verificación de tareas después de que todo esté cargado
+    if (procesoIniciado && detalleFlujoId) {
+        // Verificación inmediata para debugging
+        setTimeout(() => {
+            console.log('🔍 Ejecutando verificación inmediata de tareas...');
+            verificarTodasLasTareasAlCargar();
+        }, 500);
+        
+        // Verificación principal
+        setTimeout(verificarTodasLasTareasAlCargar, 1500);
+    }
 
     // Función para inicializar el control de etapas bloqueadas
     function inicializarControlEtapas() {
@@ -2056,7 +2102,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                    type="checkbox" 
                                    id="documento-${documentoId}" 
                                    data-documento-id="${documentoId}"
-                                   checked>
+                                   checked
+                                   disabled
+                                   title="Los checkboxes son solo visuales - El estado se controla automáticamente">
                         </div>
                         <span class="badge bg-success">
                             <i class="fas fa-check me-1"></i>Subido - Listo para Validar
@@ -2167,6 +2215,47 @@ document.addEventListener('DOMContentLoaded', function() {
                         agregarCambioPendienteEtapa(etapaId, 'documento', documentoId, true);
                         // Actualizar visual del documento como validado
                         actualizarVisualDocumento(newCheckbox, true);
+                    }
+                }
+                
+                // Verificar si la tarea debe completarse automáticamente
+                console.log('🔍 Buscando tareaElement para verificación automática...');
+                
+                // Primero buscar directamente
+                let tareaElement = documentoItem.closest('[data-tarea-id]');
+                
+                // Si no lo encuentra, buscar dentro del tarea-container
+                if (!tareaElement) {
+                    const tareaContainer = documentoItem.closest('.tarea-container');
+                    if (tareaContainer) {
+                        tareaElement = tareaContainer.querySelector('[data-tarea-id]');
+                        console.log('🎯 Buscando dentro de tarea-container:', tareaContainer);
+                        console.log('🎯 TareaElement encontrado en container:', tareaElement);
+                    }
+                }
+                
+                console.log('📋 TareaElement encontrado:', tareaElement);
+                
+                if (tareaElement) {
+                    console.log('✅ Ejecutando verificación automática de tarea...');
+                    setTimeout(() => {
+                        console.log('⏰ Timeout ejecutado, llamando verificarYActualizarEstadoTarea');
+                        verificarYActualizarEstadoTarea(tareaElement);
+                    }, 100);
+                } else {
+                    console.log('❌ No se encontró tareaElement para verificación automática');
+                    console.log('📄 DocumentoItem:', documentoItem);
+                    console.log('🔍 Buscando [data-tarea-id] en ancestors...');
+                    let ancestor = documentoItem.parentElement;
+                    let level = 1;
+                    while (ancestor && level <= 10) {
+                        console.log(`  Nivel ${level}:`, ancestor, ancestor.getAttribute('data-tarea-id'));
+                        if (ancestor.getAttribute('data-tarea-id')) {
+                            console.log(`  ✅ Encontrado en nivel ${level}!`);
+                            break;
+                        }
+                        ancestor = ancestor.parentElement;
+                        level++;
                     }
                 }
                 
@@ -2709,6 +2798,12 @@ document.addEventListener('DOMContentLoaded', function() {
         // Event listeners para checkboxes de tareas
         document.querySelectorAll('.tarea-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', function(e) {
+                // Si el checkbox está deshabilitado, no hacer nada (tareas con documentos)
+                if (this.disabled) {
+                    console.log('Checkbox de tarea deshabilitado - controlado automáticamente por documentos');
+                    return;
+                }
+                
                 // Verificar si la etapa está bloqueada
                 const etapaCard = this.closest('.etapa-card');
                 if (etapaCard && etapaCard.classList.contains('bloqueada')) {
@@ -2722,6 +2817,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const wasChecked = e.target.checked;
                 const previouslyChecked = this.dataset.previouslyChecked === 'true';
                 const tareaId = this.dataset.tareaId;
+                
+                console.log(`📝 Tarea manual ${tareaId}: marcada=${wasChecked}, anteriormente=${previouslyChecked}`);
                 
                 // Encontrar la etapa padre
                 const etapaId = etapaCard ? etapaCard.querySelector('.grabar-cambios-etapa').dataset.etapaId : null;
@@ -3013,6 +3110,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     mostrarModalSubirDocumento(documentoId);
                 });
                 
+                // Verificar si la tarea debe desmarcarse automáticamente
+                let tareaElement = documentoItem.closest('[data-tarea-id]');
+                
+                // Si no lo encuentra, buscar dentro del tarea-container
+                if (!tareaElement) {
+                    const tareaContainer = documentoItem.closest('.tarea-container');
+                    if (tareaContainer) {
+                        tareaElement = tareaContainer.querySelector('[data-tarea-id]');
+                    }
+                }
+                
+                if (tareaElement) {
+                    setTimeout(() => verificarYActualizarEstadoTarea(tareaElement), 100);
+                }
+                
                 // Cerrar modal
                 bootstrap.Modal.getInstance(modal).hide();
                 
@@ -3052,6 +3164,178 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
         modal.show();
+    }
+
+    // Función para verificar automáticamente si una tarea debe marcarse/desmarcarse basándose en sus documentos
+    function verificarYActualizarEstadoTarea(tareaElement) {
+        console.log('🚀 === INICIANDO verificarYActualizarEstadoTarea ===');
+        console.log('📋 TareaElement recibido:', tareaElement);
+        
+        if (!tareaElement) {
+            console.log('❌ TareaElement es null o undefined');
+            return;
+        }
+
+        const tareaId = tareaElement.dataset.tareaId;
+        console.log('🆔 TareaId extraído:', tareaId);
+        
+        if (!tareaId) {
+            console.log('❌ No se pudo extraer tareaId del elemento');
+            return;
+        }
+
+        // Buscar todos los documentos asociados a esta tarea específicamente dentro del contenedor de la tarea
+        const tareaContainer = tareaElement.closest('.tarea-container');
+        const documentoElements = tareaContainer ? tareaContainer.querySelectorAll('[data-documento-id]') : [];
+        
+        // Obtener IDs únicos de documentos (evitar duplicados de botones/checkboxes del mismo documento)
+        const documentosUnicos = new Set();
+        documentoElements.forEach(element => {
+            const docId = element.dataset.documentoId;
+            if (docId) {
+                documentosUnicos.add(docId);
+            }
+        });
+        
+        const documentosTarea = Array.from(documentosUnicos);
+        console.log(`Verificando tarea ${tareaId}, encontrados ${documentosTarea.length} documentos únicos: [${documentosTarea.join(', ')}]`);
+        
+        if (documentosTarea.length === 0) {
+            // Si no hay documentos, esta tarea se maneja manualmente - no hacer nada automático
+            console.log(`Tarea ${tareaId} no tiene documentos asociados - se maneja manualmente`);
+            return;
+        }
+
+        // Verificar si todos los documentos están subidos
+        let todosDocumentosSubidos = true;
+        let documentosSubidos = 0;
+        
+        documentosTarea.forEach((documentoId, index) => {
+            // Buscar el div principal del documento (que contiene el estado)
+            const documentoDiv = tareaContainer.querySelector(`.documento-item[data-documento-id="${documentoId}"]`);
+            console.log(`  Documento ${index + 1} (ID: ${documentoId}):`, documentoDiv);
+            
+            if (documentoDiv) {
+                const statusElement = documentoDiv.querySelector('.document-status');
+                if (statusElement) {
+                    // Buscar cualquier badge que indique estado completado
+                    const badges = statusElement.querySelectorAll('.badge');
+                    let documentoCompletado = false;
+                    
+                    badges.forEach(badge => {
+                        const badgeText = badge.textContent.toLowerCase();
+                        console.log(`    Badge encontrado: "${badgeText}", clases: ${badge.className}`);
+                        
+                        // Considerar completado si es validado, subido, o tiene bg-success/bg-info
+                        if (badge.classList.contains('bg-success') || 
+                            badge.classList.contains('bg-info') ||
+                            badgeText.includes('validado') ||
+                            badgeText.includes('subido')) {
+                            documentoCompletado = true;
+                        }
+                    });
+                    
+                    if (documentoCompletado) {
+                        documentosSubidos++;
+                        console.log(`    ✓ Documento ${index + 1} (ID: ${documentoId}) está completado`);
+                    } else {
+                        todosDocumentosSubidos = false;
+                        console.log(`    ✗ Documento ${index + 1} (ID: ${documentoId}) NO está completado`);
+                    }
+                } else {
+                    todosDocumentosSubidos = false;
+                    console.log(`    ✗ Documento ${index + 1} (ID: ${documentoId}) no tiene elemento de estado`);
+                }
+            } else {
+                todosDocumentosSubidos = false;
+                console.log(`    ✗ Documento ${index + 1} (ID: ${documentoId}) no se encontró el div principal`);
+            }
+        });
+        
+        console.log(`Tarea ${tareaId}: ${documentosSubidos}/${documentosTarea.length} documentos subidos. Todos completos: ${todosDocumentosSubidos}`);
+
+        // Buscar el checkbox de la tarea en el contenedor de la tarea
+        const tareaCheckbox = tareaContainer ? tareaContainer.querySelector('.tarea-checkbox') : null;
+        if (!tareaCheckbox) {
+            console.log(`No se encontró checkbox para tarea ${tareaId}`);
+            return;
+        }
+
+        const tareaActualmenteCompletada = tareaCheckbox.checked;
+        console.log(`Tarea ${tareaId} actualmente completada: ${tareaActualmenteCompletada}`);
+
+        // Si todos los documentos están subidos y la tarea no está marcada, marcarla
+        if (todosDocumentosSubidos && !tareaActualmenteCompletada) {
+            console.log(`Marcando tarea ${tareaId} como completada automáticamente`);
+            
+            // Marcar el checkbox físicamente
+            tareaCheckbox.checked = true;
+            
+            // Forzar el disparo del evento de cambio para actualizar visual
+            const changeEvent = new Event('change', { bubbles: true });
+            tareaCheckbox.dispatchEvent(changeEvent);
+            
+            // También actualizar visual directamente
+            actualizarVisualTarea(tareaCheckbox, true);
+            
+            // Agregar clase visual de completado
+            const tareaContainer = tareaCheckbox.closest('.tarea-container');
+            if (tareaContainer) {
+                tareaContainer.classList.add('tarea-completada');
+            }
+            
+            // Actualizar en el servidor
+            actualizarTareaIndividual(tareaId, true)
+                .then(() => {
+                    console.log(`✅ Tarea ${tareaId} marcada exitosamente en BD`);
+                    mostrarMensajeExito('Tarea completada automáticamente al subir todos los documentos.');
+                })
+                .catch(error => {
+                    console.error('❌ Error al actualizar tarea:', error);
+                    // Revertir cambio visual si falla
+                    tareaCheckbox.checked = false;
+                    actualizarVisualTarea(tareaCheckbox, false);
+                    if (tareaContainer) {
+                        tareaContainer.classList.remove('tarea-completada');
+                    }
+                });
+        }
+        // Si faltan documentos y la tarea está marcada, desmarcarla
+        else if (!todosDocumentosSubidos && tareaActualmenteCompletada) {
+            console.log(`Desmarcando tarea ${tareaId} porque faltan documentos`);
+            
+            // Desmarcar el checkbox físicamente
+            tareaCheckbox.checked = false;
+            
+            // Forzar el disparo del evento de cambio para actualizar visual
+            const changeEvent = new Event('change', { bubbles: true });
+            tareaCheckbox.dispatchEvent(changeEvent);
+            
+            // También actualizar visual directamente
+            actualizarVisualTarea(tareaCheckbox, false);
+            
+            // Remover clase visual de completado
+            const tareaContainer = tareaCheckbox.closest('.tarea-container');
+            if (tareaContainer) {
+                tareaContainer.classList.remove('tarea-completada');
+            }
+            
+            // Actualizar en el servidor
+            actualizarTareaIndividual(tareaId, false)
+                .then(() => {
+                    console.log(`✅ Tarea ${tareaId} desmarcada exitosamente en BD`);
+                    mostrarMensajeExito('Tarea desmarcada automáticamente porque faltan documentos.');
+                })
+                .catch(error => {
+                    console.error('❌ Error al actualizar tarea:', error);
+                    // Revertir cambio visual si falla
+                    tareaCheckbox.checked = true;
+                    actualizarVisualTarea(tareaCheckbox, true);
+                    if (tareaContainer) {
+                        tareaContainer.classList.add('tarea-completada');
+                    }
+                });
+        }
     }
 });
 </script>
