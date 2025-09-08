@@ -540,12 +540,29 @@
                                                             
                                                             @if(isset($documento->url_archivo) && $documento->url_archivo)
                                                             <div class="flex-shrink-0">
-                                                                <button type="button" class="btn btn-outline-primary btn-sm ver-pdf" 
-                                                                        data-documento-id="{{ $documento->id }}"
-                                                                        data-url="{{ $documento->url_archivo }}"
-                                                                        data-nombre="{{ $documento->nombre }}">
-                                                                    <i class="fas fa-eye me-1"></i>Ver
-                                                                </button>
+                                                                @php
+                                                                    $extension = strtolower(pathinfo($documento->url_archivo, PATHINFO_EXTENSION));
+                                                                    $esPDF = $extension === 'pdf';
+                                                                    $esImagen = in_array($extension, ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp']);
+                                                                    $puedeVisualizar = $esPDF || $esImagen;
+                                                                @endphp
+                                                                
+                                                                @if($puedeVisualizar)
+                                                                    <button type="button" class="btn btn-outline-primary btn-sm ver-archivo" 
+                                                                            data-documento-id="{{ $documento->id }}"
+                                                                            data-url="{{ $documento->url_archivo }}"
+                                                                            data-nombre="{{ $documento->nombre }}"
+                                                                            data-tipo="{{ $esPDF ? 'pdf' : 'imagen' }}">
+                                                                        <i class="fas fa-eye me-1"></i>Ver
+                                                                    </button>
+                                                                @else
+                                                                    <a href="{{ $documento->url_archivo }}" 
+                                                                       class="btn btn-outline-success btn-sm"
+                                                                       download="{{ $documento->nombre }}.{{ $extension }}"
+                                                                       title="Descargar para ver">
+                                                                        <i class="fas fa-download me-1"></i>Descargar para Ver
+                                                                    </a>
+                                                                @endif
                                                             </div>
                                                             @endif
                                                         </div>
@@ -816,7 +833,66 @@ document.addEventListener('DOMContentLoaded', function() {
     const etapas = document.querySelectorAll('.etapa-card');
     console.log('Etapas encontradas en DOM:', etapas.length);
 
-    // Ver PDF
+    // Ver PDF/Imagen
+    function verArchivo() {
+        const documentoId = this.dataset.documentoId;
+        const url = this.dataset.url;
+        const tipo = this.dataset.tipo;
+        const documentoNombre = this.dataset.nombre || this.closest('.documento-item').querySelector('h6').textContent;
+        
+        if (tipo === 'pdf') {
+            // Mostrar PDF en modal
+            document.getElementById('pdf-title').textContent = documentoNombre;
+            document.getElementById('pdf-viewer').src = url;
+            document.getElementById('pdf-download').href = url;
+            document.getElementById('pdf-download').download = documentoNombre + '.pdf';
+            
+            const modal = new bootstrap.Modal(document.getElementById('pdfModal'));
+            modal.show();
+        } else if (tipo === 'imagen') {
+            // Crear y mostrar modal para imagen si no existe
+            let imagenModal = document.getElementById('imagenModal');
+            if (!imagenModal) {
+                const modalHTML = `
+                    <div class="modal fade" id="imagenModal" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="imagen-title">Ver Imagen</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body text-center">
+                                    <img id="imagen-viewer" src="" alt="Imagen" class="img-fluid" style="max-height: 70vh;">
+                                </div>
+                                <div class="modal-footer">
+                                    <a id="imagen-download" href="" class="btn btn-primary" download>
+                                        <i class="fas fa-download me-2"></i>Descargar
+                                    </a>
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                imagenModal = document.getElementById('imagenModal');
+            }
+            
+            document.getElementById('imagen-title').textContent = documentoNombre;
+            document.getElementById('imagen-viewer').src = url;
+            document.getElementById('imagen-download').href = url;
+            
+            const modal = new bootstrap.Modal(imagenModal);
+            modal.show();
+        }
+    }
+
+    // Agregar event listeners a botones de ver archivo
+    document.querySelectorAll('.ver-archivo').forEach(btn => {
+        btn.addEventListener('click', verArchivo);
+    });
+
+    // Función para compatibilidad con botones PDF existentes (mantener por compatibilidad)
     function verPDF() {
         const documentoId = this.dataset.documentoId;
         const url = this.dataset.url;
@@ -831,7 +907,7 @@ document.addEventListener('DOMContentLoaded', function() {
         modal.show();
     }
 
-    // Agregar event listeners a botones de ver PDF
+    // Agregar event listeners a botones de ver PDF (para compatibilidad)
     document.querySelectorAll('.ver-pdf').forEach(btn => {
         btn.addEventListener('click', verPDF);
     });
