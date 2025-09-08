@@ -918,10 +918,10 @@ button[disabled] {
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Seleccionar archivo</label>
-                        <input type="file" class="form-control" id="documentFile" 
-                               accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.bmp,.webp" 
-                               required>
-                        <div class="form-text">Se permiten archivos PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, e imágenes (.png/.jpg/.jpeg/.gif/.bmp/.webp) - máximo 10MB</div>
+               <input type="file" class="form-control" id="documentFile" 
+                   accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.bmp,.webp" 
+                   required>
+               <div class="form-text">Se permiten archivos PDF, Word (.doc/.docx), Excel (.xls/.xlsx), PowerPoint (.ppt/.pptx), CSV, e imágenes (.png/.jpg/.jpeg/.gif/.bmp/.webp) - máximo 10MB</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Comentarios (opcional)</label>
@@ -2087,6 +2087,8 @@ document.addEventListener('DOMContentLoaded', function() {
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // DOCX
             'application/vnd.ms-excel',                                // XLS
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // XLSX
+            'application/vnd.ms-powerpoint',                           // PPT
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation', // PPTX
             'text/csv',                                                // CSV
             'image/png',                                               // PNG
             'image/jpeg',                                              // JPG/JPEG
@@ -2096,7 +2098,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ];
 
         if (!tiposPermitidos.includes(file.type)) {
-            mostrarNotificacion('Tipo de archivo no permitido. Se aceptan: PDF, Word, Excel, CSV e imágenes', 'warning');
+            mostrarNotificacion('Tipo de archivo no permitido. Se aceptan: PDF, Word, Excel, PowerPoint, CSV e imágenes', 'warning');
             return;
         }
 
