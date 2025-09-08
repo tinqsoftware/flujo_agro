@@ -171,21 +171,26 @@
                                             
                                         @case('radio')
                                             @if($atributo->json && is_array($atributo->json))
-                                                @foreach($atributo->json as $opcion)
+                                                @foreach($atributo->json as $index => $opcion)
                                                     <div class="form-check">
-                                                        <input class="form-check-input" type="radio" name="radio_{{ $atributo->id }}" disabled>
-                                                        <label class="form-check-label">{{ $opcion }}</label>
+                                                        <input class="form-check-input preview-radio" type="radio" 
+                                                               name="radio_{{ $atributo->id }}" 
+                                                               id="radio_{{ $atributo->id }}_{{ $index }}"
+                                                               value="{{ $opcion }}">
+                                                        <label class="form-check-label" for="radio_{{ $atributo->id }}_{{ $index }}">
+                                                            {{ $opcion }}
+                                                        </label>
                                                     </div>
                                                 @endforeach
                                             @endif
                                             @break
                                             
                                         @case('desplegable')
-                                            <select class="form-select" disabled>
-                                                <option>Seleccionar opción</option>
+                                            <select class="form-select preview-select">
+                                                <option value="">Seleccionar opción</option>
                                                 @if($atributo->json && is_array($atributo->json))
                                                     @foreach($atributo->json as $opcion)
-                                                        <option>{{ $opcion }}</option>
+                                                        <option value="{{ $opcion }}">{{ $opcion }}</option>
                                                     @endforeach
                                                 @endif
                                             </select>
@@ -193,10 +198,14 @@
                                             
                                         @case('checkbox')
                                             @if($atributo->json && is_array($atributo->json))
-                                                @foreach($atributo->json as $opcion)
+                                                @foreach($atributo->json as $index => $opcion)
                                                     <div class="form-check">
-                                                        <input class="form-check-input" type="checkbox" disabled>
-                                                        <label class="form-check-label">{{ $opcion }}</label>
+                                                        <input class="form-check-input preview-checkbox" type="checkbox" 
+                                                               id="checkbox_{{ $atributo->id }}_{{ $index }}"
+                                                               value="{{ $opcion }}">
+                                                        <label class="form-check-label" for="checkbox_{{ $atributo->id }}_{{ $index }}">
+                                                            {{ $opcion }}
+                                                        </label>
                                                     </div>
                                                 @endforeach
                                             @endif
@@ -420,13 +429,61 @@
     border: 2px dashed #dee2e6;
     border-radius: 0.375rem;
     padding: 1.5rem;
+    position: relative;
 }
 
-.preview-form .form-control,
-.preview-form .form-select,
-.preview-form .form-check-input {
+.preview-form::before {
+    content: "VISTA PREVIA";
+    position: absolute;
+    top: -12px;
+    left: 20px;
+    background: #fff;
+    color: #6c757d;
+    font-size: 0.75rem;
+    font-weight: bold;
+    padding: 0 8px;
+    letter-spacing: 1px;
+}
+
+.preview-form .form-control[disabled],
+.preview-form .form-control[readonly] {
     opacity: 0.7;
     cursor: not-allowed;
+}
+
+/* Estilos para elementos interactivos en vista previa */
+.preview-form .preview-select,
+.preview-form .preview-radio,
+.preview-form .preview-checkbox {
+    opacity: 1;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.preview-form .preview-select {
+    border-color: #28a745;
+    background-color: #f8fff9;
+}
+
+.preview-form .preview-select:focus {
+    border-color: #28a745;
+    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+}
+
+.preview-form .preview-radio:checked,
+.preview-form .preview-checkbox:checked {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.preview-form .form-check-label {
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.preview-form .form-check-input:checked + .form-check-label {
+    color: #28a745;
+    font-weight: 500;
 }
 
 .preview-form .btn {
@@ -438,11 +495,179 @@
     padding-left: 0;
     margin-bottom: 0;
 }
+
+/* Efecto hover para elementos interactivos */
+.preview-form .preview-select:hover {
+    background-color: #e8f5e8;
+}
+
+.preview-form .form-check:hover .form-check-label {
+    color: #28a745;
+}
+
+/* Indicador visual para campos funcionales */
+.preview-form .preview-select,
+.preview-form .form-check {
+    position: relative;
+}
+
+.preview-form .preview-select::after {
+    content: "🔍";
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-size: 0.8rem;
+}
+
+.preview-form .form-check::before {
+    content: "👆";
+    position: absolute;
+    right: -25px;
+    top: 0;
+    font-size: 0.7rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.preview-form .form-check:hover::before {
+    opacity: 1;
+}
 </style>
 @endpush
 
 @push('scripts')
 <script>
+// Prevenir envío del formulario de vista previa
+document.addEventListener('DOMContentLoaded', function() {
+    const previewForm = document.querySelector('.preview-form');
+    if (previewForm) {
+        previewForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            showPreviewAlert();
+        });
+        
+        // Agregar funcionalidad interactiva a los elementos de vista previa
+        setupPreviewInteractivity();
+    }
+});
+
+function setupPreviewInteractivity() {
+    // Efecto visual para selects
+    const previewSelects = document.querySelectorAll('.preview-select');
+    previewSelects.forEach(select => {
+        select.addEventListener('change', function() {
+            if (this.value) {
+                this.style.backgroundColor = '#d4edda';
+                this.style.borderColor = '#28a745';
+                
+                // Mostrar tooltip temporal
+                showTooltip(this, 'Opción seleccionada: ' + this.value);
+            } else {
+                this.style.backgroundColor = '#f8fff9';
+                this.style.borderColor = '#28a745';
+            }
+        });
+    });
+    
+    // Efecto visual para radios
+    const previewRadios = document.querySelectorAll('.preview-radio');
+    previewRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked) {
+                showTooltip(this, 'Seleccionado: ' + this.value);
+                
+                // Animar el label
+                const label = this.closest('.form-check').querySelector('.form-check-label');
+                label.style.transform = 'scale(1.05)';
+                setTimeout(() => {
+                    label.style.transform = 'scale(1)';
+                }, 200);
+            }
+        });
+    });
+    
+    // Efecto visual para checkboxes
+    const previewCheckboxes = document.querySelectorAll('.preview-checkbox');
+    previewCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const label = this.closest('.form-check').querySelector('.form-check-label');
+            if (this.checked) {
+                showTooltip(this, 'Marcado: ' + this.value);
+                label.style.transform = 'scale(1.05)';
+                setTimeout(() => {
+                    label.style.transform = 'scale(1)';
+                }, 200);
+            } else {
+                label.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    label.style.transform = 'scale(1)';
+                }, 200);
+            }
+        });
+    });
+}
+
+function showTooltip(element, message) {
+    // Crear tooltip temporal
+    const tooltip = document.createElement('div');
+    tooltip.className = 'preview-tooltip';
+    tooltip.innerHTML = `
+        <div class="bg-success text-white rounded px-2 py-1 small">
+            <i class="fas fa-eye me-1"></i>
+            ${message}
+        </div>
+    `;
+    tooltip.style.cssText = `
+        position: absolute;
+        z-index: 1060;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    `;
+    
+    document.body.appendChild(tooltip);
+    
+    // Posicionar cerca del elemento
+    const rect = element.getBoundingClientRect();
+    tooltip.style.top = (rect.top - 40) + 'px';
+    tooltip.style.left = rect.left + 'px';
+    
+    // Mostrar con animación
+    setTimeout(() => {
+        tooltip.style.opacity = '1';
+    }, 10);
+    
+    // Ocultar después de 2 segundos
+    setTimeout(() => {
+        tooltip.style.opacity = '0';
+        setTimeout(() => {
+            if (tooltip.parentNode) {
+                tooltip.parentNode.removeChild(tooltip);
+            }
+        }, 300);
+    }, 2000);
+}
+
+function showPreviewAlert() {
+    const alert = document.createElement('div');
+    alert.className = 'alert alert-info alert-dismissible fade show';
+    alert.innerHTML = `
+        <i class="fas fa-info-circle me-2"></i>
+        Esta es una vista previa del formulario. Para realizar cambios, usa el botón "Editar Ficha".
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    const contentArea = document.querySelector('.content-area');
+    contentArea.insertBefore(alert, contentArea.firstChild);
+    
+    setTimeout(() => {
+        const bsAlert = new bootstrap.Alert(alert);
+        bsAlert.close();
+    }, 5000);
+}
+
 function confirmarEliminacion(fichaId, nombreFicha) {
     document.getElementById('nombreFicha').textContent = nombreFicha;
     document.getElementById('formEliminar').action = `/fichas/${fichaId}`;
