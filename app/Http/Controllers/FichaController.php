@@ -341,30 +341,61 @@ class FichaController extends Controller
                 'tipo' => $tipoFicha,
             ]);
 
-            // 2) Eliminar atributos existentes
-            AtributoFicha::where('id_ficha', $ficha->id)->delete();
-
-            // 3) Crear nuevos atributos
+            // 2) Obtener atributos existentes
+            $atributosExistentes = AtributoFicha::where('id_ficha', $ficha->id)->get()->keyBy('nro');
+            
+            // 3) Procesar campos del formulario
             foreach ($validated['campos'] as $c) {
-                $attr = new AtributoFicha();
-                $attr->id_ficha       = $ficha->id;
-                $attr->nro            = (int)$c['nro'];
-                $attr->titulo         = $c['nombre'];
-                $attr->tipo           = $c['tipo'];
-                $attr->ancho          = $c['ancho'] ?? null;
-                $attr->obligatorio    = !empty($c['obligatorio']) ? 1 : 0;
-
-                $json = null;
-                if (isset($c['opciones']) && $c['opciones'] !== '') {
-                    $json = is_string($c['opciones']) ? $c['opciones'] : json_encode($c['opciones']);
+                $nro = (int)$c['nro'];
+                
+                if ($atributosExistentes->has($nro)) {
+                    // ACTUALIZAR atributo existente (solo la estructura, no los datos)
+                    $attr = $atributosExistentes[$nro];
+                    $attr->update([
+                        'titulo' => $c['nombre'],
+                        'tipo' => $c['tipo'],
+                        'ancho' => $c['ancho'] ?? null,
+                        'obligatorio' => !empty($c['obligatorio']) ? 1 : 0,
+                        'json' => $this->prepareJsonField($c),
+                    ]);
+                } else {
+                    // CREAR nuevo atributo
+                    $attr = new AtributoFicha();
+                    $attr->id_ficha = $ficha->id;
+                    $attr->nro = $nro;
+                    $attr->titulo = $c['nombre'];
+                    $attr->tipo = $c['tipo'];
+                    $attr->ancho = $c['ancho'] ?? null;
+                    $attr->obligatorio = !empty($c['obligatorio']) ? 1 : 0;
+                    $attr->json = $this->prepareJsonField($c);
+                    $attr->estado = 1;
+                    $attr->id_user_create = Auth::id();
+                    $attr->save();
                 }
-                $attr->json           = $json;
-                $attr->estado         = 1;
-                $attr->id_user_create = Auth::id();
-                $attr->save();
+            }
+            
+            // 4) Identificar campos eliminados (que no están en el formulario)
+            $nrosEnviados = collect($validated['campos'])->pluck('nro')->map(fn($n) => (int)$n);
+            $atributosAEliminar = $atributosExistentes->reject(function($attr) use ($nrosEnviados) {
+                return $nrosEnviados->contains($attr->nro);
+            });
+            
+            // 5) Solo eliminar atributos que NO tienen datos asociados
+            foreach ($atributosAEliminar as $attr) {
+                $tieneDatos = DB::table('datos_atributos_fichas')
+                    ->where('id_atributo', $attr->id)
+                    ->exists();
+                    
+                if (!$tieneDatos) {
+                    // No tiene datos, se puede eliminar
+                    $attr->delete();
+                } else {
+                    // Tiene datos, solo marcarlo como inactivo
+                    $attr->update(['estado' => 0]);
+                }
             }
 
-            // 4) Guardar contexto si es Flujo/Etapa
+            // 6) Guardar contexto si es Flujo/Etapa
             if (in_array($tipoFicha, ['Flujo','Etapa'], true)) {
                 $context = [
                     'id_flujo' => $validated['id_flujo'] ?? null,
@@ -570,5 +601,17 @@ class FichaController extends Controller
             'success' => true,
             'message' => "Rol {$estado} exitosamente"
         ]);
+    }
+
+    /**
+     * Preparar el campo JSON para opciones
+     */
+    private function prepareJsonField($campo)
+    {
+        if (!isset($campo['opciones']) || $campo['opciones'] === '') {
+            return null;
+        }
+        
+        return is_string($campo['opciones']) ? $campo['opciones'] : json_encode($campo['opciones']);
     }
 }
