@@ -922,7 +922,7 @@ button[disabled] {
                         <input type="file" class="form-control" id="documentFile" 
                                accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.bmp,.webp" 
                                required>
-                        <div class="form-text">Se permiten: PDF, Word, Excel, CSV, imágenes (JPG, PNG, GIF, BMP, WebP) - Máximo 20MB</div>
+                        <div class="form-text">Se permiten archivos PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, e imágenes (.png/.jpg/.jpeg/.gif/.bmp/.webp) - máximo 10MB</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Comentarios (opcional)</label>
@@ -2081,29 +2081,28 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // Lista de tipos de archivo permitidos
+        // Validar tipos de archivo permitidos
         const tiposPermitidos = [
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'text/csv',
-            'image/jpeg',
-            'image/jpg',
-            'image/png',
-            'image/gif',
-            'image/bmp',
-            'image/webp'
+            'application/pdf',                                          // PDF
+            'application/msword',                                       // DOC
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // DOCX
+            'application/vnd.ms-excel',                                // XLS
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // XLSX
+            'text/csv',                                                // CSV
+            'image/png',                                               // PNG
+            'image/jpeg',                                              // JPG/JPEG
+            'image/gif',                                               // GIF
+            'image/bmp',                                               // BMP
+            'image/webp'                                               // WEBP
         ];
 
         if (!tiposPermitidos.includes(file.type)) {
-            mostrarNotificacion('Tipo de archivo no permitido. Se permiten: PDF, Word, Excel, CSV, imágenes (JPG, PNG, GIF, BMP, WebP)', 'warning');
+            mostrarNotificacion('Tipo de archivo no permitido. Se aceptan: PDF, Word, Excel, CSV e imágenes', 'warning');
             return;
         }
 
-        if (file.size > 20 * 1024 * 1024) { // 20MB
-            mostrarNotificacion('El archivo es demasiado grande. Máximo 20MB', 'warning');
+        if (file.size > 10 * 1024 * 1024) { // 10MB
+            mostrarNotificacion('El archivo es demasiado grande. Máximo 10MB', 'warning');
             return;
         }
 
