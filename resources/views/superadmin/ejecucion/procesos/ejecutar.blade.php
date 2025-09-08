@@ -705,13 +705,23 @@ button[disabled] {
                                             
                                             <div class="btn-group-vertical btn-group-sm">
                                                 @if($documento->archivo_url)
-                                                    <!-- Botón para ver PDF -->
-                                                    <button type="button" class="btn btn-outline-primary btn-sm ver-pdf" 
-                                                            data-documento-id="{{ $documento->id }}"
-                                                            data-url="{{ $documento->archivo_url }}"
-                                                            title="Ver PDF">
-                                                        <i class="fas fa-eye"></i>
-                                                    </button>
+                                                    @php
+                                                        $extension = strtolower(pathinfo($documento->archivo_url, PATHINFO_EXTENSION));
+                                                        $esPDF = $extension === 'pdf';
+                                                        $esImagen = in_array($extension, ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp']);
+                                                        $puedePrevisualizar = $esPDF || $esImagen;
+                                                    @endphp
+                                                    
+                                                    @if($puedePrevisualizar)
+                                                        <!-- Botón para ver archivo -->
+                                                        <button type="button" class="btn btn-outline-primary btn-sm ver-archivo" 
+                                                                data-documento-id="{{ $documento->id }}"
+                                                                data-url="{{ $documento->archivo_url }}"
+                                                                data-tipo="{{ $esPDF ? 'pdf' : 'imagen' }}"
+                                                                title="{{ $esPDF ? 'Ver PDF' : 'Ver Imagen' }}">
+                                                            <i class="fas fa-eye"></i>
+                                                        </button>
+                                                    @endif
                                                     <!-- Botón para descargar -->
                                                     <a href="{{ $documento->archivo_url }}" 
                                                        class="btn btn-outline-secondary btn-sm" 
@@ -820,13 +830,23 @@ button[disabled] {
                                     
                                     <div class="btn-group-vertical btn-group-sm">
                                         @if($documento->archivo_url)
-                                            <!-- Botón para ver PDF -->
-                                            <button type="button" class="btn btn-outline-primary btn-sm ver-pdf" 
-                                                    data-documento-id="{{ $documento->id }}"
-                                                    data-url="{{ $documento->archivo_url }}"
-                                                    title="Ver PDF">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
+                                            @php
+                                                $extension = strtolower(pathinfo($documento->archivo_url, PATHINFO_EXTENSION));
+                                                $esPDF = $extension === 'pdf';
+                                                $esImagen = in_array($extension, ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp']);
+                                                $puedePrevisualizar = $esPDF || $esImagen;
+                                            @endphp
+                                            
+                                            @if($puedePrevisualizar)
+                                                <!-- Botón para ver archivo -->
+                                                <button type="button" class="btn btn-outline-primary btn-sm ver-archivo" 
+                                                        data-documento-id="{{ $documento->id }}"
+                                                        data-url="{{ $documento->archivo_url }}"
+                                                        data-tipo="{{ $esPDF ? 'pdf' : 'imagen' }}"
+                                                        title="{{ $esPDF ? 'Ver PDF' : 'Ver Imagen' }}">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                            @endif
                                             <!-- Botón para descargar -->
                                             <a href="{{ $documento->archivo_url }}" 
                                                class="btn btn-outline-secondary btn-sm" 
@@ -898,9 +918,11 @@ button[disabled] {
                         <label class="form-label">Documento: <span id="documento-nombre"></span></label>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Seleccionar archivo PDF</label>
-                        <input type="file" class="form-control" id="documentFile" accept=".pdf" required>
-                        <div class="form-text">Solo se permiten archivos PDF (máximo 10MB)</div>
+                        <label class="form-label">Seleccionar archivo</label>
+                        <input type="file" class="form-control" id="documentFile" 
+                               accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.bmp,.webp" 
+                               required>
+                        <div class="form-text">Se permiten: PDF, Word, Excel, CSV, imágenes (JPG, PNG, GIF, BMP, WebP) - Máximo 20MB</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Comentarios (opcional)</label>
@@ -2055,17 +2077,33 @@ document.addEventListener('DOMContentLoaded', function() {
         const comments = document.getElementById('documentComments').value;
 
         if (!file) {
-            mostrarNotificacion('Por favor selecciona un archivo PDF', 'warning');
+            mostrarNotificacion('Por favor selecciona un archivo', 'warning');
             return;
         }
 
-        if (file.type !== 'application/pdf') {
-            mostrarNotificacion('Solo se permiten archivos PDF', 'warning');
+        // Lista de tipos de archivo permitidos
+        const tiposPermitidos = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/csv',
+            'image/jpeg',
+            'image/jpg',
+            'image/png',
+            'image/gif',
+            'image/bmp',
+            'image/webp'
+        ];
+
+        if (!tiposPermitidos.includes(file.type)) {
+            mostrarNotificacion('Tipo de archivo no permitido. Se permiten: PDF, Word, Excel, CSV, imágenes (JPG, PNG, GIF, BMP, WebP)', 'warning');
             return;
         }
 
-        if (file.size > 10 * 1024 * 1024) { // 10MB
-            mostrarNotificacion('El archivo es demasiado grande. Máximo 10MB', 'warning');
+        if (file.size > 20 * 1024 * 1024) { // 20MB
+            mostrarNotificacion('El archivo es demasiado grande. Máximo 20MB', 'warning');
             return;
         }
 
@@ -2116,23 +2154,36 @@ document.addEventListener('DOMContentLoaded', function() {
                 // cuando se recargue la página desde el servidor
                 
                 // Agregar botones de ver y descargar
-                btnGroup.innerHTML = `
-                    <button type="button" class="btn btn-outline-primary btn-sm ver-pdf" 
-                            data-documento-id="${documentoId}"
-                            data-url="${data.archivo_url}"
-                            title="Ver PDF">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    <a href="${data.archivo_url}" 
+                const archivoUrl = data.archivo_url;
+                const extension = archivoUrl.split('.').pop().toLowerCase();
+                const esPDF = extension === 'pdf';
+                const esImagen = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(extension);
+                const puedePrevisualizar = esPDF || esImagen;
+                
+                let botonesHTML = '';
+                
+                if (puedePrevisualizar) {
+                    botonesHTML += `
+                        <button type="button" class="btn btn-outline-primary btn-sm ver-archivo" 
+                                data-documento-id="${documentoId}"
+                                data-url="${archivoUrl}"
+                                data-tipo="${esPDF ? 'pdf' : 'imagen'}"
+                                title="${esPDF ? 'Ver PDF' : 'Ver Imagen'}">
+                            <i class="fas fa-eye"></i>
+                        </button>`;
+                }
+                
+                botonesHTML += `
+                    <a href="${archivoUrl}" 
                        class="btn btn-outline-secondary btn-sm" 
-                       download="${data.nombre_archivo || 'documento.pdf'}"
+                       download="${data.nombre_archivo || 'documento'}"
                        title="Descargar">
                         <i class="fas fa-download"></i>
                     </a>
                     <button type="button" class="btn btn-outline-danger btn-sm eliminar-documento" 
                             data-documento-id="${documentoId}"
                             data-documento-nombre="${document.getElementById('documento-nombre').textContent}"
-                            data-url="${data.archivo_url}"
+                            data-url="${archivoUrl}"
                             title="Eliminar documento">
                         <i class="fas fa-trash"></i>
                     </button>
@@ -2143,8 +2194,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     </button>
                 `;
                 
+                btnGroup.innerHTML = botonesHTML;
+                
                 // Reagregar event listeners
-                btnGroup.querySelector('.ver-pdf').addEventListener('click', verPDF);
+                const btnVerArchivo = btnGroup.querySelector('.ver-archivo');
+                if (btnVerArchivo) {
+                    btnVerArchivo.addEventListener('click', verArchivo);
+                }
                 btnGroup.querySelector('.eliminar-documento').addEventListener('click', function() {
                     // Lógica de eliminar documento existente
                     const documentoId = this.dataset.documentoId;
@@ -2282,6 +2338,65 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Ver PDF
+    function verArchivo() {
+        const documentoId = this.dataset.documentoId;
+        const url = this.dataset.url;
+        const tipo = this.dataset.tipo;
+        const documentoNombre = this.closest('.documento-item').querySelector('h6').textContent;
+        
+        if (tipo === 'pdf') {
+            // Mostrar PDF en modal existente
+            document.getElementById('pdf-title').textContent = documentoNombre;
+            document.getElementById('pdf-viewer').src = url;
+            document.getElementById('pdf-download').href = url;
+            
+            const modal = new bootstrap.Modal(document.getElementById('pdfModal'));
+            modal.show();
+        } else if (tipo === 'imagen') {
+            // Crear y mostrar modal para imagen
+            let imagenModal = document.getElementById('imagenModal');
+            if (!imagenModal) {
+                // Crear modal de imagen si no existe
+                const modalHTML = `
+                    <div class="modal fade" id="imagenModal" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="imagen-title">Ver Imagen</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body text-center">
+                                    <img id="imagen-viewer" src="" alt="Imagen" class="img-fluid" style="max-height: 70vh;">
+                                </div>
+                                <div class="modal-footer">
+                                    <a id="imagen-download" href="" class="btn btn-primary" download>
+                                        <i class="fas fa-download me-2"></i>Descargar
+                                    </a>
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                imagenModal = document.getElementById('imagenModal');
+            }
+            
+            document.getElementById('imagen-title').textContent = documentoNombre;
+            document.getElementById('imagen-viewer').src = url;
+            document.getElementById('imagen-download').href = url;
+            
+            const modal = new bootstrap.Modal(imagenModal);
+            modal.show();
+        }
+    }
+
+    // Event listeners para ver archivos (PDFs e imágenes)
+    document.querySelectorAll('.ver-archivo').forEach(btn => {
+        btn.addEventListener('click', verArchivo);
+    });
+
+    // Mantener compatibilidad con botones ver-pdf existentes
     function verPDF() {
         const documentoId = this.dataset.documentoId;
         const url = this.dataset.url;
@@ -3128,8 +3243,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Cerrar modal
                 bootstrap.Modal.getInstance(modal).hide();
                 
-                // Mostrar mensaje de éxito
-                mostrarMensajeExito('Documento eliminado correctamente.');
+                // Mostrar mensaje de éxito y recargar página
+                mostrarMensajeExito('Documento eliminado correctamente. Recargando página...');
+                
+                // Recargar la página después de un breve delay
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
             } else {
                 mostrarNotificacion('Error al eliminar el documento: ' + data.message, 'error');
             }

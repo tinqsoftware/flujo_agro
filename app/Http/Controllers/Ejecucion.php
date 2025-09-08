@@ -1591,7 +1591,7 @@ class Ejecucion extends Controller
 
             $request->validate([
                 'documento_id' => 'required|exists:documentos,id',
-                'archivo' => 'required|file|mimes:pdf|max:10240', // 10MB máximo
+                'archivo' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,csv,png,jpg,jpeg,gif,bmp,webp|max:20480', // 20MB máximo
                 'comentarios' => 'nullable|string|max:500',
                 'detalle_flujo_id' => 'required|exists:detalle_flujo,id'
             ]);
