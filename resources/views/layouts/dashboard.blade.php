@@ -35,6 +35,22 @@
                     <i class="fas fa-building"></i>
                     Fichas
                 </a>
+
+                <a href="{{ route('form-types.index')}}" class="nav-link ">
+                    <i class="fas fa-building"></i>
+                    Tipos
+                </a>
+
+                <a href="{{ route('forms.index') }}" class="nav-link " >
+                    <i class="fas fa-building"></i>
+                    Formularios
+                </a>
+
+                <a href="{{ route('form-runs.index') }}" class="nav-link ">
+                    <i class="fas fa-building"></i>
+                    Ejecuciones
+                </a>
+
             @endif
             
             @if(in_array(Auth::user()->rol->nombre, ['SUPERADMIN', 'ADMINISTRADOR']))

@@ -49,4 +49,7 @@ class DetalleFlujo extends Model
     {
         return $this->hasMany(DetalleEtapa::class, 'id_detalle_flujo');
     }
+
+    public function formRuns(){ return $this->hasMany(FormRun::class,'id_detalle_flujo'); }
+
 }

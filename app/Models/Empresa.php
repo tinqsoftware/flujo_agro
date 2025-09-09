@@ -68,4 +68,10 @@ class Empresa extends Model
     {
         return $this->hasMany(TipoFlujo::class, 'id_emp');
     }
+
+    public function formTypes(){ return $this->hasMany(FormType::class,'id_emp'); }
+    public function forms(){ return $this->hasMany(Form::class,'id_emp'); }
+    public function formRuns(){ return $this->hasMany(FormRun::class,'id_emp'); }
+    public function formSequences(){ return $this->hasMany(FormSequence::class,'id_emp'); }
+
 }

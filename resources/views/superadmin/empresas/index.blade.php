@@ -51,8 +51,8 @@
                         <td>
                             <div class="d-flex align-items-center">
                                 @if($empresa->ruta_logo)
-                                    <img src="{{ Storage::url($empresa->ruta_logo) }}" 
-                                         class="rounded me-2" width="40" height="40" alt="Logo">
+                                    <img src="{{ ($empresa->ruta_logo) }}" 
+                                         class="rounded me-2"  height="40" alt="Logo">
                                 @else
                                     <div class="bg-primary rounded d-flex align-items-center justify-content-center me-2" 
                                          style="width: 40px; height: 40px;">
