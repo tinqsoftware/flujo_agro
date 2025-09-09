@@ -8,11 +8,14 @@ use Illuminate\Http\Request;
 class FormTypeController extends Controller
 {
     public function index() {
-        $types = FormType::orderBy('id_emp')->orderBy('nombre')->paginate(20);
+        $types = FormType::with('empresa')->orderBy('id_emp')->orderBy('nombre')->paginate(20);
         return view('admin.forms.types.index', compact('types'));
     }
 
-    public function create() { return view('admin.forms.types.create'); }
+    public function create() { 
+        $empresas = \App\Models\Empresa::where('estado', true)->orderBy('nombre')->get();
+        return view('admin.forms.types.create', compact('empresas')); 
+    }
 
     public function store(Request $r) {
         $data = $r->validate([
@@ -22,10 +25,11 @@ class FormTypeController extends Controller
             'estado'=>'boolean'
         ]);
         FormType::create($data);
-        return back()->with('ok','Tipo creado');
+        return redirect()->route('form-types.index')->with('ok','Tipo creado');
     }
 
     public function edit(FormType $form_type) {
+        $form_type->load('empresa');
         return view('admin.forms.types.edit', ['type'=>$form_type]);
     }
 
@@ -35,7 +39,7 @@ class FormTypeController extends Controller
             'descripcion'=>'nullable|string',
             'estado'=>'boolean'
         ]));
-        return back()->with('ok','Tipo actualizado');
+        return redirect()->route('form-types.index')->with('ok','Tipo actualizado');
     }
 
     public function destroy(FormType $form_type) {

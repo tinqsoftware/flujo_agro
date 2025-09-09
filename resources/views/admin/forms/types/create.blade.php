@@ -6,8 +6,13 @@
 <form method="post" action="{{ route('form-types.store') }}" class="row g-3">
 @csrf
 <div class="col-md-3">
-  <label class="form-label">Empresa (id_emp)</label>
-  <input name="id_emp" class="form-control" required>
+  <label class="form-label">Empresa</label>
+  <select name="id_emp" class="form-select" required>
+    <option value="">Seleccione una empresa</option>
+    @foreach($empresas as $empresa)
+      <option value="{{ $empresa->id }}">{{ $empresa->nombre }}</option>
+    @endforeach
+  </select>
 </div>
 <div class="col-md-6">
   <label class="form-label">Nombre</label>

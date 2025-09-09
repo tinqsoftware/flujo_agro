@@ -1,6 +1,6 @@
 @extends('layouts.dashboard')
-@section('title','Editar Tipo #{{ $type->id }}')
-@section('page-title','Editar Tipo #{{ $type->id }}')
+@section('title', 'Editar: ' . $type->nombre . ' | ' . ($type->empresa->nombre ?? 'Sin empresa'))
+@section('page-title', 'Editar: ' . $type->nombre . ' | ' . ($type->empresa->nombre ?? 'Sin empresa'))
 @section('content-area')
 <form method="post" action="{{ route('form-types.update',$type) }}" class="row g-3">
 @csrf @method('put')
