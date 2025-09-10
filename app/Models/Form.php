@@ -19,4 +19,17 @@ class Form extends Model {
     public function sequences(){ return $this->hasMany(FormSequence::class,'id_form'); }
     public function runs(){ return $this->hasMany(FormRun::class,'id_form'); }
     public function pdfTemplates(){ return $this->hasMany(PdfTemplate::class,'id_form'); }
+    
+    // Relación con etapas a través de la tabla pivot etapas_forms
+    public function etapas()
+    {
+        return $this->belongsToMany(Etapa::class, 'etapas_forms', 'id_forms', 'id_etapa')
+                    ->withTimestamps();
+    }
+    
+    // Relación directa con EtapaForm
+    public function etapaForms()
+    {
+        return $this->hasMany(EtapaForm::class, 'id_forms');
+    }
 }

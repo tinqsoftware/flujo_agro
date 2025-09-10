@@ -66,4 +66,17 @@ class Etapa extends Model
     {
         return $this->hasMany(DetalleEtapa::class, 'id_etapa');
     }
+
+    // Relación con formularios a través de la tabla pivot etapas_forms
+    public function forms()
+    {
+        return $this->belongsToMany(Form::class, 'etapas_forms', 'id_etapa', 'id_forms')
+                    ->withTimestamps();
+    }
+    
+    // Relación directa con EtapaForm
+    public function etapaForms()
+    {
+        return $this->hasMany(EtapaForm::class, 'id_etapa');
+    }
 }
