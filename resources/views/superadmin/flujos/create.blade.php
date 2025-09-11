@@ -92,4 +92,12 @@
 
 {{-- Builder (mismo script que en EDIT) --}}
 @include('superadmin.flujos.partials.builder-script')
+
+<script>
+  // Configuración para gestión de formularios
+  window.flujoConfig = {
+    isSuper: @json($isSuper),
+    userEmpresa: @json(!$isSuper ? auth()->user()->id_emp : null)
+  };
+</script>
 @endpush

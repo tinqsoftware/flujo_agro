@@ -45,7 +45,10 @@
             <div class="col-12">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <div class="fw-semibold">Tareas</div>
-                <button type="button" class="btn btn-sm btn-outline-primary btnAddTask"><i class="fas fa-plus me-1"></i> Tarea</button>
+                <div class="btn-group">
+                  <button type="button" class="btn btn-sm btn-outline-primary btnAddTask"><i class="fas fa-plus me-1"></i> Tarea</button>
+                  <button type="button" class="btn btn-sm btn-outline-success btnAddForm" data-stage-id="{{ $stage['id'] ?? '' }}"><i class="fas fa-plus me-1"></i> Form</button>
+                </div>
               </div>
               <div class="tasks-list d-grid gap-2" data-stage-id="{{ $stage['id'] ?? '' }}">
                 @foreach(($stage['tasks'] ?? []) as $t)
@@ -175,6 +178,37 @@
                   </div>
                 @endforeach
               </div>
+              
+              {{-- Formularios asociados a esta etapa --}}
+              <div class="mt-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <div class="fw-semibold small text-muted">Formularios asociados</div>
+                </div>
+                <div class="stage-forms-list d-grid gap-1" data-stage-id="{{ $stage['id'] ?? '' }}">
+                  @foreach(($stage['forms'] ?? []) as $f)
+                    <div class="form-item list-group-item border rounded p-2 bg-light" 
+                         data-form-id="{{ $f['id'] ?? uniqid('form_') }}"
+                         data-form-db-id="{{ isset($f['id']) && is_numeric($f['id']) ? $f['id'] : '' }}">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <div class="flex-grow-1">
+                          <div class="form-title fw-semibold text-success">
+                            <i class="fas fa-clipboard-list me-1"></i>{{ $f['name'] ?? 'Formulario' }}
+                          </div>
+                          <div class="small text-muted form-desc">{{ $f['description'] ?? '' }}</div>
+                          <span class="badge bg-success badge-sm">
+                            <i class="fas fa-check"></i> Asociado
+                          </span>
+                        </div>
+                        <div class="ms-2">
+                          <button type="button" class="btn btn-sm btn-outline-danger btnRemoveForm" data-form-id="{{ $f['id'] ?? '' }}">
+                            <i class="fas fa-unlink"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  @endforeach
+                </div>
+              </div>
             </div>
           </div>
 
@@ -225,6 +259,45 @@
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
             <button type="button" class="btn btn-primary" id="bm-save">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {{-- Modal para seleccionar formularios --}}
+    <div class="modal fade" id="formSelectorModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Seleccionar Formulario para la Etapa</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row">
+              <div class="col-md-4">
+                <h6>Formularios Disponibles</h6>
+                <div id="formsList" class="list-group">
+                  <div class="text-center py-3">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                      <span class="visually-hidden">Cargando...</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-8">
+                <h6>Vista Previa del Formulario</h6>
+                <div id="formPreview" class="border rounded p-3" style="min-height: 400px;">
+                  <div class="text-center text-muted py-5">
+                    <i class="fas fa-eye fa-3x mb-3"></i>
+                    <p>Selecciona un formulario para ver la vista previa</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="button" class="btn btn-success" id="confirmFormSelection" disabled>Agregar Formulario</button>
           </div>
         </div>
       </div>

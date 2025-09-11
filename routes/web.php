@@ -141,6 +141,16 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::patch('/flujos/documentos/{documento}/toggle-estado', [\App\Http\Controllers\FlujoController::class, 'toggleDocumentoEstado'])
             ->name('flujos.documentos.toggle-estado');
 
+        // AJAX para gestión de formularios en etapas
+        Route::get('/flujos/forms-by-empresa', [\App\Http\Controllers\FlujoController::class, 'formsByEmpresa'])
+            ->name('flujos.forms.byEmpresa');
+        Route::get('/flujos/form-preview/{form}', [\App\Http\Controllers\FlujoController::class, 'formPreview'])
+            ->name('flujos.form.preview');
+        Route::post('/flujos/etapas/{etapa}/associate-form', [\App\Http\Controllers\FlujoController::class, 'associateForm'])
+            ->name('flujos.etapas.associateForm');
+        Route::delete('/flujos/etapas/{etapa}/remove-form/{form}', [\App\Http\Controllers\FlujoController::class, 'removeForm'])
+            ->name('flujos.etapas.removeForm');
+
         // EJECUCIÓN DE FLUJOS
         Route::resource('ejecucion', Ejecucion::class)->only(['index']);
         

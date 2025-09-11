@@ -195,7 +195,17 @@
 
       st.querySelector('.stage-nro').textContent = nro;
 
-      out.stages.push({ id: stageId, name, description: desc, nro, paralelo, estado, tasks });
+      // Obtener formularios asociados a esta etapa
+      const forms = [];
+      st.querySelectorAll('.stage-forms-list .form-item').forEach((fi) => {
+        forms.push({
+          id: fi.getAttribute('data-form-db-id') || fi.getAttribute('data-form-id'),
+          name: fi.querySelector('.form-title')?.textContent?.trim().replace(/^.*?\s/, '') || 'Formulario',
+          description: fi.querySelector('.form-desc')?.textContent?.trim() || ''
+        });
+      });
+
+      out.stages.push({ id: stageId, name, description: desc, nro, paralelo, estado, tasks, forms });
     });
 
     builderInput.value = JSON.stringify(out);
@@ -444,9 +454,18 @@
           <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-2">
               <div class="fw-semibold">Tareas</div>
-              <button type="button" class="btn btn-sm btn-outline-primary btnAddTask"><i class="fas fa-plus me-1"></i> Tarea</button>
+              <div class="btn-group">
+                <button type="button" class="btn btn-sm btn-outline-primary btnAddTask"><i class="fas fa-plus me-1"></i> Tarea</button>
+                <button type="button" class="btn btn-sm btn-outline-success btnAddForm" data-stage-id="${id}"><i class="fas fa-plus me-1"></i> Form</button>
+              </div>
             </div>
             <div class="tasks-list d-grid gap-2" data-stage-id="${id}"></div>
+            <div class="mt-3">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="fw-semibold small text-muted">Formularios asociados</div>
+              </div>
+              <div class="stage-forms-list d-grid gap-1" data-stage-id="${id}"></div>
+            </div>
           </div>
         </div>
         <input type="hidden" class="stage-name" value="Nueva etapa">
@@ -523,6 +542,10 @@
       rebuildJSON();
     }
 
+    if (btn?.classList.contains('btnAddForm') && stage) {
+      openFormSelectorModal(stage);
+    }
+
     if (btn?.classList.contains('btnAddTaskDoc')) {
       const task = e.target.closest('.task-item');
       if (task) {
@@ -578,6 +601,26 @@
       });
     }
     if (btn?.classList.contains('btnDelDoc') && doc) { doc.remove(); rebuildJSON(); }
+    
+    // Gestión de formularios
+    if (btn?.classList.contains('btnRemoveForm')) {
+      const formItem = e.target.closest('.form-item');
+      const stage = e.target.closest('.stage-item');
+      
+      if (formItem && stage) {
+        const formId = btn.getAttribute('data-form-id');
+        const stageId = stage.getAttribute('data-stage-db-id');
+        
+        if (isEditMode && stageId && formId) {
+          // En modo edición, hacer petición AJAX para desasociar
+          removeFormFromStage(stageId, formId, formItem);
+        } else {
+          // En creación, solo remover del DOM
+          formItem.remove();
+          rebuildJSON();
+        }
+      }
+    }
   });
 
   // Event listeners para switches de estado (solo en modo edición)
@@ -648,6 +691,337 @@
 
   initStageSortables();
   rebuildJSON();
+
+  // Funciones para gestión de formularios
+  let currentStageForForm = null;
+  let availableForms = [];
+  let selectedFormId = null;
+
+  function openFormSelectorModal(stage) {
+    currentStageForForm = stage;
+    const modal = new bootstrap.Modal(document.getElementById('formSelectorModal'));
+    
+    // Obtener empresa ID para cargar formularios
+    let empresaId = null;
+    
+    // Verificar si tenemos configuración global
+    if (window.flujoConfig) {
+      if (window.flujoConfig.isSuper) {
+        // Para SUPERADMIN, detectar empresa desde el select
+        const empresaSelect = document.getElementById('empresaSelect');
+        if (empresaSelect) {
+          empresaId = empresaSelect.value;
+        } else if (window.flujoConfig.flujoEmpresa) {
+          // En edición, usar la empresa del flujo
+          empresaId = window.flujoConfig.flujoEmpresa;
+        }
+        
+        if (!empresaId) {
+          alert('Debe seleccionar una empresa primero');
+          return;
+        }
+      } else {
+        // Para usuarios normales, usar su empresa
+        empresaId = window.flujoConfig.userEmpresa;
+      }
+    } else {
+      // Fallback al método anterior
+      const empresaSelect = document.getElementById('empresaSelect');
+      if (empresaSelect) {
+        empresaId = empresaSelect.value;
+      } else {
+        const empresaInput = document.querySelector('select[name="id_emp"], input[name="id_emp"]');
+        if (empresaInput) {
+          empresaId = empresaInput.value;
+        }
+      }
+      
+      if (!empresaId) {
+        alert('Debe seleccionar una empresa primero');
+        return;
+      }
+    }
+    
+    loadFormsByEmpresa(empresaId);
+    modal.show();
+  }
+
+  function loadFormsByEmpresa(empresaId) {
+    const formsList = document.getElementById('formsList');
+    const formPreview = document.getElementById('formPreview');
+    
+    formsList.innerHTML = `
+      <div class="text-center py-3">
+        <div class="spinner-border spinner-border-sm" role="status">
+          <span class="visually-hidden">Cargando...</span>
+        </div>
+      </div>
+    `;
+    
+    // Construir URL con o sin parámetro empresa_id dependiendo del tipo de usuario
+    let url = `{{ route('flujos.forms.byEmpresa') }}`;
+    if (window.flujoConfig && window.flujoConfig.isSuper && empresaId) {
+      url += `?empresa_id=${empresaId}`;
+    }
+    
+    fetch(url)
+      .then(response => response.json())
+      .then(data => {
+        availableForms = data.forms || [];
+        renderFormsList();
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        formsList.innerHTML = '<div class="alert alert-danger">Error al cargar formularios</div>';
+      });
+  }
+
+  function renderFormsList() {
+    const formsList = document.getElementById('formsList');
+    
+    if (availableForms.length === 0) {
+      formsList.innerHTML = '<div class="text-muted text-center py-3">No hay formularios disponibles</div>';
+      return;
+    }
+    
+    formsList.innerHTML = availableForms.map(form => `
+      <div class="list-group-item list-group-item-action form-list-item" 
+           data-form-id="${form.id}" 
+           style="cursor: pointer;">
+        <div class="d-flex w-100 justify-content-between">
+          <h6 class="mb-1">${form.nombre}</h6>
+          <small class="text-muted">${form.type ? form.type.nombre : 'Sin tipo'}</small>
+        </div>
+        <p class="mb-1 small text-muted">${form.descripcion || 'Sin descripción'}</p>
+      </div>
+    `).join('');
+    
+    // Agregar event listeners a los items
+    formsList.querySelectorAll('.form-list-item').forEach(item => {
+      item.addEventListener('click', () => {
+        selectForm(parseInt(item.dataset.formId));
+      });
+    });
+  }
+
+  function selectForm(formId) {
+    selectedFormId = formId;
+    
+    // Marcar como seleccionado visualmente
+    document.querySelectorAll('.form-list-item').forEach(item => {
+      item.classList.remove('active');
+    });
+    document.querySelector(`[data-form-id="${formId}"]`).classList.add('active');
+    
+    // Habilitar botón de confirmación
+    document.getElementById('confirmFormSelection').disabled = false;
+    
+    // Cargar vista previa
+    loadFormPreview(formId);
+  }
+
+  function loadFormPreview(formId) {
+    const formPreview = document.getElementById('formPreview');
+    
+    formPreview.innerHTML = `
+      <div class="text-center py-3">
+        <div class="spinner-border spinner-border-sm" role="status">
+          <span class="visually-hidden">Cargando vista previa...</span>
+        </div>
+      </div>
+    `;
+    
+    fetch(`{{ url('/flujos/form-preview') }}/${formId}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.form) {
+          renderFormPreview(data.form);
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        formPreview.innerHTML = '<div class="alert alert-danger">Error al cargar vista previa</div>';
+      });
+  }
+
+  function renderFormPreview(form) {
+    const formPreview = document.getElementById('formPreview');
+    
+    let html = `
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">${form.nombre}</h5>
+          <small class="text-muted">${form.descripcion || ''}</small>
+        </div>
+        <div class="card-body">
+          <div class="row mb-3">
+            <div class="col-sm-6">
+              <strong>Tipo:</strong> ${form.type}
+            </div>
+            <div class="col-sm-6">
+              <strong>Grupos:</strong> ${form.total_groups}
+            </div>
+          </div>
+          <div class="row mb-3">
+            <div class="col-sm-6">
+              <strong>Total Campos:</strong> ${form.total_fields}
+            </div>
+          </div>
+    `;
+    
+    if (form.groups && form.groups.length > 0) {
+      html += '<h6>Grupos y Campos:</h6>';
+      form.groups.forEach(group => {
+        html += `
+          <div class="border rounded p-2 mb-2">
+            <strong>${group.nombre}</strong>
+            ${group.descripcion ? `<br><small class="text-muted">${group.descripcion}</small>` : ''}
+            <div class="mt-2">
+        `;
+        
+        if (group.fields && group.fields.length > 0) {
+          group.fields.forEach(field => {
+            html += `
+              <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                <span>${field.nombre}</span>
+                <div>
+                  <span class="badge bg-secondary">${field.tipo}</span>
+                  ${field.required ? '<span class="badge bg-danger">Requerido</span>' : ''}
+                </div>
+              </div>
+            `;
+          });
+        } else {
+          html += '<small class="text-muted">Sin campos</small>';
+        }
+        
+        html += '</div></div>';
+      });
+    }
+    
+    html += '</div></div>';
+    formPreview.innerHTML = html;
+  }
+
+  function addFormToStage(formId, formData) {
+    if (!currentStageForForm) return;
+    
+    const formsList = currentStageForForm.querySelector('.stage-forms-list');
+    const formId_str = uid('form');
+    
+    const formHtml = `
+      <div class="form-item list-group-item border rounded p-2 bg-light" 
+           data-form-id="${formId_str}" 
+           data-form-db-id="${formId}">
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="flex-grow-1">
+            <div class="form-title fw-semibold text-success">
+              <i class="fas fa-clipboard-list me-1"></i>${formData.name}
+            </div>
+            <div class="small text-muted form-desc">${formData.description || ''}</div>
+            <span class="badge bg-success badge-sm">
+              <i class="fas fa-check"></i> Asociado
+            </span>
+          </div>
+          <div class="ms-2">
+            <button type="button" class="btn btn-sm btn-outline-danger btnRemoveForm" data-form-id="${formId}">
+              <i class="fas fa-unlink"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    formsList.insertAdjacentHTML('beforeend', formHtml);
+    rebuildJSON();
+  }
+
+  function removeFormFromStage(stageId, formId, formItem) {
+    if (!stageId || !formId) {
+      formItem.remove();
+      rebuildJSON();
+      return;
+    }
+    
+    fetch(`{{ url('/flujos/etapas') }}/${stageId}/remove-form/${formId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        formItem.remove();
+        rebuildJSON();
+      } else {
+        alert(data.error || 'Error al desasociar formulario');
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert('Error al desasociar formulario');
+    });
+  }
+
+  // Event listener para confirmar selección de formulario
+  document.getElementById('confirmFormSelection')?.addEventListener('click', () => {
+    if (!selectedFormId || !currentStageForForm) return;
+    
+    const stageId = currentStageForForm.getAttribute('data-stage-db-id');
+    
+    if (isEditMode && stageId) {
+      // En modo edición, hacer petición AJAX para asociar
+      fetch(`{{ url('/flujos/etapas') }}/${stageId}/associate-form`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        },
+        body: JSON.stringify({ form_id: selectedFormId })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          addFormToStage(selectedFormId, data.form);
+          bootstrap.Modal.getInstance(document.getElementById('formSelectorModal')).hide();
+        } else {
+          alert(data.error || 'Error al asociar formulario');
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('Error al asociar formulario');
+      });
+    } else {
+      // En modo creación, solo agregar al DOM
+      const selectedForm = availableForms.find(f => f.id === selectedFormId);
+      if (selectedForm) {
+        addFormToStage(selectedFormId, {
+          name: selectedForm.nombre,
+          description: selectedForm.descripcion
+        });
+        bootstrap.Modal.getInstance(document.getElementById('formSelectorModal')).hide();
+      }
+    }
+  });
+
+  // Limpiar estado cuando se cierra el modal
+  document.getElementById('formSelectorModal')?.addEventListener('hidden.bs.modal', () => {
+    currentStageForForm = null;
+    selectedFormId = null;
+    document.getElementById('confirmFormSelection').disabled = true;
+    document.getElementById('formPreview').innerHTML = `
+      <div class="text-center text-muted py-5">
+        <i class="fas fa-eye fa-3x mb-3"></i>
+        <p>Selecciona un formulario para ver la vista previa</p>
+      </div>
+    `;
+  });
+
+  // Fin funciones gestión de formularios
+
 })();
 </script>
 

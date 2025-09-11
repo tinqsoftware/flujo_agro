@@ -99,6 +99,15 @@
   })();
 </script>
 
-{{-- Builder (mismo script que en CREATE) --}}
+{{-- Builder script con datos --}}
 @include('superadmin.flujos.partials.builder-script')
+
+<script>
+  // Configuración para gestión de formularios
+  window.flujoConfig = {
+    isSuper: @json($isSuper),
+    userEmpresa: @json(!$isSuper ? auth()->user()->id_emp : null),
+    flujoEmpresa: @json($flujo->id_emp)
+  };
+</script>
 @endpush

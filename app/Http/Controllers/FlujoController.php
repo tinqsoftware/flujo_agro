@@ -162,6 +162,27 @@ class FlujoController extends Controller
                         }
                     }
                     
+                    // Gestionar formularios asociados a esta etapa
+                    if (!empty($st['forms'])) {
+                        foreach ($st['forms'] as $f) {
+                            $formId = is_numeric($f['id']) ? $f['id'] : null;
+                            if ($formId) {
+                                // Verificar que el formulario existe y pertenece a la misma empresa
+                                $form = \App\Models\Form::where('id', $formId)
+                                    ->where('id_emp', $empresaId)
+                                    ->where('estado', 1)
+                                    ->first();
+                                
+                                if ($form) {
+                                    \App\Models\EtapaForm::create([
+                                        'id_etapa' => $et->id,
+                                        'id_forms' => $form->id
+                                    ]);
+                                }
+                            }
+                        }
+                    }
+                    
                     // Ya no procesamos documentos a nivel de etapa ($st['documents'])
                     // porque ahora todos los documentos están dentro de las tareas
                 }
@@ -215,6 +236,15 @@ class FlujoController extends Controller
                 ];
             })->toArray();
 
+            // Obtener formularios asociados a esta etapa
+            $formsAsociados = $st->etapaForms()->with('form')->get()->map(function($etapaForm) {
+                return [
+                    'id' => $etapaForm->form->id,
+                    'name' => $etapaForm->form->nombre,
+                    'description' => $etapaForm->form->descripcion
+                ];
+            })->toArray();
+
             // Para compatibilidad: como ya no existe id_etapa, no hay documentos antiguos que cargar
             // Todos los documentos ahora están dentro de las tareas
             $documentosAntiguos = []; // Array vacío ya que no hay documentos antiguos
@@ -228,6 +258,7 @@ class FlujoController extends Controller
                 'estado'     => (int)$st->estado,
                 'tasks'      => $tareas,
                 'documents'  => $documentosAntiguos, // Siempre vacío ahora
+                'forms'      => $formsAsociados, // Agregar formularios asociados
             ];
         }
         $treeJson = json_encode($tree);
@@ -386,6 +417,43 @@ class FlujoController extends Controller
                         // No hay documentos antiguos que procesar
                         // Los documentos ahora solo existen dentro de las tareas
                     }
+
+                    // Gestionar formularios asociados a esta etapa
+                    if (!empty($stData['forms'])) {
+                        $existingForms = \App\Models\EtapaForm::where('id_etapa', $etapa->id)->get()->keyBy('id_forms');
+                        $processedForms = [];
+
+                        foreach ($stData['forms'] as $fData) {
+                            $formId = isset($fData['id']) && is_numeric($fData['id']) ? $fData['id'] : null;
+                            
+                            if ($formId) {
+                                // Verificar que el formulario existe y pertenece a la misma empresa
+                                $form = \App\Models\Form::where('id', $formId)
+                                    ->where('id_emp', $empresaId)
+                                    ->where('estado', 1)
+                                    ->first();
+                                
+                                if ($form) {
+                                    if (!isset($existingForms[$formId])) {
+                                        // Crear nueva asociación
+                                        \App\Models\EtapaForm::create([
+                                            'id_etapa' => $etapa->id,
+                                            'id_forms' => $form->id
+                                        ]);
+                                    }
+                                    $processedForms[] = $form->id;
+                                }
+                            }
+                        }
+
+                        // Eliminar asociaciones no incluidas en el builder
+                        \App\Models\EtapaForm::where('id_etapa', $etapa->id)
+                                              ->whereNotIn('id_forms', $processedForms)
+                                              ->delete();
+                    } else {
+                        // Si no hay formularios en el builder, eliminar todas las asociaciones existentes
+                        \App\Models\EtapaForm::where('id_etapa', $etapa->id)->delete();
+                    }
                 }
 
                 // Eliminar etapas no incluidas en el builder
@@ -399,6 +467,9 @@ class FlujoController extends Controller
                     Documento::whereIn('id_tarea', $tareasIds)->delete(); // Documentos nuevos
                     Tarea::where('id_etapa', $etapa->id)->delete();
                     
+                    // Eliminar asociaciones de formularios
+                    \App\Models\EtapaForm::where('id_etapa', $etapa->id)->delete();
+                    
                     // Ya no eliminamos documentos con id_etapa porque esa columna no existe
                     
                     $etapa->delete();
@@ -411,6 +482,9 @@ class FlujoController extends Controller
                     $tareasIds = Tarea::where('id_etapa', $e->id)->pluck('id');
                     Documento::whereIn('id_tarea', $tareasIds)->delete();
                     Tarea::where('id_etapa',$e->id)->delete();
+                    
+                    // Eliminar asociaciones de formularios
+                    \App\Models\EtapaForm::where('id_etapa', $e->id)->delete();
                     
                     // Ya no eliminamos documentos con id_etapa porque esa columna no existe
                 }
@@ -495,6 +569,152 @@ class FlujoController extends Controller
             'success' => true,
             'estado' => $documento->estado,
             'message' => 'Estado de documento actualizado'
+        ]);
+    }
+
+    /** Obtener formularios por empresa para el selector */
+    public function formsByEmpresa(Request $request)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+        
+        // Para SUPERADMIN, usar empresa del request, para otros usar su empresa
+        $empresaId = $isSuper ? $request->get('empresa_id') : $user->id_emp;
+        
+        if (!$empresaId) {
+            return response()->json(['forms' => []]);
+        }
+
+        // Verificar permisos
+        if (!$isSuper && $empresaId != $user->id_emp) {
+            return response()->json(['error' => 'No autorizado'], 403);
+        }
+
+        $forms = \App\Models\Form::where('id_emp', $empresaId)
+            ->where('estado', 1)
+            ->with(['type'])
+            ->select('id', 'nombre', 'descripcion', 'id_type')
+            ->orderBy('nombre')
+            ->get();
+
+        return response()->json(['forms' => $forms]);
+    }
+
+    /** Obtener vista previa de un formulario */
+    public function formPreview(\App\Models\Form $form)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+        
+        // Verificar permisos
+        if (!$isSuper && $form->id_emp != $user->id_emp) {
+            return response()->json(['error' => 'No autorizado'], 403);
+        }
+
+        $form->load(['groups.fields', 'type']);
+        
+        return response()->json([
+            'form' => [
+                'id' => $form->id,
+                'nombre' => $form->nombre,
+                'descripcion' => $form->descripcion,
+                'type' => $form->type ? $form->type->nombre : 'Sin tipo',
+                'groups' => $form->groups->map(function($group) {
+                    return [
+                        'id' => $group->id,
+                        'nombre' => $group->nombre,
+                        'descripcion' => $group->descripcion,
+                        'fields' => $group->fields->map(function($field) {
+                            return [
+                                'id' => $field->id,
+                                'nombre' => $field->nombre,
+                                'tipo' => $field->tipo,
+                                'required' => $field->required,
+                                'descripcion' => $field->descripcion
+                            ];
+                        })
+                    ];
+                }),
+                'total_groups' => $form->groups->count(),
+                'total_fields' => $form->fields->count()
+            ]
+        ]);
+    }
+
+    /** Asociar formulario a etapa */
+    public function associateForm(Request $request, \App\Models\Etapa $etapa)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+        
+        // Verificar permisos
+        if (!$isSuper && $etapa->flujo->id_emp != $user->id_emp) {
+            return response()->json(['error' => 'No autorizado'], 403);
+        }
+
+        $formId = $request->get('form_id');
+        $form = \App\Models\Form::find($formId);
+        
+        if (!$form) {
+            return response()->json(['error' => 'Formulario no encontrado'], 404);
+        }
+
+        // Verificar que el formulario pertenece a la misma empresa
+        if (!$isSuper && $form->id_emp != $user->id_emp) {
+            return response()->json(['error' => 'Formulario no autorizado'], 403);
+        }
+
+        // Verificar si ya está asociado
+        $exists = \App\Models\EtapaForm::where('id_etapa', $etapa->id)
+            ->where('id_forms', $form->id)
+            ->exists();
+
+        if ($exists) {
+            return response()->json(['error' => 'El formulario ya está asociado a esta etapa'], 422);
+        }
+
+        // Crear la asociación
+        \App\Models\EtapaForm::create([
+            'id_etapa' => $etapa->id,
+            'id_forms' => $form->id
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Formulario asociado correctamente',
+            'form' => [
+                'id' => $form->id,
+                'name' => $form->nombre,
+                'description' => $form->descripcion
+            ]
+        ]);
+    }
+
+    /** Remover formulario de etapa */
+    public function removeForm(\App\Models\Etapa $etapa, \App\Models\Form $form)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+        
+        // Verificar permisos
+        if (!$isSuper && $etapa->flujo->id_emp != $user->id_emp) {
+            return response()->json(['error' => 'No autorizado'], 403);
+        }
+
+        // Encontrar y eliminar la asociación
+        $etapaForm = \App\Models\EtapaForm::where('id_etapa', $etapa->id)
+            ->where('id_forms', $form->id)
+            ->first();
+
+        if (!$etapaForm) {
+            return response()->json(['error' => 'Asociación no encontrada'], 404);
+        }
+
+        $etapaForm->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Formulario desasociado correctamente'
         ]);
     }
 }
