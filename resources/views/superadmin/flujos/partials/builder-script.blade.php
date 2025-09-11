@@ -832,15 +832,28 @@
     `;
     
     fetch(`{{ url('/flujos/form-preview') }}/${formId}`)
-      .then(response => response.json())
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+      })
       .then(data => {
+        if (data.error) {
+          throw new Error(data.error);
+        }
         if (data.form) {
           renderFormPreview(data.form);
+        } else {
+          throw new Error('No se recibieron datos del formulario');
         }
       })
       .catch(error => {
-        console.error('Error:', error);
-        formPreview.innerHTML = '<div class="alert alert-danger">Error al cargar vista previa</div>';
+        console.error('Error al cargar vista previa:', error);
+        formPreview.innerHTML = `<div class="alert alert-danger">
+          <strong>Error al cargar vista previa:</strong><br>
+          ${error.message}
+        </div>`;
       });
   }
 
@@ -856,47 +869,98 @@
         <div class="card-body">
           <div class="row mb-3">
             <div class="col-sm-6">
-              <strong>Tipo:</strong> ${form.type}
+              <strong>Tipo:</strong> ${form.type || 'Sin tipo'}
             </div>
             <div class="col-sm-6">
-              <strong>Grupos:</strong> ${form.total_groups}
+              <strong>Grupos:</strong> ${form.total_groups || 0}
             </div>
           </div>
           <div class="row mb-3">
             <div class="col-sm-6">
-              <strong>Total Campos:</strong> ${form.total_fields}
+              <strong>Total Campos:</strong> ${form.total_fields || 0}
+            </div>
+            <div class="col-sm-6">
+              <strong>Campos sin grupo:</strong> ${form.fields_without_group_count || 0}
             </div>
           </div>
     `;
     
+    // Mostrar campos sin grupo primero (si existen)
+    if (form.fields_without_group && form.fields_without_group.length > 0) {
+      html += '<h6 class="text-primary"><i class="fas fa-list"></i> Campos Directos del Formulario:</h6>';
+      html += '<div class="border rounded p-2 mb-3 bg-light">';
+      
+      form.fields_without_group.forEach(field => {
+        const fieldType = field.tipo || 'text';
+        const isRequired = field.required || false;
+        const fieldKind = field.kind || 'input';
+        const isVisible = field.visible !== false;
+        
+        html += `
+          <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+            <div>
+              <span class="fw-medium">${field.nombre || field.codigo || 'Sin nombre'}</span>
+              ${field.codigo ? `<br><small class="text-muted">Código: ${field.codigo}</small>` : ''}
+              ${field.descripcion ? `<br><small class="text-muted">${field.descripcion}</small>` : ''}
+            </div>
+            <div class="text-end">
+              <span class="badge bg-primary">${fieldType}</span>
+              <span class="badge bg-info">${fieldKind}</span>
+              ${isRequired ? '<span class="badge bg-danger">Requerido</span>' : ''}
+              ${!isVisible ? '<span class="badge bg-secondary">Oculto</span>' : ''}
+            </div>
+          </div>
+        `;
+      });
+      
+      html += '</div>';
+    }
+    
+    // Mostrar grupos (si existen)
     if (form.groups && form.groups.length > 0) {
-      html += '<h6>Grupos y Campos:</h6>';
+      html += '<h6 class="text-success"><i class="fas fa-layer-group"></i> Grupos y Campos:</h6>';
       form.groups.forEach(group => {
         html += `
           <div class="border rounded p-2 mb-2">
-            <strong>${group.nombre}</strong>
+            <strong class="text-success">${group.nombre || 'Grupo sin nombre'}</strong>
             ${group.descripcion ? `<br><small class="text-muted">${group.descripcion}</small>` : ''}
             <div class="mt-2">
         `;
         
         if (group.fields && group.fields.length > 0) {
           group.fields.forEach(field => {
+            const fieldType = field.tipo || 'text';
+            const isRequired = field.required || false;
+            const fieldKind = field.kind || 'input';
+            const isVisible = field.visible !== false;
+            
             html += `
               <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                <span>${field.nombre}</span>
                 <div>
-                  <span class="badge bg-secondary">${field.tipo}</span>
-                  ${field.required ? '<span class="badge bg-danger">Requerido</span>' : ''}
+                  <span class="fw-medium">${field.nombre || field.codigo || 'Sin nombre'}</span>
+                  ${field.codigo ? `<br><small class="text-muted">Código: ${field.codigo}</small>` : ''}
+                  ${field.descripcion ? `<br><small class="text-muted">${field.descripcion}</small>` : ''}
+                </div>
+                <div class="text-end">
+                  <span class="badge bg-primary">${fieldType}</span>
+                  <span class="badge bg-info">${fieldKind}</span>
+                  ${isRequired ? '<span class="badge bg-danger">Requerido</span>' : ''}
+                  ${!isVisible ? '<span class="badge bg-secondary">Oculto</span>' : ''}
                 </div>
               </div>
             `;
           });
         } else {
-          html += '<small class="text-muted">Sin campos</small>';
+          html += '<small class="text-muted">Sin campos configurados en este grupo</small>';
         }
         
         html += '</div></div>';
       });
+    }
+    
+    // Si no hay campos ni grupos
+    if ((!form.groups || form.groups.length === 0) && (!form.fields_without_group || form.fields_without_group.length === 0)) {
+      html += '<div class="alert alert-info"><i class="fas fa-info-circle"></i> Este formulario no tiene campos configurados.</div>';
     }
     
     html += '</div></div>';

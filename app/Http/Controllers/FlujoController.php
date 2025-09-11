@@ -611,7 +611,11 @@ class FlujoController extends Controller
             return response()->json(['error' => 'No autorizado'], 403);
         }
 
-        $form->load(['groups.fields', 'type']);
+        // Cargar relaciones necesarias
+        $form->load(['groups.fields', 'type', 'fields']);
+        
+        // Obtener campos sin grupo (directos del formulario)
+        $fieldsWithoutGroup = $form->fields()->whereNull('id_group')->get();
         
         return response()->json([
             'form' => [
@@ -627,16 +631,32 @@ class FlujoController extends Controller
                         'fields' => $group->fields->map(function($field) {
                             return [
                                 'id' => $field->id,
-                                'nombre' => $field->nombre,
-                                'tipo' => $field->tipo,
-                                'required' => $field->required,
-                                'descripcion' => $field->descripcion
+                                'nombre' => $field->etiqueta, // Campo correcto
+                                'codigo' => $field->codigo,
+                                'tipo' => $field->datatype, // Campo correcto
+                                'required' => $field->requerido, // Campo correcto
+                                'descripcion' => $field->descripcion,
+                                'kind' => $field->kind,
+                                'visible' => $field->visible
                             ];
                         })
                     ];
                 }),
+                'fields_without_group' => $fieldsWithoutGroup->map(function($field) {
+                    return [
+                        'id' => $field->id,
+                        'nombre' => $field->etiqueta,
+                        'codigo' => $field->codigo,
+                        'tipo' => $field->datatype,
+                        'required' => $field->requerido,
+                        'descripcion' => $field->descripcion,
+                        'kind' => $field->kind,
+                        'visible' => $field->visible
+                    ];
+                }),
                 'total_groups' => $form->groups->count(),
-                'total_fields' => $form->fields->count()
+                'total_fields' => $form->fields->count(),
+                'fields_without_group_count' => $fieldsWithoutGroup->count()
             ]
         ]);
     }
