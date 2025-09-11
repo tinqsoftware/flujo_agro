@@ -14,7 +14,8 @@ class StoreFormRunRequest extends FormRequest
         return [
             'fields'               => 'array',
             'groups'               => 'array',
-            'id_detalle_flujo'     => 'nullable|integer',
+            'id_etapas_forms'      => 'nullable|integer', // Campo correcto
+            'id_detalle_flujo'     => 'nullable|integer', // Mantener compatibilidad si se necesita
         ];
     }
 }

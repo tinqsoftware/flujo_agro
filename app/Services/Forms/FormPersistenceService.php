@@ -5,24 +5,38 @@ use App\Models\{Form, FormRun, FormAnswer, FormAnswerRow, FormAnswerRowValue};
 use Illuminate\Support\Facades\DB;
 
 class FormPersistenceService {
-    public function saveRun(Form $form, array $payload, int $empId, ?int $detalleFlujoId, int $userId): FormRun {
-        return DB::transaction(function() use ($form,$payload,$empId,$detalleFlujoId,$userId){
-            $run = new FormRun([
-                'id_form' => $form->id,
-                'id_emp'  => $empId,
-                'id_detalle_flujo' => $detalleFlujoId,
-                'estado'  => 'draft',
-                'created_by' => $userId
-            ]);
+    public function saveRun(Form $form, array $payload, int $empId, ?int $etapaFormId, int $userId, ?FormRun $existingRun = null): FormRun {
+        return DB::transaction(function() use ($form,$payload,$empId,$etapaFormId,$userId,$existingRun){
+            if ($existingRun) {
+                // Actualizar run existente
+                $run = $existingRun;
+                $run->update([
+                    'id_etapas_forms' => $etapaFormId,
+                    'updated_by' => $userId
+                ]);
+                
+                // Limpiar respuestas existentes para reemplazarlas
+                $run->answers()->delete();
+                $run->rows()->delete(); // Esto debería eliminar en cascada los values
+            } else {
+                // Crear nuevo run
+                $run = new FormRun([
+                    'id_form' => $form->id,
+                    'id_emp'  => $empId,
+                    'id_etapas_forms' => $etapaFormId, // Campo correcto según el modelo
+                    'estado'  => 'draft',
+                    'created_by' => $userId
+                ]);
 
-            // correlativo
-            if ($form->usa_correlativo) {
-                $seq = app(SequenceService::class)->next(
-                    $form->id, $empId, $form->correlativo_prefijo ?? '', $form->correlativo_sufijo ?? '', $form->correlativo_padding ?? 6
-                );
-                $run->correlativo = $seq;
+                // correlativo solo para nuevos runs
+                if ($form->usa_correlativo) {
+                    $seq = app(SequenceService::class)->next(
+                        $form->id, $empId, $form->correlativo_prefijo ?? '', $form->correlativo_sufijo ?? '', $form->correlativo_padding ?? 6
+                    );
+                    $run->correlativo = $seq;
+                }
+                $run->save();
             }
-            $run->save();
 
             // valores simples
             foreach ($payload['fields'] ?? [] as $codigo => $value) {

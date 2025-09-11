@@ -166,7 +166,7 @@ class FormRunController extends Controller
             $form,
             $payload,
             $form->id_emp,
-            $payload['id_detalle_flujo'] ?? null,
+            $payload['id_etapas_forms'] ?? null, // Campo correcto
             auth()->id()
         );
 
@@ -219,8 +219,9 @@ class FormRunController extends Controller
             $form,
             $payload,
             $form_run->id_emp,
-            $payload['id_detalle_flujo'] ?? $form_run->id_detalle_flujo,
-            auth()->id()
+            $payload['id_etapas_forms'] ?? $form_run->id_etapas_forms, // Campo correcto
+            auth()->id(),
+            $form_run // Pasar el run existente para actualización
         );
 
         return back()->with('ok','Actualizado');
