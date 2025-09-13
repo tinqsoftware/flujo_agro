@@ -673,9 +673,9 @@
                         <div class="form-text">Dale un nombre descriptivo para identificar fácilmente esta ejecución</div>
                     </div>
 
-                    <!-- Configuración de tareas y documentos -->
+                    <!-- Configuración de tareas, documentos y formularios -->
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <h6 class="fw-bold mb-3">
                                 <i class="fas fa-tasks me-1"></i>Tareas a incluir
                                 <span id="contador-tareas" class="badge bg-success ms-2">0 seleccionadas</span>
@@ -687,7 +687,7 @@
                                 <!-- Las tareas se cargarán dinámicamente -->
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <h6 class="fw-bold mb-3">
                                 <i class="fas fa-file-alt me-1"></i>Documentos a incluir
                                 <span id="contador-documentos" class="badge bg-success ms-2">0 seleccionados</span>
@@ -697,6 +697,18 @@
                             </h6>
                             <div id="documentos-container" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
                                 <!-- Los documentos se cargarán dinámicamente -->
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="fw-bold mb-3">
+                                <i class="fas fa-clipboard-list me-1"></i>Formularios a incluir
+                                <span id="contador-formularios" class="badge bg-success ms-2">0 seleccionados</span>
+                                <button type="button" class="btn btn-sm btn-outline-success ms-2" id="select-all-formularios">
+                                    <i class="fas fa-check-double"></i> Todos
+                                </button>
+                            </h6>
+                            <div id="formularios-container" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                                <!-- Los formularios se cargarán dinámicamente -->
                             </div>
                         </div>
                     </div>
@@ -1076,6 +1088,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Cargar documentos
                 cargarDocumentos(data.flujo.etapas);
                 
+                // Cargar formularios
+                cargarFormularios(data.flujo.etapas);
+                
                 // Mostrar modal
                 console.log('Mostrando modal...');
                 modalConfiguracion.show();
@@ -1239,13 +1254,60 @@ document.addEventListener('DOMContentLoaded', function() {
         actualizarContadores();
     }
 
+    // Función para cargar formularios en el modal
+    function cargarFormularios(etapas) {
+        const container = document.getElementById('formularios-container');
+        if (!container) {
+            console.error('Container de formularios no encontrado');
+            return;
+        }
+        
+        container.innerHTML = '';
+
+        etapas.forEach(etapa => {
+            if (etapa.formularios && etapa.formularios.length > 0) {
+                // Título de etapa
+                const etapaTitle = document.createElement('div');
+                etapaTitle.className = 'mb-2';
+                etapaTitle.innerHTML = `<small class="fw-bold text-primary">Etapa ${etapa.nro}: ${etapa.nombre}</small>`;
+                container.appendChild(etapaTitle);
+
+                // Formularios de la etapa
+                etapa.formularios.forEach(formulario => {
+                    const formDiv = document.createElement('div');
+                    formDiv.className = 'form-check mb-2';
+                    formDiv.innerHTML = `
+                        <input class="form-check-input formulario-checkbox" type="checkbox" value="${formulario.etapa_form_id}" 
+                               id="formulario-${formulario.etapa_form_id}" checked>
+                        <label class="form-check-label" for="formulario-${formulario.etapa_form_id}">
+                            <strong>${formulario.nombre}</strong>
+                            ${formulario.descripcion ? `<br><small class="text-muted">${formulario.descripcion}</small>` : ''}
+                            ${formulario.requerido ? '<span class="badge bg-danger ms-1" style="font-size: 0.6rem;">Requerido</span>' : ''}
+                        </label>
+                    `;
+                    container.appendChild(formDiv);
+                });
+            }
+        });
+        
+        // Agregar event listeners a los checkboxes para actualizar contadores
+        container.querySelectorAll('.formulario-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', actualizarContadores);
+        });
+        
+        // Actualizar contador inicial
+        actualizarContadores();
+    }
+
     // Función para actualizar contadores
     function actualizarContadores() {
         const tareasSeleccionadas = document.querySelectorAll('.tarea-checkbox:checked').length;
         const documentosSeleccionados = document.querySelectorAll('.documento-checkbox:checked').length;
+        const formulariosSeleccionados = document.querySelectorAll('.formulario-checkbox:checked').length;
         
         const contadorTareas = document.getElementById('contador-tareas');
         const contadorDocumentos = document.getElementById('contador-documentos');
+        const contadorFormularios = document.getElementById('contador-formularios');
         
         if (contadorTareas) {
             contadorTareas.textContent = `${tareasSeleccionadas} seleccionadas`;
@@ -1257,10 +1319,15 @@ document.addEventListener('DOMContentLoaded', function() {
             contadorDocumentos.className = documentosSeleccionados > 0 ? 'badge bg-success ms-2' : 'badge bg-secondary ms-2';
         }
         
+        if (contadorFormularios) {
+            contadorFormularios.textContent = `${formulariosSeleccionados} seleccionados`;
+            contadorFormularios.className = formulariosSeleccionados > 0 ? 'badge bg-success ms-2' : 'badge bg-secondary ms-2';
+        }
+        
         // Actualizar el botón de envío según las selecciones
         const submitBtn = formConfiguracion ? formConfiguracion.querySelector('button[type="submit"]') : null;
         if (submitBtn) {
-            const totalSeleccionados = tareasSeleccionadas + documentosSeleccionados;
+            const totalSeleccionados = tareasSeleccionadas + documentosSeleccionados + formulariosSeleccionados;
             if (totalSeleccionados === 0) {
                 submitBtn.classList.add('btn-outline-danger');
                 submitBtn.classList.remove('btn-success');
@@ -1273,16 +1340,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Eventos para seleccionar todas las tareas/documentos
+    // Eventos para seleccionar todas las tareas/documentos/formularios
     if (!isSuper) {
         const selectAllTareas = document.getElementById('select-all-tareas');
         const selectAllDocumentos = document.getElementById('select-all-documentos');
+        const selectAllFormularios = document.getElementById('select-all-formularios');
         
         if (selectAllTareas) {
             selectAllTareas.addEventListener('click', function() {
                 const checkboxes = document.querySelectorAll('.tarea-checkbox');
                 const allChecked = Array.from(checkboxes).every(cb => cb.checked);
                 checkboxes.forEach(cb => cb.checked = !allChecked);
+                actualizarContadores();
             });
         }
 
@@ -1291,6 +1360,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 const checkboxes = document.querySelectorAll('.documento-checkbox');
                 const allChecked = Array.from(checkboxes).every(cb => cb.checked);
                 checkboxes.forEach(cb => cb.checked = !allChecked);
+                actualizarContadores();
+            });
+        }
+
+        if (selectAllFormularios) {
+            selectAllFormularios.addEventListener('click', function() {
+                const checkboxes = document.querySelectorAll('.formulario-checkbox');
+                const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                checkboxes.forEach(cb => cb.checked = !allChecked);
+                actualizarContadores();
             });
         }
 
@@ -1313,22 +1392,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 const documentosSeleccionados = Array.from(document.querySelectorAll('.documento-checkbox:checked'))
                     .map(cb => cb.value);
 
-                // Validar que al menos una tarea o documento esté seleccionado
-                if (tareasSeleccionadas.length === 0 && documentosSeleccionados.length === 0) {
-                    alert('Debes seleccionar al menos una tarea o un documento para crear la ejecución.\n\nNo puedes crear una ejecución sin elementos a ejecutar.');
+                // Recopilar formularios seleccionados
+                const formulariosSeleccionados = Array.from(document.querySelectorAll('.formulario-checkbox:checked'))
+                    .map(cb => cb.value);
+
+                // Validar que al menos una tarea, documento o formulario esté seleccionado
+                if (tareasSeleccionadas.length === 0 && documentosSeleccionados.length === 0 && formulariosSeleccionados.length === 0) {
+                    alert('Debes seleccionar al menos una tarea, un documento o un formulario para crear la ejecución.\n\nNo puedes crear una ejecución sin elementos a ejecutar.');
                     return;
                 }
 
                 console.log('Configuración validada:', {
                     tareas_seleccionadas: tareasSeleccionadas.length,
-                    documentos_seleccionados: documentosSeleccionados.length
+                    documentos_seleccionados: documentosSeleccionados.length,
+                    formularios_seleccionados: formulariosSeleccionados.length
                 });
 
                 // Enviar configuración
                 enviarConfiguracion(flujoSeleccionado.id, {
                     nombre: nombre,
                     tareas_seleccionadas: tareasSeleccionadas,
-                    documentos_seleccionados: documentosSeleccionados
+                    documentos_seleccionados: documentosSeleccionados,
+                    formularios_seleccionados: formulariosSeleccionados
                 });
             });
         }

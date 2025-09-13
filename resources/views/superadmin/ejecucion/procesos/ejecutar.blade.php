@@ -879,6 +879,90 @@ button[disabled] {
                 </div>
                 @endif
                 
+                <!-- Formularios de la etapa -->
+                @if($etapa->etapaForms->count() > 0)
+                <div class="formularios-etapa mt-4">
+                    <div class="d-flex align-items-center mb-3">
+                        <i class="fas fa-clipboard-list text-success me-2"></i>
+                        <h6 class="mb-0">Formularios (<span class="formularios-completados">0</span>/<span class="total-formularios">{{ $etapa->etapaForms->count() }}</span> completados)</h6>
+                    </div>
+                    
+                    @foreach($etapa->etapaForms as $etapaForm)
+                    @php
+                        // Verificar si existe un FormRun para este formulario y esta ejecución
+                        $formRun = null;
+                        if ($flujo->proceso_iniciado && $flujo->detalle_flujo_id) {
+                            $formRun = \App\Models\FormRun::where('id_etapas_forms', $etapaForm->id)
+                                ->where('id_emp', Auth::user()->id_emp)
+                                ->first();
+                        }
+                        $formularioCompletado = $formRun && $formRun->estado === 'completado';
+                        $formularioIniciado = $formRun && in_array($formRun->estado, ['en_progreso', 'completado']);
+                    @endphp
+                    
+                    <div class="formulario-container mb-3 p-3 border rounded" style="background-color: #f0f8f0; border-left: 4px solid #28a745 !important;">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center mb-1">
+                                    <i class="fas fa-file-alt me-2 text-success"></i>
+                                    <strong>{{ $etapaForm->form->nombre }}</strong>
+                                    @if($formularioCompletado)
+                                        <span class="badge bg-success ms-2">
+                                            <i class="fas fa-check-circle"></i> Completado
+                                        </span>
+                                    @elseif($formularioIniciado)
+                                        <span class="badge bg-warning ms-2">
+                                            <i class="fas fa-clock"></i> En Progreso
+                                        </span>
+                                    @else
+                                        <span class="badge bg-secondary ms-2">
+                                            <i class="fas fa-minus-circle"></i> Pendiente
+                                        </span>
+                                    @endif
+                                </div>
+                                @if($etapaForm->form->descripcion)
+                                    <div class="small text-muted">{{ $etapaForm->form->descripcion }}</div>
+                                @endif
+                                @if($formRun && $formRun->correlativo)
+                                    <div class="small text-info mt-1">
+                                        <i class="fas fa-hashtag me-1"></i>Correlativo: <strong>{{ $formRun->correlativo }}</strong>
+                                    </div>
+                                @endif
+                            </div>
+                            <div class="d-flex gap-2">
+                                @if($flujo->proceso_iniciado)
+                                    @if($formularioCompletado)
+                                        <!-- Botón para ver formulario completado -->
+                                        <button type="button" class="btn btn-outline-success btn-sm ver-formulario-completado" 
+                                                data-form-run-id="{{ $formRun->id }}"
+                                                data-form-nombre="{{ $etapaForm->form->nombre }}"
+                                                title="Ver formulario completado">
+                                            <i class="fas fa-eye"></i> Ver
+                                        </button>
+                                    @else
+                                        <!-- Botón para rellenar formulario -->
+                                        <button type="button" class="btn btn-success btn-sm rellenar-formulario" 
+                                                data-etapa-form-id="{{ $etapaForm->id }}"
+                                                data-form-id="{{ $etapaForm->form->id }}"
+                                                data-form-nombre="{{ $etapaForm->form->nombre }}"
+                                                data-form-run-id="{{ $formRun->id ?? '' }}"
+                                                title="{{ $formularioIniciado ? 'Continuar llenado' : 'Rellenar formulario' }}">
+                                            <i class="fas fa-edit"></i> {{ $formularioIniciado ? 'Continuar' : 'Rellenar' }}
+                                        </button>
+                                    @endif
+                                @else
+                                    <!-- Proceso no iniciado -->
+                                    <button type="button" class="btn btn-secondary btn-sm" disabled title="Inicie el proceso para poder rellenar formularios">
+                                        <i class="fas fa-lock"></i> Bloqueado
+                                    </button>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+                @endif
+                
                 <!-- Botón para grabar cambios de esta etapa -->
                 @if($flujo->proceso_iniciado)
                 <div class="row mt-4">
@@ -1041,6 +1125,75 @@ button[disabled] {
     </div>
 </div>
 
+<!-- Modal para rellenar formulario -->
+<div class="modal fade" id="rellenarFormularioModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-clipboard-list me-2"></i>Rellenar Formulario: <span id="modal-form-nombre"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                <div id="formulario-contenido">
+                    <!-- El contenido del formulario se cargará aquí dinámicamente -->
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-success" role="status">
+                            <span class="visually-hidden">Cargando formulario...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Cargando campos del formulario...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Cancelar
+                </button>
+                <button type="button" class="btn btn-warning" id="guardar-borrador-formulario" style="display: none;">
+                    <i class="fas fa-save me-2"></i>Guardar Borrador
+                </button>
+                <button type="button" class="btn btn-success" id="completar-formulario" style="display: none;">
+                    <i class="fas fa-check-circle me-2"></i>Completar Formulario
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para ver formulario completado -->
+<div class="modal fade" id="verFormularioCompletadoModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-eye me-2"></i>Formulario Completado: <span id="modal-form-completado-nombre"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                <div id="formulario-completado-contenido">
+                    <!-- El contenido del formulario completado se cargará aquí -->
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-info" role="status">
+                            <span class="visually-hidden">Cargando formulario...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Cargando formulario completado...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Cerrar
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="imprimir-formulario" style="display: none;">
+                    <i class="fas fa-print me-2"></i>Imprimir
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 <!-- Contenedor para notificaciones -->
@@ -1129,6 +1282,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Inicializar listeners de cambios visuales TEMPRANO
     agregarListenersCambiosVisuales();
     agregarListenersEliminarDocumento();
+    agregarListenersFormularios();
     
     // Inicializar event listeners de botones "Grabar Cambios" por etapa
     document.querySelectorAll('.grabar-cambios-etapa').forEach(btn => {
@@ -2632,7 +2786,17 @@ document.addEventListener('DOMContentLoaded', function() {
                                 }
                             }
                             
-                            // Actualizar estado visual de la etapa
+                            // Actualizar contadores de formularios
+                            const formulariosCompletadosElement = etapaElement.querySelector('.formularios-completados');
+                            const totalFormulariosElement = etapaElement.querySelector('.total-formularios');
+                            
+                            if (formulariosCompletadosElement && etapaData.formularios_completados !== undefined) {
+                                formulariosCompletadosElement.textContent = etapaData.formularios_completados;
+                            }
+                            
+                            if (totalFormulariosElement && etapaData.total_formularios !== undefined) {
+                                totalFormulariosElement.textContent = etapaData.total_formularios;
+                            }                            // Actualizar estado visual de la etapa
                             if (etapaData.progreso === 100) {
                                 etapaElement.classList.remove('activa');
                                 etapaElement.classList.add('completada');
@@ -3455,6 +3619,1271 @@ document.addEventListener('DOMContentLoaded', function() {
                         tareaContainer.classList.add('tarea-completada');
                     }
                 });
+        }
+    }
+
+    // Event listeners para los formularios
+    function agregarListenersFormularios() {
+        // Event listener para rellenar formulario
+        document.querySelectorAll('.rellenar-formulario').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const etapaFormId = this.dataset.etapaFormId;
+                const formId = this.dataset.formId;
+                const formNombre = this.dataset.formNombre;
+                const formRunId = this.dataset.formRunId;
+                
+                console.log('Abriendo formulario:', {etapaFormId, formId, formNombre, formRunId});
+                
+                abrirModalFormulario(etapaFormId, formId, formNombre, formRunId);
+            });
+        });
+
+        // Event listener para ver formulario completado
+        document.querySelectorAll('.ver-formulario-completado').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const formRunId = this.dataset.formRunId;
+                const formNombre = this.dataset.formNombre;
+                
+                console.log('Viendo formulario completado:', {formRunId, formNombre});
+                
+                abrirModalFormularioCompletado(formRunId, formNombre);
+            });
+        });
+
+        // Event listener para guardar borrador
+        document.getElementById('guardar-borrador-formulario')?.addEventListener('click', function() {
+            guardarFormulario('borrador');
+        });
+
+        // Event listener para completar formulario
+        document.getElementById('completar-formulario')?.addEventListener('click', function() {
+            if (validarFormulario()) {
+                guardarFormulario('completado');
+            }
+        });
+    }
+
+    // Función para abrir modal de formulario
+    function abrirModalFormulario(etapaFormId, formId, formNombre, formRunId = null) {
+        const modal = new bootstrap.Modal(document.getElementById('rellenarFormularioModal'));
+        
+        // Actualizar título
+        document.getElementById('modal-form-nombre').textContent = formNombre;
+        
+        // Mostrar modal
+        modal.show();
+        
+        // Cargar contenido del formulario
+        cargarContenidoFormulario(etapaFormId, formId, formRunId);
+    }
+
+    // Función para cargar el contenido del formulario dinámico
+    function cargarContenidoFormulario(etapaFormId, formId, formRunId = null) {
+        const contenedor = document.getElementById('formulario-contenido');
+        
+        // Mostrar loading
+        contenedor.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-success" role="status">
+                    <span class="visually-hidden">Cargando formulario...</span>
+                </div>
+                <p class="mt-2 text-muted">Cargando campos del formulario...</p>
+            </div>
+        `;
+
+        // Hacer petición al servidor para obtener la estructura del formulario
+        const url = formRunId ? 
+            `{{ route('ejecucion.formulario.editar', ':formRunId') }}`.replace(':formRunId', formRunId) :
+            `{{ route('ejecucion.formulario.nuevo', ':etapaFormId') }}`.replace(':etapaFormId', etapaFormId);
+
+        fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderizarFormulario(data.formulario, data.respuestas || {});
+                
+                // Mostrar botones
+                document.getElementById('guardar-borrador-formulario').style.display = 'inline-block';
+                document.getElementById('completar-formulario').style.display = 'inline-block';
+                
+                // Guardar datos del formulario actual
+                window.formularioActual = {
+                    etapaFormId: etapaFormId,
+                    formId: formId,
+                    formRunId: formRunId || data.formRunId
+                };
+                
+                // Guardar estructura del formulario para funciones auxiliares
+                window.currentFormulario = data.formulario;
+            } else {
+                contenedor.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Error al cargar el formulario: ${data.message || 'Error desconocido'}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error al cargar formulario:', error);
+            contenedor.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Error al cargar el formulario. Por favor, intente nuevamente.
+                </div>
+            `;
+        });
+    }
+
+    // Función para renderizar el formulario dinámico
+    function renderizarFormulario(formulario, respuestas = {}) {
+        const contenedor = document.getElementById('formulario-contenido');
+        let html = '<form id="dynamic-form">';
+
+        // Agrupar campos por grupos si existen
+        const grupos = formulario.groups || [];
+        const camposSinGrupo = formulario.fields.filter(field => !field.id_group);
+
+        // Renderizar grupos
+        grupos.forEach(grupo => {
+            const camposGrupo = formulario.fields.filter(field => field.id_group === grupo.id);
+            
+            if (grupo.repetible) {
+                // Grupo repetible
+                html += `
+                    <div class="card mb-3">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-0">${grupo.nombre}</h6>
+                                ${grupo.descripcion ? `<small class="text-muted">${grupo.descripcion}</small>` : ''}
+                            </div>
+                            <button type="button" class="btn btn-sm btn-primary" onclick="addRow('${grupo.codigo}')">
+                                <i class="fas fa-plus"></i> Agregar fila
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-bordered" id="grupo-${grupo.codigo}">
+                                    <thead>
+                                        <tr>
+                `;
+
+                // Cabeceras de la tabla
+                camposGrupo.forEach(field => {
+                    html += `<th>${field.etiqueta}</th>`;
+                });
+                html += `<th width="50">Acción</th></tr></thead><tbody id="tbody-${grupo.codigo}">`;
+
+                // Obtener respuestas del grupo
+                const respuestasGrupo = respuestas.groups && respuestas.groups[grupo.codigo] 
+                    ? respuestas.groups[grupo.codigo] : [{}];
+
+                // Renderizar filas existentes
+                respuestasGrupo.forEach((fila, index) => {
+                    html += `<tr data-row="${index}">`;
+                    camposGrupo.forEach(field => {
+                        const valor = fila[field.codigo] || '';
+                        html += `<td>${renderizarCampo(field, valor, true, grupo.codigo, index)}</td>`;
+                    });
+                    html += `
+                        <td>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>`;
+                });
+
+                html += `</tbody></table></div></div></div>`;
+
+            } else {
+                // Grupo normal (no repetible)
+                html += `
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">${grupo.nombre}</h6>
+                            ${grupo.descripcion ? `<small class="text-muted">${grupo.descripcion}</small>` : ''}
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                `;
+
+                camposGrupo.forEach(field => {
+                    const valor = respuestas.fields && respuestas.fields[field.codigo] || '';
+                    html += renderizarCampo(field, valor);
+                });
+
+                html += '</div></div></div>';
+            }
+        });
+
+        // Renderizar campos sin grupo
+        if (camposSinGrupo.length > 0) {
+            html += '<div class="card mb-3"><div class="card-body"><div class="row">';
+            camposSinGrupo.forEach(field => {
+                const valor = respuestas.fields && respuestas.fields[field.codigo] || '';
+                html += renderizarCampo(field, valor);
+            });
+            html += '</div></div></div>';
+        }
+
+        html += '</form>';
+        contenedor.innerHTML = html;
+
+        // Inicializar funcionalidades
+        wireRealtimeCalc();
+        wireRowButtons();
+        wireOnSelectAutofill();
+    }
+
+    // Función para renderizar un campo individual
+    function renderizarCampo(field, valor, isInGroup = false, groupName = '', rowIndex = 0) {
+        const required = field.requerido ? 'required' : '';
+        const readonly = field.kind === 'output' ? 'readonly' : '';
+        const disabled = field.kind === 'output' ? 'disabled' : '';
+        const colClass = field.ancho ? `col-md-${field.ancho}` : 'col-md-3';
+        
+        // Construir el name del campo
+        let fieldName;
+        if (isInGroup) {
+            fieldName = `groups[${groupName}][${rowIndex}][${field.codigo}]`;
+        } else {
+            fieldName = `fields[${field.codigo}]`;
+        }
+        
+        // Atributos data para fórmulas
+        let dataAttrs = `data-field-code="${field.codigo}"`;
+        if (field.kind === 'output' && field.formula && field.formula.expression) {
+            dataAttrs += ` data-expression="${field.formula.expression}" data-output-type="${field.formula.output_type || 'decimal'}"`;
+        }
+        
+        let html = `<div class="${colClass} mb-3">`;
+        html += `<label class="form-label">${field.etiqueta}`;
+        if (field.requerido) html += ' <span class="text-danger">*</span>';
+        if (field.kind === 'output' && field.formula) {
+            html += ' <span class="badge bg-info ms-1">calc</span>';
+        }
+        html += '</label>';
+
+        if (field.descripcion) {
+            html += `<div class="text-muted small mb-2">${field.descripcion}</div>`;
+        }
+
+        // Verificar si es un campo de output (calculado)
+        if (field.kind === 'output') {
+            // Campo de output se renderiza como un div no editable
+            html += `<div class="form-control bg-light" style="min-height: 38px; padding: 0.375rem 0.75rem; border: 1px solid #ced4da;" 
+                     ${dataAttrs} 
+                     id="output-${field.codigo}">
+                        <span class="text-muted">${valor || '(Se calculará automáticamente)'}</span>
+                     </div>`;
+            // Agregar input hidden para enviar el valor
+            html += `<input type="hidden" name="${fieldName}" value="${valor || ''}" ${dataAttrs}>`;
+        } else {
+            // Campo normal de input
+            switch (field.datatype) {
+            case 'textarea':
+                html += `<textarea class="form-control" name="${fieldName}" ${dataAttrs} ${readonly} ${required}>${valor || ''}</textarea>`;
+                break;
+                
+            case 'int':
+                html += `<input type="number" step="1" class="form-control" name="${fieldName}" value="${valor || ''}" ${dataAttrs} ${readonly} ${required}>`;
+                break;
+                
+            case 'decimal':
+                html += `<input type="number" step="0.000001" class="form-control" name="${fieldName}" value="${valor || ''}" ${dataAttrs} ${readonly} ${required}>`;
+                break;
+                
+            case 'date':
+                html += `<input type="date" class="form-control" name="${fieldName}" value="${valor || ''}" ${dataAttrs} ${readonly} ${required}>`;
+                break;
+                
+            case 'datetime':
+                html += `<input type="datetime-local" class="form-control" name="${fieldName}" value="${valor || ''}" ${dataAttrs} ${readonly} ${required}>`;
+                break;
+                
+            case 'boolean':
+                const selectedNo = (!valor || valor === '0') ? 'selected' : '';
+                const selectedYes = (valor === '1' || valor === true) ? 'selected' : '';
+                html += `<select class="form-select" name="${fieldName}" ${dataAttrs} ${disabled}>
+                          <option value="0" ${selectedNo}>No</option>
+                          <option value="1" ${selectedYes}>Sí</option>
+                        </select>`;
+                break;
+                
+            case 'select':
+            case 'multiselect':
+            case 'fk':
+                const isMulti = field.datatype === 'multiselect';
+                const multiple = isMulti ? 'multiple' : '';
+                const bracketName = isMulti ? `${fieldName}[]` : fieldName;
+                
+                // Configuración para autollenado
+                const config = field.config_json || {};
+                const onSelect = config.on_select || null;
+                const onSelectAttr = onSelect ? `data-on-select='${JSON.stringify(onSelect)}'` : '';
+                
+                html += `<select class="form-select" name="${bracketName}" ${dataAttrs} ${onSelectAttr} ${multiple} ${disabled}>`;
+                
+                if (!isMulti) {
+                    html += '<option value="">Seleccione una opción</option>';
+                }
+                
+                if (field.opciones && Array.isArray(field.opciones)) {
+                    field.opciones.forEach(opcion => {
+                        const selected = (valor === opcion.valor || (Array.isArray(valor) && valor.includes(opcion.valor))) ? 'selected' : '';
+                        const metaAttr = opcion.meta ? `data-meta='${JSON.stringify(opcion.meta)}'` : '';
+                        html += `<option value="${opcion.valor}" ${selected} ${metaAttr}>${opcion.etiqueta}</option>`;
+                    });
+                }
+                html += '</select>';
+                break;
+                
+            case 'file':
+                html += `<input type="file" class="form-control" name="${fieldName}" ${dataAttrs} ${disabled}>`;
+                if (valor) {
+                    html += `<div class="mt-2"><small class="text-muted">Archivo actual: ${valor}</small></div>`;
+                }
+                break;
+                
+            // Mantener compatibilidad con tipos antiguos
+            case 'texto':
+            case 'email':
+            case 'telefono':
+                html += `<input type="${field.datatype === 'email' ? 'email' : 'text'}" 
+                         class="form-control" 
+                         name="${fieldName}" 
+                         value="${valor || ''}" 
+                         ${dataAttrs}
+                         ${readonly}
+                         ${required}
+                         placeholder="${field.placeholder || ''}">`;
+                break;
+            
+            case 'numero':
+                html += `<input type="number" 
+                         class="form-control" 
+                         name="${fieldName}" 
+                         value="${valor || ''}" 
+                         ${dataAttrs}
+                         ${readonly}
+                         ${required}
+                         placeholder="${field.placeholder || ''}">`;
+                break;
+            
+            case 'fecha':
+                html += `<input type="date" 
+                         class="form-control" 
+                         name="${fieldName}" 
+                         value="${valor || ''}" 
+                         ${dataAttrs}
+                         ${readonly}
+                         ${required}>`;
+                break;
+            
+            case 'checkbox':
+                const checked = valor === '1' || valor === true ? 'checked' : '';
+                html += `<div class="form-check">
+                          <input class="form-check-input" 
+                                 type="checkbox" 
+                                 name="${fieldName}" 
+                                 value="1" 
+                                 ${checked} 
+                                 ${disabled}
+                                 ${dataAttrs}
+                                 ${required}>
+                          <label class="form-check-label">${field.placeholder || 'Sí'}</label>
+                        </div>`;
+                break;
+                
+            default: // text
+                html += `<input type="text" 
+                         class="form-control" 
+                         name="${fieldName}" 
+                         value="${valor || ''}" 
+                         ${dataAttrs}
+                         ${readonly}
+                         ${required}>`;
+        }
+        } // Cierre del bloque else para campos no-output
+
+        html += '</div>';
+        return html;
+    }
+
+    // Función para validar el formulario
+    function validarFormulario() {
+        const form = document.getElementById('dynamic-form');
+        if (!form) return false;
+
+        const elementos = form.querySelectorAll('[required]');
+        let valido = true;
+
+        elementos.forEach(elemento => {
+            if (!elemento.value.trim()) {
+                elemento.classList.add('is-invalid');
+                valido = false;
+            } else {
+                elemento.classList.remove('is-invalid');
+            }
+        });
+
+        if (!valido) {
+            mostrarNotificacion('Por favor, complete todos los campos requeridos', 'warning');
+        }
+
+        return valido;
+    }
+
+    // Función para guardar el formulario
+    function guardarFormulario(estado) {
+        const form = document.getElementById('dynamic-form');
+        if (!form) {
+            mostrarNotificacion('Error: No se encontró el formulario', 'error');
+            return;
+        }
+
+        const formData = new FormData(form);
+        const data = {
+            estado: estado,
+            etapa_form_id: window.formularioActual.etapaFormId,
+            form_run_id: window.formularioActual.formRunId,
+            respuestas: {}
+        };
+
+        // Recopilar respuestas
+        for (let [key, value] of formData.entries()) {
+            if (key.startsWith('field_')) {
+                const fieldId = key.replace('field_', '');
+                data.respuestas[fieldId] = value;
+            }
+        }
+
+        // También incluir checkboxes no marcados
+        form.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            if (!checkbox.checked && checkbox.name.startsWith('field_')) {
+                const fieldId = checkbox.name.replace('field_', '');
+                data.respuestas[fieldId] = '0';
+            }
+        });
+
+        // Enviar al servidor
+        fetch(`{{ route('ejecucion.formulario.guardar') }}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                mostrarNotificacion(
+                    estado === 'completado' ? 
+                    'Formulario completado exitosamente' : 
+                    'Borrador guardado exitosamente', 
+                    'success'
+                );
+                
+                // Cerrar modal
+                bootstrap.Modal.getInstance(document.getElementById('rellenarFormularioModal')).hide();
+                
+                // Actualizar página para reflejar cambios
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+                
+            } else {
+                mostrarNotificacion(`Error al guardar: ${data.message || 'Error desconocido'}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error al guardar formulario:', error);
+            mostrarNotificacion('Error al guardar el formulario', 'error');
+        });
+    }
+
+    // Función para abrir modal de formulario completado
+    function abrirModalFormularioCompletado(formRunId, formNombre) {
+        const modal = new bootstrap.Modal(document.getElementById('verFormularioCompletadoModal'));
+        
+        // Actualizar título
+        document.getElementById('modal-form-completado-nombre').textContent = formNombre;
+        
+        // Mostrar modal
+        modal.show();
+        
+        // Cargar contenido del formulario completado
+        cargarFormularioCompletado(formRunId);
+    }
+
+    // Función para cargar formulario completado
+    function cargarFormularioCompletado(formRunId) {
+        const contenedor = document.getElementById('formulario-completado-contenido');
+        
+        // Mostrar loading
+        contenedor.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-info" role="status">
+                    <span class="visually-hidden">Cargando formulario...</span>
+                </div>
+                <p class="mt-2 text-muted">Cargando formulario completado...</p>
+            </div>
+        `;
+
+        fetch(`{{ route('ejecucion.formulario.ver', ':formRunId') }}`.replace(':formRunId', formRunId))
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderizarFormularioCompletado(data.formulario, data.respuestas);
+                
+                // Mostrar botón de imprimir si es necesario
+                document.getElementById('imprimir-formulario').style.display = 'inline-block';
+            } else {
+                contenedor.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Error al cargar el formulario: ${data.message || 'Error desconocido'}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error al cargar formulario completado:', error);
+            contenedor.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Error al cargar el formulario. Por favor, intente nuevamente.
+                </div>
+            `;
+        });
+    }
+
+    // Función para renderizar formulario completado (solo lectura)
+    function renderizarFormularioCompletado(formulario, respuestas) {
+        const contenedor = document.getElementById('formulario-completado-contenido');
+        let html = '<div class="form-readonly">';
+
+        // Información del formulario
+        html += `
+            <div class="alert alert-success mb-4">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-check-circle fa-2x me-3"></i>
+                    <div>
+                        <h6 class="mb-1">Formulario Completado</h6>
+                        <small>Este formulario ha sido completado exitosamente y sus respuestas están guardadas.</small>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Renderizar grupos y campos (solo lectura)
+        const grupos = formulario.groups || [];
+        const camposSinGrupo = formulario.fields.filter(field => !field.id_group);
+
+        grupos.forEach(grupo => {
+            html += `
+                <div class="card mb-3">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0">${grupo.nombre}</h6>
+                        ${grupo.descripcion ? `<small class="text-muted">${grupo.descripcion}</small>` : ''}
+                    </div>
+                    <div class="card-body">
+            `;
+
+            const camposGrupo = formulario.fields.filter(field => field.id_group === grupo.id);
+            camposGrupo.forEach(field => {
+                html += renderizarCampoSoloLectura(field, respuestas[field.id] || '');
+            });
+
+            html += '</div></div>';
+        });
+
+        if (camposSinGrupo.length > 0) {
+            html += '<div class="row">';
+            camposSinGrupo.forEach(field => {
+                html += renderizarCampoSoloLectura(field, respuestas[field.id] || '');
+            });
+            html += '</div>';
+        }
+
+        html += '</div>';
+        contenedor.innerHTML = html;
+    }
+
+    // Función para renderizar campo en modo solo lectura
+    function renderizarCampoSoloLectura(field, valor) {
+        const colClass = field.ancho ? `col-md-${field.ancho}` : 'col-md-6';
+        
+        let html = `<div class="${colClass} mb-3">`;
+        html += `<label class="form-label fw-bold">${field.etiqueta}</label>`;
+        
+        let valorMostrar = valor || '<em class="text-muted">Sin respuesta</em>';
+        
+        if (field.datatype === 'checkbox') {
+            valorMostrar = (valor === '1' || valor === true) ? 
+                '<span class="badge bg-success">Sí</span>' : 
+                '<span class="badge bg-secondary">No</span>';
+        } else if (field.datatype === 'select' && field.opciones) {
+            const opcionSeleccionada = field.opciones.find(opt => opt.valor === valor);
+            valorMostrar = opcionSeleccionada ? opcionSeleccionada.etiqueta : valorMostrar;
+        }
+        
+        html += `<div class="form-control-plaintext border rounded p-2 bg-light">${valorMostrar}</div>`;
+        
+        html += '</div>';
+        return html;
+    }
+
+    // ============================================
+    // FUNCIONES PARA GRUPOS REPETIBLES
+    // ============================================
+
+    // Función para agregar una fila a un grupo repetible
+    function addRow(groupCode) {
+        const tbody = document.getElementById(`tbody-${groupCode}`);
+        const rows = tbody.querySelectorAll('tr');
+        const newIndex = rows.length;
+        
+        // Obtener campos del grupo
+        const formulario = window.currentFormulario;
+        const grupo = formulario.groups.find(g => g.codigo === groupCode);
+        const camposGrupo = formulario.fields.filter(field => field.id_group === grupo.id);
+        
+        let html = `<tr data-row="${newIndex}">`;
+        camposGrupo.forEach(field => {
+            html += `<td>${renderizarCampo(field, '', true, groupCode, newIndex)}</td>`;
+        });
+        html += `
+            <td>
+                <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        </tr>`;
+        
+        tbody.insertAdjacentHTML('beforeend', html);
+        renumberRows(groupCode);
+        
+        // Re-inicializar funcionalidades para la nueva fila
+        wireRealtimeCalc();
+        wireOnSelectAutofill();
+    }
+
+    // Función para eliminar una fila
+    function removeRow(button) {
+        const tr = button.closest('tr');
+        const tbody = tr.closest('tbody');
+        const groupCode = tbody.id.replace('tbody-', '');
+        
+        tr.remove();
+        renumberRows(groupCode);
+    }
+
+    // Función para renumerar las filas después de agregar/eliminar
+    function renumberRows(groupCode) {
+        const tbody = document.getElementById(`tbody-${groupCode}`);
+        const rows = tbody.querySelectorAll('tr');
+        
+        rows.forEach((row, index) => {
+            row.setAttribute('data-row', index);
+            
+            // Actualizar nombres de inputs en la fila
+            const inputs = row.querySelectorAll('input, select, textarea');
+            inputs.forEach(input => {
+                const name = input.getAttribute('name');
+                if (name && name.includes('groups[')) {
+                    const newName = name.replace(/\[(\d+)\]/, `[${index}]`);
+                    input.setAttribute('name', newName);
+                }
+            });
+        });
+    }
+
+    // ============================================
+    // FUNCIONES PARA CÁLCULOS EN TIEMPO REAL
+    // ============================================
+
+    // Función para inicializar cálculos en tiempo real
+    function wireRealtimeCalc() {
+        console.log('🔢 Inicializando cálculos en tiempo real...');
+        
+        // Buscar todos los campos con fórmulas (tanto DIVs como inputs)
+        const formulaFields = document.querySelectorAll('[data-expression]');
+        console.log(`🎯 Encontrados ${formulaFields.length} campos con fórmulas`);
+        
+        formulaFields.forEach(field => {
+            const expression = field.getAttribute('data-expression');
+            const outputType = field.getAttribute('data-output-type') || 'decimal';
+            const fieldCode = field.getAttribute('data-field-code');
+            
+            console.log(`📊 Configurando campo output: ${fieldCode}, expresión: ${expression}`);
+            
+            // Encontrar campos relacionados en la expresión
+            const relatedFields = findRelatedFields(expression);
+            console.log(`🔗 Campos relacionados para ${fieldCode}:`, relatedFields);
+            
+            // Agregar listeners a campos relacionados
+            relatedFields.forEach(relatedFieldCode => {
+                // Buscar inputs que contengan el código del campo en su name
+                const possibleSelectors = [
+                    `[name="fields[${relatedFieldCode}]"]`,
+                    `[name*="[${relatedFieldCode}]"]`,
+                    `[data-field-code="${relatedFieldCode}"]`
+                ];
+                
+                let foundInputs = [];
+                possibleSelectors.forEach(selector => {
+                    const inputs = document.querySelectorAll(selector);
+                    inputs.forEach(input => {
+                        if (!foundInputs.includes(input)) {
+                            foundInputs.push(input);
+                        }
+                    });
+                });
+                
+                console.log(`🎯 Para campo ${relatedFieldCode} encontrados ${foundInputs.length} inputs`);
+                
+                foundInputs.forEach(input => {
+                    console.log(`⚡ Agregando listeners a input:`, input.name || input.getAttribute('data-field-code'));
+                    
+                    // Remover listeners existentes para evitar duplicados
+                    input.removeEventListener('input', input._formulaHandler);
+                    input.removeEventListener('change', input._formulaHandler);
+                    
+                    // Crear handler específico para este input
+                    input._formulaHandler = () => {
+                        console.log(`🔄 Input ${relatedFieldCode} cambió, recalculando ${fieldCode}`);
+                        calculateFormula(field, expression, outputType);
+                    };
+                    
+                    input.addEventListener('input', input._formulaHandler);
+                    input.addEventListener('change', input._formulaHandler);
+                });
+            });
+            
+            // Calcular valor inicial
+            console.log(`🚀 Calculando valor inicial para ${fieldCode}`);
+            calculateFormula(field, expression, outputType);
+        });
+        
+        console.log('✅ Cálculos en tiempo real configurados');
+    }
+
+    // Función para encontrar campos relacionados en una expresión
+    function findRelatedFields(expression) {
+        // Verificar que la expresión no sea undefined, null o vacía
+        if (!expression || expression === 'undefined' || expression === 'null') {
+            console.log('⚠️ Expresión inválida, retornando array vacío');
+            return [];
+        }
+        
+        const normalizedExpression = expression.replace(/\{\{([^}]+)\}\}/g, '[$1]');
+        
+        const fieldPattern = /\[([^\]]+)\]/g;
+        const fields = [];
+        let match;
+        
+        while ((match = fieldPattern.exec(normalizedExpression)) !== null) {
+            fields.push(match[1]);
+        }
+        
+        return [...new Set(fields)]; // Eliminar duplicados
+    }
+
+    // Función para calcular una fórmula
+    function calculateFormula(outputField, expression, outputType) {
+        console.log(`🧮 === CALCULANDO FÓRMULA ===`);
+        console.log(`📝 Expresión original: ${expression}`);
+        console.log(`🎯 Campo output:`, outputField);
+        console.log(`📊 Tipo output: ${outputType}`);
+        
+        // Verificar que la expresión sea válida
+        if (!expression || expression === 'undefined' || expression === 'null') {
+            console.log('⚠️ Expresión inválida, estableciendo valor 0');
+            if (outputField.tagName === 'DIV') {
+                outputField.innerHTML = '<span class="text-muted">0</span>';
+                const fieldCode = outputField.getAttribute('data-field-code');
+                const hiddenInput = outputField.parentNode.querySelector(`input[type="hidden"][data-field-code="${fieldCode}"]`);
+                if (hiddenInput) {
+                    hiddenInput.value = '0';
+                }
+            } else if (outputField.type === 'hidden') {
+                // Es un input hidden de output, actualizar el DIV visual correspondiente
+                const fieldCode = outputField.getAttribute('data-field-code');
+                const visualDiv = document.getElementById(`output-${fieldCode}`);
+                
+                if (visualDiv) {
+                    visualDiv.innerHTML = '<span class="text-muted">0</span>';
+                }
+                
+                // Actualizar el input hidden también
+                outputField.value = '0';
+            } else {
+                outputField.value = '0';
+            }
+            return;
+        }
+        
+        try {
+            
+            let normalizedExpression = expression.replace(/\{\{([^}]+)\}\}/g, '[$1]');
+            console.log(`🔄 Expresión normalizada: ${normalizedExpression}`);
+            
+            // Reemplazar códigos de campo con valores
+            let processedExpression = normalizedExpression;
+            
+            console.log(`🔍 Buscando campos en la expresión...`);
+            
+            // Usar replace con función callback en lugar de exec para evitar problemas de bucle infinito
+            processedExpression = processedExpression.replace(/\[([^\]]+)\]/g, (fullMatch, fieldCode) => {
+                console.log(`🎯 Procesando campo: ${fieldCode}`);
+                
+                // Buscar el valor del campo
+                let value = getFieldValue(fieldCode, outputField);
+                
+                // Convertir a número si es necesario
+                if (value === '' || value === null || value === undefined) {
+                    value = 0;
+                } else {
+                    value = parseFloat(value) || 0;
+                }
+                
+                console.log(`🔢 Reemplazando ${fullMatch} con ${value}`);
+                return value;
+            });
+            
+            console.log(`⚙️ Expresión procesada: ${processedExpression}`);
+            
+            // Evaluar la expresión
+            const result = evalExpression(processedExpression);
+            console.log(`🎯 Resultado crudo: ${result}`);
+            
+            // Formatear el resultado según el tipo
+            let formattedResult;
+            switch (outputType) {
+                case 'int':
+                    formattedResult = Math.round(result);
+                    break;
+                case 'decimal':
+                    formattedResult = parseFloat(result.toFixed(2));
+                    break;
+                default:
+                    formattedResult = result;
+            }
+            
+            console.log(`✨ Resultado formateado: ${formattedResult}`);
+            
+            // Establecer el valor en el campo de salida
+            if (outputField.tagName === 'DIV') {
+                // Es un div de output, actualizar el contenido visual y el input hidden
+                console.log(`📺 Actualizando DIV con resultado: ${formattedResult}`);
+                outputField.innerHTML = `<span class="fw-bold text-success">${formattedResult}</span>`;
+                
+                // Buscar el input hidden asociado
+                const fieldCode = outputField.getAttribute('data-field-code');
+                const hiddenInput = outputField.parentNode.querySelector(`input[type="hidden"][data-field-code="${fieldCode}"]`);
+                if (hiddenInput) {
+                    hiddenInput.value = formattedResult;
+                    console.log(`🔒 Input hidden actualizado con: ${formattedResult}`);
+                } else {
+                    console.log(`❌ No se encontró input hidden para ${fieldCode}`);
+                }
+            } else if (outputField.type === 'hidden') {
+                // Es un input hidden de output, buscar el DIV visual correspondiente
+                console.log(`🔒 Es input hidden, buscando DIV visual...`);
+                const fieldCode = outputField.getAttribute('data-field-code');
+                const visualDiv = document.getElementById(`output-${fieldCode}`);
+                
+                if (visualDiv) {
+                    console.log(`📺 Actualizando DIV visual con resultado: ${formattedResult}`);
+                    visualDiv.innerHTML = `<span class="fw-bold text-success">${formattedResult}</span>`;
+                } else {
+                    console.log(`❌ No se encontró DIV visual para ${fieldCode}`);
+                }
+                
+                // Actualizar el input hidden también
+                console.log(`📝 Actualizando INPUT hidden con resultado: ${formattedResult}`);
+                outputField.value = formattedResult;
+            } else {
+                // Es un input normal
+                console.log(`📝 Actualizando INPUT con resultado: ${formattedResult}`);
+                outputField.value = formattedResult;
+            }
+            
+            console.log(`✅ Cálculo completado exitosamente`);
+            
+        } catch (error) {
+            console.error('❌ Error calculando fórmula:', error);
+            if (outputField.tagName === 'DIV') {
+                outputField.innerHTML = '<span class="text-danger">Error en cálculo</span>';
+                
+                // Limpiar input hidden asociado
+                const fieldCode = outputField.getAttribute('data-field-code');
+                const hiddenInput = outputField.parentNode.querySelector(`input[type="hidden"][data-field-code="${fieldCode}"]`);
+                if (hiddenInput) {
+                    hiddenInput.value = '';
+                }
+            } else if (outputField.type === 'hidden') {
+                // Es un input hidden de output, limpiar el DIV visual correspondiente
+                const fieldCode = outputField.getAttribute('data-field-code');
+                const visualDiv = document.getElementById(`output-${fieldCode}`);
+                
+                if (visualDiv) {
+                    visualDiv.innerHTML = '<span class="text-danger">Error en cálculo</span>';
+                }
+                
+                // Limpiar el input hidden también
+                outputField.value = '';
+            } else {
+                outputField.value = '';
+            }
+        }
+    }
+
+    // Función para obtener el valor de un campo
+    function getFieldValue(fieldCode, contextField) {
+        console.log(`🔍 Buscando valor para campo: ${fieldCode}`);
+        
+        // Determinar el contexto (grupo y fila si aplica)
+        const fieldName = contextField.getAttribute('name');
+        
+        if (fieldName && fieldName.includes('groups[')) {
+            // Estamos en un grupo, buscar en la misma fila
+            const groupMatch = fieldName.match(/groups\[([^\]]+)\]\[(\d+)\]/);
+            if (groupMatch) {
+                const groupName = groupMatch[1];
+                const rowIndex = groupMatch[2];
+                
+                const selector = `[name="groups[${groupName}][${rowIndex}][${fieldCode}]"]`;
+                console.log(`🎯 Buscando en grupo con selector: ${selector}`);
+                
+                const input = document.querySelector(selector);
+                const value = input ? input.value : 0;
+                console.log(`📊 Valor encontrado para ${fieldCode} en grupo: ${value}`);
+                return value;
+            }
+        } else {
+            // Campo normal - probar múltiples selectores
+            const possibleSelectors = [
+                `[name="fields[${fieldCode}]"]`,
+                `[data-field-code="${fieldCode}"]`,
+                `input[name*="${fieldCode}"]`,
+                `select[name*="${fieldCode}"]`,
+                `textarea[name*="${fieldCode}"]`
+            ];
+            
+            for (let selector of possibleSelectors) {
+                console.log(`🔎 Probando selector: ${selector}`);
+                const input = document.querySelector(selector);
+                
+                if (input) {
+                    let value = input.value;
+                    
+                    // Manejar checkboxes
+                    if (input.type === 'checkbox') {
+                        value = input.checked ? 1 : 0;
+                    }
+                    
+                    console.log(`✅ Valor encontrado para ${fieldCode}: ${value} (usando ${selector})`);
+                    return parseFloat(value) || 0;
+                }
+            }
+        }
+        
+        console.log(`❌ No se encontró valor para campo: ${fieldCode}, retornando 0`);
+        return 0;
+    }
+
+    // Función segura para evaluar expresiones matemáticas
+    function evalExpression(expression) {
+        console.log(`🧮 Evaluando expresión: "${expression}"`);
+        
+        // Verificar si quedan campos sin reemplazar
+        if (expression.includes('[') && expression.includes(']')) {
+            throw new Error(`Expresión contiene campos sin reemplazar: ${expression}`);
+        }
+        
+        // Lista de operadores y funciones permitidas
+        const allowedChars = /^[0-9+\-*/.() ]+$/;
+        
+        if (!allowedChars.test(expression)) {
+            console.log(`❌ Caracteres no permitidos en: "${expression}"`);
+            throw new Error(`Expresión contiene caracteres no permitidos: ${expression}`);
+        }
+        
+        try {
+            const result = Function(`"use strict"; return (${expression})`)();
+            console.log(`✅ Resultado de evaluación: ${result}`);
+            return result;
+        } catch (error) {
+            console.log(`❌ Error en evaluación:`, error);
+            throw new Error('Error evaluando expresión: ' + error.message);
+        }
+    }
+
+    // ============================================
+    // FUNCIONES PARA AUTOFILL
+    // ============================================
+
+    // Función para inicializar autofill en selects
+    function wireOnSelectAutofill() {
+        const autofillSelects = document.querySelectorAll('[data-on-select]');
+        
+        autofillSelects.forEach(select => {
+            select.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                if (!selectedOption || !selectedOption.value) return;
+                
+                // Obtener metadatos del option seleccionado
+                const metaData = selectedOption.getAttribute('data-meta');
+                if (!metaData) return;
+                
+                try {
+                    const meta = JSON.parse(metaData);
+                    
+                    // Aplicar valores a campos relacionados
+                    Object.keys(meta).forEach(fieldCode => {
+                        const value = meta[fieldCode];
+                        
+                        // Determinar el contexto del campo actual
+                        const currentName = this.getAttribute('name');
+                        let targetInput;
+                        
+                        if (currentName && currentName.includes('groups[')) {
+                            // Estamos en un grupo, buscar en la misma fila
+                            const groupMatch = currentName.match(/groups\[([^\]]+)\]\[(\d+)\]/);
+                            if (groupMatch) {
+                                const groupName = groupMatch[1];
+                                const rowIndex = groupMatch[2];
+                                targetInput = document.querySelector(`[name="groups[${groupName}][${rowIndex}][${fieldCode}]"]`);
+                            }
+                        } else {
+                            // Campo normal
+                            targetInput = document.querySelector(`[name="fields[${fieldCode}]"]`);
+                        }
+                        
+                        if (targetInput) {
+                            targetInput.value = value;
+                            // Disparar evento para recalcular fórmulas
+                            targetInput.dispatchEvent(new Event('input'));
+                        }
+                    });
+                    
+                } catch (error) {
+                    console.error('Error procesando autofill:', error);
+                }
+            });
+        });
+    }
+
+    // Función para inicializar manejo de botones de fila
+    function wireRowButtons() {
+        // Esta función se llama automáticamente cuando se renderizan nuevas filas
+        // Los botones se manejan directamente con onclick en el HTML
+    }
+
+    // ============================================
+    // FUNCIONES PARA GUARDAR FORMULARIO
+    // ============================================
+
+    // Función para validar el formulario antes de completar
+    function validarFormulario() {
+        const form = document.getElementById('dynamic-form');
+        if (!form) return false;
+        
+        let isValid = true;
+        const errors = [];
+        
+        // Validar campos requeridos
+        const requiredFields = form.querySelectorAll('[required]');
+        
+        requiredFields.forEach(field => {
+            // Limpiar errores previos
+            field.classList.remove('is-invalid');
+            const errorDiv = field.parentNode.querySelector('.invalid-feedback');
+            if (errorDiv) errorDiv.remove();
+            
+            if (!field.value.trim()) {
+                isValid = false;
+                field.classList.add('is-invalid');
+                
+                // Agregar mensaje de error
+                const errorMsg = document.createElement('div');
+                errorMsg.className = 'invalid-feedback';
+                errorMsg.textContent = 'Este campo es requerido';
+                field.parentNode.appendChild(errorMsg);
+                
+                // Obtener etiqueta del campo para el resumen
+                const label = field.parentNode.querySelector('label');
+                const fieldName = label ? label.textContent : field.name;
+                errors.push(fieldName);
+            }
+        });
+        
+        // Mostrar resumen de errores si existen
+        if (!isValid) {
+            const errorList = errors.join(', ');
+            mostrarMensaje(`Por favor complete los siguientes campos requeridos: ${errorList}`, 'warning');
+            
+            // Scroll al primer campo con error
+            const firstErrorField = form.querySelector('.is-invalid');
+            if (firstErrorField) {
+                firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                firstErrorField.focus();
+            }
+        }
+        
+        return isValid;
+    }
+
+    // Función para guardar el formulario
+    function guardarFormulario(estado) {
+        const form = document.getElementById('dynamic-form');
+        if (!form || !window.formularioActual) {
+            mostrarMensaje('Error: No se puede guardar el formulario', 'error');
+            return;
+        }
+        
+        // Recopilar datos del formulario
+        const formData = new FormData();
+        
+        // Datos básicos
+        formData.append('estado', estado);
+        formData.append('etapa_form_id', window.formularioActual.etapaFormId);
+        formData.append('form_id', window.formularioActual.formId);
+        if (window.formularioActual.formRunId) {
+            formData.append('form_run_id', window.formularioActual.formRunId);
+        }
+        
+        // Recopilar valores de campos normales
+        const normalFields = form.querySelectorAll('[name^="fields["]');
+        normalFields.forEach(field => {
+            if (field.type === 'file') {
+                if (field.files && field.files.length > 0) {
+                    formData.append(field.name, field.files[0]);
+                }
+            } else if (field.type === 'checkbox') {
+                formData.append(field.name, field.checked ? '1' : '0');
+            } else {
+                formData.append(field.name, field.value);
+            }
+        });
+        
+        // Recopilar valores de grupos repetibles
+        const groupData = {};
+        const groupFields = form.querySelectorAll('[name^="groups["]');
+        
+        groupFields.forEach(field => {
+            const match = field.name.match(/groups\[([^\]]+)\]\[(\d+)\]\[([^\]]+)\]/);
+            if (match) {
+                const groupName = match[1];
+                const rowIndex = parseInt(match[2]);
+                const fieldCode = match[3];
+                
+                if (!groupData[groupName]) {
+                    groupData[groupName] = {};
+                }
+                if (!groupData[groupName][rowIndex]) {
+                    groupData[groupName][rowIndex] = {};
+                }
+                
+                if (field.type === 'file') {
+                    if (field.files && field.files.length > 0) {
+                        formData.append(`groups[${groupName}][${rowIndex}][${fieldCode}]`, field.files[0]);
+                    }
+                } else if (field.type === 'checkbox') {
+                    groupData[groupName][rowIndex][fieldCode] = field.checked ? '1' : '0';
+                } else {
+                    groupData[groupName][rowIndex][fieldCode] = field.value;
+                }
+            }
+        });
+        
+        // Agregar datos de grupos como JSON
+        if (Object.keys(groupData).length > 0) {
+            formData.append('groups_data', JSON.stringify(groupData));
+        }
+        
+        // Mostrar indicador de carga
+        const button = estado === 'borrador' ? 
+            document.getElementById('guardar-borrador-formulario') : 
+            document.getElementById('completar-formulario');
+            
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+        
+        // Enviar datos al servidor (siempre usar la misma ruta para crear y actualizar)
+        const url = `{{ route('ejecucion.formulario.guardar') }}`;
+            
+        fetch(url, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Actualizar ID si es nuevo
+                if (data.formRunId) {
+                    window.formularioActual.formRunId = data.formRunId;
+                }
+                
+                if (estado === 'completado') {
+                    mostrarMensaje('Formulario completado exitosamente', 'success');
+                    
+                    // Cerrar modal y actualizar vista
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('formulario-modal'));
+                    if (modal) modal.hide();
+                    
+                    // Recargar la vista de la etapa
+                    location.reload();
+                } else {
+                    mostrarMensaje('Borrador guardado exitosamente', 'success');
+                }
+            } else {
+                mostrarMensaje(data.message || 'Error al guardar el formulario', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarMensaje('Error de conexión al guardar el formulario', 'error');
+        })
+        .finally(() => {
+            button.disabled = false;
+            button.textContent = originalText;
+        });
+    }
+
+    // Función auxiliar para mostrar mensajes
+    function mostrarMensaje(mensaje, tipo) {
+        // Crear y mostrar toast o alert
+        const alertClass = tipo === 'error' ? 'alert-danger' : 
+                          tipo === 'warning' ? 'alert-warning' : 
+                          'alert-success';
+        
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert ${alertClass} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            ${mensaje}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        // Insertar al principio del contenido del modal
+        const modalBody = document.querySelector('#formulario-modal .modal-body');
+        if (modalBody) {
+            modalBody.insertBefore(alertDiv, modalBody.firstChild);
+            
+            // Auto-remove después de 5 segundos
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, 5000);
         }
     }
 });

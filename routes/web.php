@@ -67,8 +67,8 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
             Route::post('fields/{field}/formula',  [FormFieldFormulaController::class,'upsert'])->name('forms.fields.formula.upsert');
             Route::delete('fields/{field}/formula',[FormFieldFormulaController::class,'destroy'])->name('forms.fields.formula.destroy');
 
-            Route::resource('pdf-templates', PdfTemplateController::class)->except(['show','edit','create','index']);
-            Route::post('pdf-templates/{template}/elements', [PdfElementController::class,'upsert'])->name('forms.pdf.elements.upsert');
+            // Route::resource('pdf-templates', PdfTemplateController::class)->except(['show','edit','create','index']);
+            // Route::post('pdf-templates/{template}/elements', [PdfElementController::class,'upsert'])->name('forms.pdf.elements.upsert');
         });
 
     });
@@ -189,6 +189,12 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         
         // Ruta para re-ejecutar flujo (crear nueva ejecución completa)
         Route::post('ejecucion/{flujo}/re-ejecutar', [Ejecucion::class, 'reEjecutarFlujo'])->name('ejecucion.re-ejecutar');
+
+        // Rutas para formularios en ejecución
+        Route::get('ejecucion/formulario/nuevo/{etapaFormId}', [Ejecucion::class, 'nuevoFormulario'])->name('ejecucion.formulario.nuevo');
+        Route::get('ejecucion/formulario/editar/{formRunId}', [Ejecucion::class, 'editarFormulario'])->name('ejecucion.formulario.editar');
+        Route::get('ejecucion/formulario/ver/{formRunId}', [Ejecucion::class, 'verFormulario'])->name('ejecucion.formulario.ver');
+        Route::post('ejecucion/formulario/guardar', [Ejecucion::class, 'guardarFormulario'])->name('ejecucion.formulario.guardar');
 
     
         // Gestión de Usuarios (SUPERADMIN y ADMINISTRADOR)

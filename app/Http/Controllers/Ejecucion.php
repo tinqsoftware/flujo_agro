@@ -14,9 +14,9 @@ use App\Models\DetalleDocumento;
 use App\Models\DetalleFlujo;
 use App\Models\DetalleEtapa;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class Ejecucion extends Controller
 {
@@ -510,7 +510,7 @@ class Ejecucion extends Controller
                 return response()->json(['error' => 'El flujo no está disponible para ejecución'], 404);
             }
 
-            // Cargar etapas con sus tareas y documentos para mostrar en la configuración
+            // Cargar etapas con sus tareas, documentos y formularios para mostrar en la configuración
             $flujo->load([
                 'etapas' => function($query) {
                     $query->where('etapas.estado', 1)->orderBy('nro');
@@ -520,6 +520,9 @@ class Ejecucion extends Controller
                 },
                 'etapas.documentos' => function($query) {
                     $query->where('documentos.estado', 1)->orderBy('nombre');
+                },
+                'etapas.etapaForms.form' => function($query) {
+                    $query->where('forms.estado', 1)->orderBy('forms.nombre');
                 }
             ]);
 
@@ -527,7 +530,8 @@ class Ejecucion extends Controller
                 'flujo_id' => $flujo->id,
                 'etapas_count' => $flujo->etapas->count(),
                 'total_tareas' => $flujo->etapas->sum(function($etapa) { return $etapa->tareas->count(); }),
-                'total_documentos' => $flujo->etapas->sum(function($etapa) { return $etapa->documentos->count(); })
+                'total_documentos' => $flujo->etapas->sum(function($etapa) { return $etapa->documentos->count(); }),
+                'total_formularios' => $flujo->etapas->sum(function($etapa) { return $etapa->etapaForms->count(); })
             ]);
 
             // Retornar JSON para el modal
@@ -562,6 +566,16 @@ class Ejecucion extends Controller
                                     'id' => $documento->id,
                                     'nombre' => $documento->nombre,
                                     'descripcion' => $documento->descripcion
+                                ];
+                            }),
+                            // Formularios asociados a esta etapa
+                            'formularios' => $etapa->etapaForms->map(function($etapaForm) {
+                                return [
+                                    'id' => $etapaForm->form->id,
+                                    'nombre' => $etapaForm->form->nombre,
+                                    'descripcion' => $etapaForm->form->descripcion,
+                                    'etapa_form_id' => $etapaForm->id,
+                                    'requerido' => $etapaForm->requerido ?? true
                                 ];
                             })
                         ];
@@ -795,23 +809,26 @@ class Ejecucion extends Controller
         $request->validate([
             'nombre' => 'required|string|max:255',
             'tareas_seleccionadas' => 'array',
-            'documentos_seleccionados' => 'array'
+            'documentos_seleccionados' => 'array',
+            'formularios_seleccionados' => 'array'
         ]);
 
-        // Validar que al menos una tarea o documento esté seleccionado
+        // Validar que al menos una tarea, documento o formulario esté seleccionado
         $tareasSeleccionadas = $request->tareas_seleccionadas ?? [];
         $documentosSeleccionados = $request->documentos_seleccionados ?? [];
+        $formulariosSeleccionados = $request->formularios_seleccionados ?? [];
         
-        if (empty($tareasSeleccionadas) && empty($documentosSeleccionados)) {
+        if (empty($tareasSeleccionadas) && empty($documentosSeleccionados) && empty($formulariosSeleccionados)) {
             return response()->json([
-                'error' => 'Debes seleccionar al menos una tarea o un documento para crear la ejecución'
+                'error' => 'Debes seleccionar al menos una tarea, un documento o un formulario para crear la ejecución'
             ], 422);
         }
 
         Log::info('Validación de selección completada', [
             'tareas_seleccionadas_count' => count($tareasSeleccionadas),
             'documentos_seleccionados_count' => count($documentosSeleccionados),
-            'total_elementos_seleccionados' => count($tareasSeleccionadas) + count($documentosSeleccionados)
+            'formularios_seleccionados_count' => count($formulariosSeleccionados),
+            'total_elementos_seleccionados' => count($tareasSeleccionadas) + count($documentosSeleccionados) + count($formulariosSeleccionados)
         ]);
 
         try {
@@ -907,6 +924,48 @@ class Ejecucion extends Controller
                                 ]);
                             }
                         }
+                    }
+                }
+            }
+
+            // Crear registros de form_runs para formularios seleccionados
+            if (!empty($formulariosSeleccionados)) {
+                foreach ($formulariosSeleccionados as $etapaFormId) {
+                    try {
+                        // Buscar la relación EtapaForm
+                        $etapaForm = \App\Models\EtapaForm::with('form')->find($etapaFormId);
+                        
+                        if ($etapaForm && $etapaForm->form) {
+                            // Generar correlativo si el formulario lo requiere
+                            $correlativo = null;
+                            if ($etapaForm->form->usa_correlativo) {
+                                $correlativo = $this->generarCorrelativo($etapaForm->form, $user->id_emp);
+                            }
+                            
+                            // Crear FormRun
+                            $formRun = \App\Models\FormRun::create([
+                                'id_form' => $etapaForm->form->id,
+                                'id_emp' => $user->id_emp,
+                                'id_etapas_forms' => $etapaFormId,
+                                'correlativo' => $correlativo,
+                                'estado' => 'draft',
+                                'created_by' => $user->id,
+                                'updated_by' => $user->id
+                            ]);
+                            
+                            Log::info('FormRun creado en ejecución', [
+                                'form_run_id' => $formRun->id,
+                                'form_id' => $etapaForm->form->id,
+                                'etapa_form_id' => $etapaFormId,
+                                'correlativo' => $correlativo,
+                                'detalle_flujo_id' => $detalleFlujoActivo->id
+                            ]);
+                        }
+                    } catch (\Exception $e) {
+                        Log::error('Error al crear FormRun', [
+                            'etapa_form_id' => $etapaFormId,
+                            'error' => $e->getMessage()
+                        ]);
                     }
                 }
             }
@@ -2011,7 +2070,8 @@ class Ejecucion extends Controller
         // Cargar el flujo con todas las relaciones necesarias
         $flujo = $detalleFlujo->flujo()->with([
             'etapas.tareas', 
-            'etapas.documentos'
+            'etapas.documentos',
+            'etapas.etapaForms.form'
         ])->first();
 
         if (!$flujo) {
@@ -2143,9 +2203,46 @@ class Ejecucion extends Controller
                 // No agregar documentos al total porque no están incluidos en el flujo
             }
 
+            // Obtener información de formularios
+            $formularios_completados = 0;
+            $formularios_data = [];
+            $total_formularios = $etapa->etapaForms()->count();
+            
+            if ($total_formularios > 0) {
+                foreach ($etapa->etapaForms as $etapaForm) {
+                    $formRun = \App\Models\FormRun::where('id_etapas_forms', $etapaForm->id)
+                        ->where('id_emp', $detalleFlujo->id_emp)
+                        ->first();
+                    
+                    $formulario_completado = false;
+                    $correlativo = null;
+                    $fecha_completada = null;
+                    
+                    if ($formRun && $formRun->estado === 'completado') {
+                        $formularios_completados++;
+                        $items_completados++;
+                        $formulario_completado = true;
+                        $correlativo = $formRun->correlativo;
+                        $fecha_completada = $formRun->updated_at ? $formRun->updated_at->format('d/m/Y') : null;
+                    }
+                    
+                    $total_items++;
+                    
+                    $formularios_data[] = [
+                        'id' => $etapaForm->id,
+                        'form_id' => $etapaForm->form->id,
+                        'nombre' => $etapaForm->form->nombre,
+                        'completado' => $formulario_completado,
+                        'estado' => $formRun ? $formRun->estado : 'pendiente',
+                        'correlativo' => $correlativo,
+                        'fecha_completada' => $fecha_completada
+                    ];
+                }
+            }
+
             $progreso_etapa = 0;
-            if (($total_tareas + $total_documentos) > 0) {
-                $progreso_etapa = round((($tareas_completadas + $documentos_subidos) / ($total_tareas + $total_documentos)) * 100);
+            if (($total_tareas + $total_documentos + $total_formularios) > 0) {
+                $progreso_etapa = round((($tareas_completadas + $documentos_subidos + $formularios_completados) / ($total_tareas + $total_documentos + $total_formularios)) * 100);
             }
 
             $etapas_data[] = [
@@ -2156,9 +2253,12 @@ class Ejecucion extends Controller
                 'total_tareas' => $total_tareas,
                 'documentos_subidos' => $documentos_subidos,
                 'total_documentos' => $total_documentos,
+                'formularios_completados' => $formularios_completados,
+                'total_formularios' => $total_formularios,
                 'estado' => $detalleEtapa ? $detalleEtapa->estado : 1, // Estado de BD: 1=Pendiente, 2=En progreso, 3=Completada
                 'tareas' => $tareas_data,
-                'documentos' => $documentos_data
+                'documentos' => $documentos_data,
+                'formularios' => $formularios_data
             ];
         }
 
@@ -2765,5 +2865,443 @@ class Ejecucion extends Controller
         }
 
         return 0;
+    }
+
+    /**
+     * Generar correlativo para un formulario
+     */
+    private function generarCorrelativo($form, $empresaId)
+    {
+        if (!$form->usa_correlativo) {
+            return null;
+        }
+        
+        // Buscar o crear la secuencia para este formulario y empresa
+        $sequence = \App\Models\FormSequence::firstOrCreate(
+            ['id_form' => $form->id, 'id_emp' => $empresaId],
+            ['last_number' => 0]
+        );
+        
+        // Incrementar el último número
+        $sequence->increment('last_number');
+        
+        // Generar el correlativo según el formato del formulario
+        return ($form->prefijo ?? '') . 
+               str_pad($sequence->last_number, $form->padding ?? 6, '0', STR_PAD_LEFT) . 
+               ($form->sufijo ?? '');
+    }
+
+    /**
+     * Cargar formulario nuevo para rellenar
+     */
+    public function nuevoFormulario($etapaFormId)
+    {
+        try {
+            $etapaForm = \App\Models\EtapaForm::with(['form.groups', 'form.fields.source', 'form.fields.formula', 'etapa'])
+                ->findOrFail($etapaFormId);
+            
+            // Verificar que el usuario tenga acceso
+            if (!$etapaForm || $etapaForm->etapa->flujo->id_emp != Auth::user()->id_emp) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes acceso a este formulario'
+                ], 403);
+            }
+
+            // Crear o buscar FormRun existente
+            $formRun = \App\Models\FormRun::firstOrCreate([
+                'id_etapas_forms' => $etapaFormId,
+                'id_emp' => Auth::user()->id_emp,
+                'id_form' => $etapaForm->form->id
+            ], [
+                'correlativo' => $this->generarCorrelativo($etapaForm->form, Auth::user()->id_emp),
+                'estado' => 'en_progreso',
+                'created_by' => Auth::id(),
+                'updated_by' => Auth::id()
+            ]);
+
+            // Preparar campos con opciones y fórmulas
+            $fieldsWithOptions = $etapaForm->form->fields->map(function($field) {
+                $fieldData = $field->toArray();
+                
+                // Agregar opciones si el campo tiene source
+                if ($field->source && in_array($field->datatype, ['select', 'multiselect'])) {
+                    $fieldData['opciones'] = $this->resolverOpcionesField($field);
+                }
+                
+                // Agregar fórmula si el campo es de tipo output
+                if ($field->kind === 'output' && $field->formula) {
+                    $fieldData['formula'] = [
+                        'expression' => $field->formula->expression,
+                        'output_type' => $field->formula->output_type ?? 'decimal'
+                    ];
+                }
+                
+                return $fieldData;
+            });
+
+            return response()->json([
+                'success' => true,
+                'formulario' => [
+                    'id' => $etapaForm->form->id,
+                    'nombre' => $etapaForm->form->nombre,
+                    'descripcion' => $etapaForm->form->descripcion,
+                    'groups' => $etapaForm->form->groups,
+                    'fields' => $fieldsWithOptions
+                ],
+                'formRunId' => $formRun->id,
+                'respuestas' => $this->obtenerRespuestasFormRun($formRun->id)
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error al cargar formulario nuevo: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al cargar el formulario: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Cargar formulario existente para editar
+     */
+    public function editarFormulario($formRunId)
+    {
+        try {
+            $formRun = \App\Models\FormRun::with(['form.groups', 'form.fields.source', 'form.fields.formula', 'etapaForm.etapa'])
+                ->findOrFail($formRunId);
+            
+            // Verificar que el usuario tenga acceso
+            if (!$formRun || $formRun->id_emp != Auth::user()->id_emp) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes acceso a este formulario'
+                ], 403);
+            }
+
+            // Si está completado, no permitir edición
+            if ($formRun->estado === 'completado') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Este formulario ya está completado y no se puede editar'
+                ], 400);
+            }
+
+            // Preparar campos con opciones y fórmulas
+            $fieldsWithOptions = $formRun->form->fields->map(function($field) {
+                $fieldData = $field->toArray();
+                
+                // Agregar opciones si el campo tiene source
+                if ($field->source && in_array($field->datatype, ['select', 'multiselect'])) {
+                    $fieldData['opciones'] = $this->resolverOpcionesField($field);
+                }
+                
+                // Agregar fórmula si el campo es de tipo output
+                if ($field->kind === 'output' && $field->formula) {
+                    $fieldData['formula'] = [
+                        'expression' => $field->formula->expression,
+                        'output_type' => $field->formula->output_type ?? 'decimal'
+                    ];
+                }
+                
+                return $fieldData;
+            });
+
+            return response()->json([
+                'success' => true,
+                'formulario' => [
+                    'id' => $formRun->form->id,
+                    'nombre' => $formRun->form->nombre,
+                    'descripcion' => $formRun->form->descripcion,
+                    'groups' => $formRun->form->groups,
+                    'fields' => $fieldsWithOptions
+                ],
+                'formRunId' => $formRun->id,
+                'respuestas' => $this->obtenerRespuestasFormRun($formRun->id)
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error al cargar formulario para editar: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al cargar el formulario: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Ver formulario completado
+     */
+    public function verFormulario($formRunId)
+    {
+        try {
+            $formRun = \App\Models\FormRun::with(['form.groups', 'form.fields.source', 'form.fields.formula', 'etapaForm.etapa'])
+                ->findOrFail($formRunId);
+            
+            // Verificar que el usuario tenga acceso
+            if (!$formRun || $formRun->id_emp != Auth::user()->id_emp) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes acceso a este formulario'
+                ], 403);
+            }
+
+            // Preparar campos con opciones y fórmulas
+            $fieldsWithOptions = $formRun->form->fields->map(function($field) {
+                $fieldData = $field->toArray();
+                
+                // Agregar opciones si el campo tiene source
+                if ($field->source && in_array($field->datatype, ['select', 'multiselect'])) {
+                    $fieldData['opciones'] = $this->resolverOpcionesField($field);
+                }
+                
+                // Agregar fórmula si el campo es de tipo output
+                if ($field->kind === 'output' && $field->formula) {
+                    $fieldData['formula'] = [
+                        'expression' => $field->formula->expression,
+                        'output_type' => $field->formula->output_type ?? 'decimal'
+                    ];
+                }
+                
+                return $fieldData;
+            });
+
+            return response()->json([
+                'success' => true,
+                'formulario' => [
+                    'id' => $formRun->form->id,
+                    'nombre' => $formRun->form->nombre,
+                    'descripcion' => $formRun->form->descripcion,
+                    'groups' => $formRun->form->groups,
+                    'fields' => $fieldsWithOptions
+                ],
+                'formRunId' => $formRun->id,
+                'estado' => $formRun->estado,
+                'correlativo' => $formRun->correlativo,
+                'respuestas' => $this->obtenerRespuestasFormRun($formRun->id)
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error al ver formulario: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al cargar el formulario: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Guardar respuestas del formulario
+     */
+    public function guardarFormulario(Request $request)
+    {
+        try {
+            $data = $request->validate([
+                'estado' => 'required|in:borrador,en_progreso,completado',
+                'etapa_form_id' => 'required|exists:etapas_forms,id',
+                'form_run_id' => 'required|exists:form_runs,id',
+                'respuestas' => 'required|array'
+            ]);
+
+            $formRun = \App\Models\FormRun::findOrFail($data['form_run_id']);
+            
+            // Verificar que el usuario tenga acceso
+            if ($formRun->id_emp != Auth::user()->id_emp) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes acceso a este formulario'
+                ], 403);
+            }
+
+            // Actualizar estado del FormRun
+            $formRun->update([
+                'estado' => $data['estado'],
+                'updated_by' => Auth::id()
+            ]);
+
+            // Guardar las respuestas
+            foreach ($data['respuestas'] as $fieldId => $valor) {
+                \App\Models\FormAnswer::updateOrCreate([
+                    'id_run' => $formRun->id,
+                    'id_field' => $fieldId
+                ], [
+                    'valor' => $valor
+                ]);
+            }
+
+            // Si se completó el formulario, actualizar el progreso de la etapa
+            if ($data['estado'] === 'completado') {
+                $this->actualizarProgresoEtapaPorFormulario($formRun);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $data['estado'] === 'completado' ? 'Formulario completado exitosamente' : 'Borrador guardado exitosamente',
+                'form_run_id' => $formRun->id,
+                'estado' => $formRun->estado
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error al guardar formulario: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al guardar el formulario: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtener respuestas de un FormRun
+     */
+    private function obtenerRespuestasFormRun($formRunId)
+    {
+        $respuestas = \App\Models\FormAnswer::where('id_run', $formRunId)->get();
+        $resultado = [];
+        
+        foreach ($respuestas as $respuesta) {
+            $resultado[$respuesta->id_field] = $respuesta->valor;
+        }
+        
+        return $resultado;
+    }
+
+    /**
+     * Actualizar progreso de etapa cuando se completa un formulario
+     */
+    private function actualizarProgresoEtapaPorFormulario($formRun)
+    {
+        try {
+            $etapaForm = $formRun->etapaForm;
+            if (!$etapaForm) return;
+
+            $etapa = $etapaForm->etapa;
+            if (!$etapa) return;
+
+            // Buscar el detalle de la etapa actual
+            $detalleEtapa = \App\Models\DetalleEtapa::where('id_etapa', $etapa->id)
+                ->whereHas('detalleFlujo', function($query) use ($formRun) {
+                    $query->where('id_emp', $formRun->id_emp);
+                })
+                ->whereIn('estado', [1, 2]) // pendiente o en progreso
+                ->first();
+
+            if ($detalleEtapa) {
+                // Verificar si todos los elementos de la etapa están completados
+                $this->verificarYActualizarCompletitudEtapa($detalleEtapa);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error al actualizar progreso de etapa por formulario: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Verificar si una etapa está completada incluyendo formularios
+     */
+    private function verificarYActualizarCompletitudEtapa($detalleEtapa)
+    {
+        $etapa = $detalleEtapa->etapa;
+        
+        // Verificar tareas completadas
+        $totalTareas = $etapa->tareas()->count();
+        $tareasCompletadas = \App\Models\DetalleTarea::where('id_detalle_etapa', $detalleEtapa->id)
+            ->where('completada', true)->count();
+
+        // Verificar documentos validados
+        $totalDocumentos = $etapa->documentos()->count();
+        $documentosValidados = \App\Models\DetalleDocumento::where('id_detalle_etapa', $detalleEtapa->id)
+            ->where('validado', true)->count();
+
+        // Verificar formularios completados
+        $totalFormularios = $etapa->etapaForms()->count();
+        $formulariosCompletados = \App\Models\FormRun::whereIn('id_etapas_forms', 
+            $etapa->etapaForms()->pluck('id')
+        )->where('id_emp', $detalleEtapa->detalleFlujo->id_emp)
+        ->where('estado', 'completado')->count();
+
+        // Una etapa está completada si TODOS sus elementos están completados
+        $etapaCompleta = ($totalTareas == $tareasCompletadas) && 
+                        ($totalDocumentos == $documentosValidados) &&
+                        ($totalFormularios == $formulariosCompletados);
+
+        if ($etapaCompleta && $detalleEtapa->estado != 3) {
+            $detalleEtapa->update([
+                'estado' => 3, // completada
+                'fecha_fin' => now()
+            ]);
+
+            Log::info("Etapa {$etapa->nombre} completada automáticamente por formulario");
+        }
+    }
+
+    /**
+     * Resolver opciones para un campo según su fuente
+     */
+    private function resolverOpcionesField($field)
+    {
+        if (!$field->source) {
+            return [];
+        }
+
+        $source = $field->source;
+        $opciones = [];
+
+        switch ($source->source_kind) {
+            case 'static_options':
+                if ($source->options_json && is_array($source->options_json)) {
+                    $opciones = collect($source->options_json)->map(function($opcion) {
+                        return [
+                            'valor' => $opcion['value'] ?? $opcion['valor'] ?? '',
+                            'etiqueta' => $opcion['label'] ?? $opcion['etiqueta'] ?? $opcion['value'] ?? $opcion['valor'] ?? ''
+                        ];
+                    })->toArray();
+                }
+                break;
+
+            case 'query':
+                if ($source->query_sql) {
+                    try {
+                        $results = DB::select($source->query_sql);
+                        $opciones = collect($results)->map(function($row) {
+                            $row = (array) $row;
+                            return [
+                                'valor' => $row['value'] ?? $row['id'] ?? array_values($row)[0] ?? '',
+                                'etiqueta' => $row['label'] ?? $row['nombre'] ?? $row['text'] ?? array_values($row)[1] ?? array_values($row)[0] ?? ''
+                            ];
+                        })->toArray();
+                    } catch (\Exception $e) {
+                        Log::error("Error ejecutando query para campo {$field->id}: " . $e->getMessage());
+                    }
+                }
+                break;
+
+            case 'table_column':
+                if ($source->table_name && $source->column_name) {
+                    try {
+                        $results = DB::table($source->table_name)
+                            ->select($source->column_name . ' as value')
+                            ->distinct()
+                            ->whereNotNull($source->column_name)
+                            ->orderBy($source->column_name)
+                            ->get();
+                        
+                        $opciones = $results->map(function($row) {
+                            return [
+                                'valor' => $row->value,
+                                'etiqueta' => $row->value
+                            ];
+                        })->toArray();
+                    } catch (\Exception $e) {
+                        Log::error("Error obteniendo opciones de tabla para campo {$field->id}: " . $e->getMessage());
+                    }
+                }
+                break;
+
+            case 'ficha_attr':
+                // Para atributos de fichas, implementar según sea necesario
+                break;
+        }
+
+        return $opciones;
     }
 }
