@@ -13,9 +13,14 @@ use App\Models\DetalleTarea;
 use App\Models\DetalleDocumento;
 use App\Models\DetalleFlujo;
 use App\Models\DetalleEtapa;
+use App\Models\FormRun;
+use App\Models\FormAnswer;
+use App\Models\FormField;
+use App\Models\FormGroup;
+use App\Models\EtapaForm;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class Ejecucion extends Controller
@@ -1104,6 +1109,9 @@ class Ejecucion extends Controller
             },
             'etapas.documentos' => function($query) {
                 $query->where('documentos.estado', 1);
+            },
+            'etapas.etapaForms.form' => function($query) {
+                $query->where('forms.estado', 1);
             }
         ])->first();
 
@@ -1200,10 +1208,50 @@ class Ejecucion extends Controller
                     $totalDocumentos++;
                 }
             }
+            
+            // Procesar formularios (etapaForms) para esta ejecución específica
+            $formulariosCompletados = 0;
+            $totalFormularios = 0;
+            
+            foreach ($etapa->etapaForms as $etapaForm) {
+                // Buscar FormRun específico para esta ejecución de flujo
+                $formRun = null;
+                
+                // Aplicar misma lógica que nuevoFormulario para buscar FormRun específico
+                if ($detalleFlujo && $detalleFlujo->id) {
+                    $formRun = \App\Models\FormRun::where('id_etapas_forms', $etapaForm->id)
+                        ->where('id_emp', $detalleFlujo->id_emp)
+                        ->where('id_form', $etapaForm->form->id)
+                        ->where(function($query) use ($detalleFlujo) {
+                            $query->where('correlativo', 'LIKE', "DF{$detalleFlujo->id}-%")
+                                  ->orWhere('created_by', $detalleFlujo->id);
+                        })
+                        ->first();
+                        
+                    Log::info('Procesando formulario en vista ejecutarDetalle:', [
+                        'detalle_flujo_id' => $detalleFlujo->id,
+                        'etapa_form_id' => $etapaForm->id,
+                        'form_id' => $etapaForm->form->id,
+                        'encontrado' => $formRun ? $formRun->id : 'NO'
+                    ]);
+                }
+                
+                // Configurar propiedades del etapaForm para la vista
+                if ($formRun && $formRun->estado === 'completado') {
+                    $etapaForm->formularioCompletado = true;
+                    $etapaForm->formRun = $formRun;
+                    $formulariosCompletados++;
+                } else {
+                    $etapaForm->formularioCompletado = false;
+                    $etapaForm->formRun = $formRun; // Puede ser null
+                }
+                
+                $totalFormularios++;
+            }
 
-            // Calcular progreso de la etapa
-            $totalItems = $totalTareas + $totalDocumentos;
-            $itemsCompletados = $tareasCompletadas + $documentosCompletados;
+            // Calcular progreso de la etapa incluyendo formularios
+            $totalItems = $totalTareas + $totalDocumentos + $totalFormularios;
+            $itemsCompletados = $tareasCompletadas + $documentosCompletados + $formulariosCompletados;
             
             if ($totalItems > 0) {
                 $etapa->progreso_porcentaje = round(($itemsCompletados / $totalItems) * 100);
@@ -1217,6 +1265,8 @@ class Ejecucion extends Controller
                 'total_tareas' => $totalTareas,
                 'documentos_completados' => $documentosCompletados,
                 'total_documentos' => $totalDocumentos,
+                'formularios_completados' => $formulariosCompletados,
+                'total_formularios' => $totalFormularios,
                 'progreso_porcentaje' => $etapa->progreso_porcentaje
             ]);
         }
@@ -2210,9 +2260,23 @@ class Ejecucion extends Controller
             
             if ($total_formularios > 0) {
                 foreach ($etapa->etapaForms as $etapaForm) {
-                    $formRun = \App\Models\FormRun::where('id_etapas_forms', $etapaForm->id)
-                        ->where('id_emp', $detalleFlujo->id_emp)
-                        ->first();
+                    // Buscar FormRun específico para esta ejecución de flujo
+                    $formRun = null;
+                    
+                    // Aplicar misma lógica que nuevoFormulario para buscar FormRun específico
+                    if ($detalleFlujo && $detalleFlujo->id) {
+                        $formRun = \App\Models\FormRun::where('id_etapas_forms', $etapaForm->id)
+                            ->where('id_emp', $detalleFlujo->id_emp)
+                            ->where('id_form', $etapaForm->form->id)
+                            ->where('correlativo', 'LIKE', "DF{$detalleFlujo->id}-%")
+                            ->first();
+                            
+                        Log::info('Buscando FormRun para vista - Ejecución específica:', [
+                            'detalle_flujo_id' => $detalleFlujo->id,
+                            'etapa_form_id' => $etapaForm->id,
+                            'encontrado' => $formRun ? $formRun->id : 'NO'
+                        ]);
+                    }
                     
                     $formulario_completado = false;
                     $correlativo = null;
@@ -2894,9 +2958,16 @@ class Ejecucion extends Controller
     /**
      * Cargar formulario nuevo para rellenar
      */
-    public function nuevoFormulario($etapaFormId)
+    public function nuevoFormulario(Request $request, $etapaFormId)
     {
         try {
+            $detalleFlujoId = $request->input('detalle_flujo_id');
+            Log::info("=== NUEVO FORMULARIO ===", [
+                'etapa_form_id' => $etapaFormId,
+                'detalle_flujo_id' => $detalleFlujoId,
+                'user_id' => Auth::id()
+            ]);
+            
             $etapaForm = \App\Models\EtapaForm::with(['form.groups', 'form.fields.source', 'form.fields.formula', 'etapa'])
                 ->findOrFail($etapaFormId);
             
@@ -2908,17 +2979,75 @@ class Ejecucion extends Controller
                 ], 403);
             }
 
-            // Crear o buscar FormRun existente
-            $formRun = \App\Models\FormRun::firstOrCreate([
+            // Crear o buscar FormRun existente específico para esta ejecución de flujo
+            $searchCriteria = [
                 'id_etapas_forms' => $etapaFormId,
                 'id_emp' => Auth::user()->id_emp,
                 'id_form' => $etapaForm->form->id
-            ], [
-                'correlativo' => $this->generarCorrelativo($etapaForm->form, Auth::user()->id_emp),
-                'estado' => 'en_progreso',
-                'created_by' => Auth::id(),
-                'updated_by' => Auth::id()
-            ]);
+            ];
+            
+            $formRun = null;
+            
+            // ESTRATEGIA CORREGIDA: Siempre usar correlativo con prefijo DF{detalle_flujo_id}
+            // para identificar formularios específicos de cada ejecución
+            if ($detalleFlujoId) {
+                // Buscar FormRuns específicos de esta ejecución usando correlativo
+                $formRun = \App\Models\FormRun::where($searchCriteria)
+                    ->where('correlativo', 'LIKE', "DF{$detalleFlujoId}-%")
+                    ->first();
+                    
+                Log::info('Buscando FormRun para ejecución específica:', [
+                    'detalle_flujo_id' => $detalleFlujoId,
+                    'busqueda_correlativo' => "DF{$detalleFlujoId}-%",
+                    'encontrado' => $formRun ? $formRun->id : 'NO'
+                ]);
+            }
+            
+            // Si no se encontró con detalle_flujo_id, NO buscar FormRuns genéricos
+            // Cada ejecución de flujo debe tener sus propios FormRuns únicos
+            if (!$formRun) {
+                Log::info('No se encontró FormRun específico para esta ejecución - se creará uno nuevo:', [
+                    'detalle_flujo_id' => $detalleFlujoId,
+                    'etapa_form_id' => $etapaFormId
+                ]);
+            }
+            
+            // Si no existe, crear uno nuevo
+            if (!$formRun) {
+                $correlativoBase = $this->generarCorrelativo($etapaForm->form, Auth::user()->id_emp);
+                $correlativoFinal = null;
+                
+                // SIEMPRE agregar prefijo DF{detalleFlujoId} si tenemos detalle_flujo_id
+                // para garantizar que cada ejecución tenga FormRuns únicos
+                if ($detalleFlujoId) {
+                    if ($correlativoBase) {
+                        $correlativoFinal = "DF{$detalleFlujoId}-{$correlativoBase}";
+                    } else {
+                        // Si el formulario no usa correlativo, generar uno para esta ejecución
+                        $correlativoFinal = "DF{$detalleFlujoId}-1";
+                    }
+                } else {
+                    $correlativoFinal = $correlativoBase;
+                }
+                
+                $formRun = \App\Models\FormRun::create([
+                    'id_form' => $etapaForm->form->id,
+                    'id_etapas_forms' => $etapaFormId,
+                    'id_emp' => Auth::user()->id_emp,
+                    'correlativo' => $correlativoFinal,
+                    'estado' => 'draft',
+                    'created_by' => Auth::id(), // SIEMPRE usuario actual
+                    'updated_by' => Auth::id()
+                ]);
+                
+                Log::info('Nuevo FormRun creado:', [
+                    'id' => $formRun->id,
+                    'correlativo' => $correlativoFinal,
+                    'created_by' => Auth::id(),
+                    'detalle_flujo_id' => $detalleFlujoId,
+                    'usa_correlativo' => $etapaForm->form->usa_correlativo ? 'SI' : 'NO'
+                ]);
+            }
 
             // Preparar campos con opciones y fórmulas
             $fieldsWithOptions = $etapaForm->form->fields->map(function($field) {
@@ -2979,8 +3108,8 @@ class Ejecucion extends Controller
                 ], 403);
             }
 
-            // Si está completado, no permitir edición
-            if ($formRun->estado === 'completado') {
+            // Si está completado, no permitir edición - usar estados correctos de la BD
+            if (in_array($formRun->estado, ['submitted', 'approved'])) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Este formulario ya está completado y no se puede editar'
@@ -3035,8 +3164,18 @@ class Ejecucion extends Controller
     public function verFormulario($formRunId)
     {
         try {
+            Log::info("=== VER FORMULARIO ===", ['formRunId' => $formRunId]);
+            
             $formRun = \App\Models\FormRun::with(['form.groups', 'form.fields.source', 'form.fields.formula', 'etapaForm.etapa'])
                 ->findOrFail($formRunId);
+            
+            Log::info("FormRun encontrado", [
+                'id' => $formRun->id,
+                'correlativo' => $formRun->correlativo,
+                'estado' => $formRun->estado,
+                'form_id' => $formRun->form->id,
+                'form_nombre' => $formRun->form->nombre
+            ]);
             
             // Verificar que el usuario tenga acceso
             if (!$formRun || $formRun->id_emp != Auth::user()->id_emp) {
@@ -3066,6 +3205,9 @@ class Ejecucion extends Controller
                 return $fieldData;
             });
 
+            $respuestas = $this->obtenerRespuestasFormRun($formRun->id);
+            Log::info("Respuestas obtenidas del FormRun", ['respuestas' => $respuestas]);
+
             return response()->json([
                 'success' => true,
                 'formulario' => [
@@ -3078,7 +3220,7 @@ class Ejecucion extends Controller
                 'formRunId' => $formRun->id,
                 'estado' => $formRun->estado,
                 'correlativo' => $formRun->correlativo,
-                'respuestas' => $this->obtenerRespuestasFormRun($formRun->id)
+                'respuestas' => $respuestas
             ]);
 
         } catch (\Exception $e) {
@@ -3096,17 +3238,126 @@ class Ejecucion extends Controller
     public function guardarFormulario(Request $request)
     {
         try {
-            $data = $request->validate([
-                'estado' => 'required|in:borrador,en_progreso,completado',
-                'etapa_form_id' => 'required|exists:etapas_forms,id',
-                'form_run_id' => 'required|exists:form_runs,id',
-                'respuestas' => 'required|array'
+            Log::info('=== INICIO GUARDAR FORMULARIO ===');
+            Log::info('Request Content:', $request->all());
+            
+            // Validación básica de datos - aceptar los estados que vienen del frontend
+            $request->validate([
+                'estado' => 'required|in:draft,submitted,approved,void,borrador,completado,en_progreso,pendiente',
+                'etapa_form_id' => 'required|integer|exists:etapas_forms,id'
             ]);
 
-            $formRun = \App\Models\FormRun::findOrFail($data['form_run_id']);
+            $etapaFormId = $request->input('etapa_form_id');
+            $estado = $request->input('estado');
+            $formRunId = $request->input('form_run_id');
+            
+            // Normalizar estado para asegurar compatibilidad
+            $estadoNormalizado = $this->normalizarEstadoFormulario($estado);
+            
+            Log::info('Datos básicos:', [
+                'etapa_form_id' => $etapaFormId,
+                'estado_original' => $estado,
+                'estado_normalizado' => $estadoNormalizado,
+                'form_run_id' => $formRunId
+            ]);
+
+            // Buscar o crear el FormRun
+            if ($formRunId) {
+                $formRun = FormRun::find($formRunId);
+                if (!$formRun) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'FormRun no encontrado'
+                    ], 404);
+                }
+                Log::info('FormRun existente encontrado:', ['id' => $formRun->id]);
+            } else {
+                // Crear nuevo FormRun
+                $etapaForm = EtapaForm::find($etapaFormId);
+                if (!$etapaForm) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'EtapaForm no encontrado'
+                    ], 404);
+                }
+                
+                $detalleFlujoId = $request->input('detalle_flujo_id');
+                
+                // Buscar FormRun existente usando la misma lógica que nuevoFormulario
+                $searchCriteria = [
+                    'id_etapas_forms' => $etapaFormId,
+                    'id_emp' => Auth::user()->id_emp,
+                    'id_form' => $etapaForm->id_forms
+                ];
+                
+                $formRun = null;
+                
+                // Usar misma estrategia: buscar sólo por correlativo específico de ejecución
+                if ($detalleFlujoId) {
+                    $formRun = FormRun::where($searchCriteria)
+                        ->where('correlativo', 'LIKE', "DF{$detalleFlujoId}-%")
+                        ->first();
+                        
+                    Log::info('Guardando - Buscando FormRun para ejecución específica:', [
+                        'detalle_flujo_id' => $detalleFlujoId,
+                        'busqueda_correlativo' => "DF{$detalleFlujoId}-%",
+                        'encontrado' => $formRun ? $formRun->id : 'NO'
+                    ]);
+                }
+                
+                // Si no se encontró con detalle_flujo_id, NO buscar FormRuns genéricos
+                // Cada ejecución de flujo debe tener sus propios FormRuns únicos
+                if (!$formRun) {
+                    Log::info('Guardando - No se encontró FormRun específico para esta ejecución - se creará uno nuevo:', [
+                        'detalle_flujo_id' => $detalleFlujoId,
+                        'etapa_form_id' => $etapaFormId
+                    ]);
+                    
+                    // Crear nuevo FormRun con la misma estrategia que nuevoFormulario
+                    $correlativoBase = $this->generarCorrelativo($etapaForm->form, Auth::user()->id_emp);
+                    $correlativoFinal = null;
+                    
+                    // SIEMPRE agregar prefijo DF{detalleFlujoId} si tenemos detalle_flujo_id
+                    // para garantizar que cada ejecución tenga FormRuns únicos
+                    if ($detalleFlujoId) {
+                        if ($correlativoBase) {
+                            $correlativoFinal = "DF{$detalleFlujoId}-{$correlativoBase}";
+                        } else {
+                            // Si el formulario no usa correlativo, generar uno para esta ejecución
+                            $correlativoFinal = "DF{$detalleFlujoId}-1";
+                        }
+                    } else {
+                        $correlativoFinal = $correlativoBase;
+                    }
+                    
+                    $formRun = FormRun::create([
+                        'id_form' => $etapaForm->id_forms,
+                        'id_etapas_forms' => $etapaFormId,
+                        'id_emp' => Auth::user()->id_emp,
+                        'estado' => $estadoNormalizado,
+                        'correlativo' => $correlativoFinal,
+                        'created_by' => Auth::id(), // SIEMPRE usuario actual
+                        'updated_by' => Auth::id()
+                    ]);
+                    Log::info('Guardando - Nuevo FormRun creado:', [
+                        'id' => $formRun->id,
+                        'correlativo' => $correlativoFinal,
+                        'created_by' => Auth::id(),
+                        'detalle_flujo_id' => $detalleFlujoId,
+                        'usa_correlativo' => $etapaForm->form->usa_correlativo ? 'SI' : 'NO'
+                    ]);
+                } else {
+                    Log::info('Guardando - FormRun existente encontrado:', [
+                        'id' => $formRun->id,
+                        'correlativo' => $formRun->correlativo,
+                        'detalle_flujo_id' => $detalleFlujoId
+                    ]);
+                }
+            }
             
             // Verificar que el usuario tenga acceso
             if ($formRun->id_emp != Auth::user()->id_emp) {
+                Log::warning('Usuario sin acceso al formulario');
                 return response()->json([
                     'success' => false,
                     'message' => 'No tienes acceso a este formulario'
@@ -3115,37 +3366,146 @@ class Ejecucion extends Controller
 
             // Actualizar estado del FormRun
             $formRun->update([
-                'estado' => $data['estado'],
+                'estado' => $estadoNormalizado,
                 'updated_by' => Auth::id()
             ]);
+            Log::info('FormRun actualizado exitosamente');
 
-            // Guardar las respuestas
-            foreach ($data['respuestas'] as $fieldId => $valor) {
-                \App\Models\FormAnswer::updateOrCreate([
+            // Recopilar campos del formulario del request
+            $camposFormulario = [];
+            foreach ($request->all() as $key => $value) {
+                if (str_starts_with($key, 'respuestas[')) {
+                    // Extraer el ID del campo
+                    preg_match('/respuestas\[(.+)\]/', $key, $matches);
+                    if (isset($matches[1])) {
+                        $camposFormulario[$matches[1]] = $value;
+                    }
+                }
+            }
+            
+            Log::info('Campos del formulario encontrados:', [
+                'total' => count($camposFormulario),
+                'campos' => array_keys($camposFormulario)
+            ]);
+            
+            $respuestasGuardadas = 0;
+            foreach ($camposFormulario as $fieldId => $valor) {
+                Log::info("Procesando campo {$fieldId} con valor:", [
+                    'valor' => $valor, 
+                    'tipo' => gettype($valor),
+                    'fieldId' => $fieldId
+                ]);
+                
+                // Buscar el campo por ID (el JavaScript envía field IDs)
+                $field = FormField::find($fieldId);
+                if (!$field) {
+                    Log::warning("Campo no encontrado con ID: {$fieldId}");
+                    continue;
+                }
+
+                Log::info("Campo encontrado:", [
+                    'field_id' => $field->id,
+                    'field_codigo' => $field->codigo,
+                    'field_datatype' => $field->datatype
+                ]);
+
+                // Preparar datos para FormAnswer
+                $answerData = [
                     'id_run' => $formRun->id,
-                    'id_field' => $fieldId
-                ], [
-                    'valor' => $valor
+                    'id_field' => $field->id,
+                    'value_text' => null,
+                    'value_number' => null,
+                    'value_int' => null,
+                    'value_date' => null,
+                    'value_datetime' => null,
+                    'value_bool' => null,
+                    'value_json' => null
+                ];
+
+                // Asignar el valor al campo correcto según el tipo
+                switch ($field->datatype) {
+                    case 'text':
+                    case 'textarea':
+                    case 'select':
+                    case 'radio':
+                        $answerData['value_text'] = (string) $valor;
+                        break;
+                    case 'number':
+                    case 'decimal':
+                        $answerData['value_number'] = is_numeric($valor) ? (float) $valor : null;
+                        break;
+                    case 'integer':
+                        $answerData['value_int'] = is_numeric($valor) ? (int) $valor : null;
+                        break;
+                    case 'date':
+                        $answerData['value_date'] = $valor ? date('Y-m-d', strtotime($valor)) : null;
+                        break;
+                    case 'datetime':
+                        $answerData['value_datetime'] = $valor ? date('Y-m-d H:i:s', strtotime($valor)) : null;
+                        break;
+                    case 'checkbox':
+                        $answerData['value_bool'] = (bool) $valor;
+                        break;
+                    case 'multiselect':
+                    case 'json':
+                        $answerData['value_json'] = is_array($valor) ? $valor : [$valor];
+                        break;
+                    default:
+                        $answerData['value_text'] = (string) $valor;
+                        break;
+                }
+
+                // Crear o actualizar la respuesta
+                $formAnswer = FormAnswer::updateOrCreate([
+                    'id_run' => $formRun->id,
+                    'id_field' => $field->id
+                ], $answerData);
+
+                $respuestasGuardadas++;
+                Log::info("Respuesta guardada para campo {$fieldId}", [
+                    'field_codigo' => $field->codigo,
+                    'field_type' => $field->datatype,
+                    'valor_original' => $valor,
+                    'form_answer_id' => $formAnswer->id,
+                    'answer_data_saved' => $answerData
                 ]);
             }
 
+            Log::info("Total de respuestas procesadas: {$respuestasGuardadas}");
+
             // Si se completó el formulario, actualizar el progreso de la etapa
-            if ($data['estado'] === 'completado') {
+            if ($estado === 'completado') {
+                Log::info('Formulario completado, actualizando progreso de etapa');
                 $this->actualizarProgresoEtapaPorFormulario($formRun);
             }
 
+            Log::info('=== FORMULARIO GUARDADO EXITOSAMENTE ===');
+
             return response()->json([
                 'success' => true,
-                'message' => $data['estado'] === 'completado' ? 'Formulario completado exitosamente' : 'Borrador guardado exitosamente',
-                'form_run_id' => $formRun->id,
-                'estado' => $formRun->estado
+                'message' => $estado === 'completado' ? 'Formulario completado exitosamente' : 'Borrador guardado exitosamente',
+                'formRunId' => $formRun->id,
+                'form_run_id' => $formRun->id, // Mantener por compatibilidad
+                'etapaFormId' => $formRun->id_etapas_forms, // Agregar para el frontend
+                'estado' => $formRun->estado,
+                'debug' => [
+                    'form_run_id' => $formRun->id,
+                    'etapa_form_id' => $formRun->id_etapas_forms,
+                    'form_id' => $formRun->id_form,
+                    'respuestas_guardadas' => $respuestasGuardadas,
+                    'respuestas_recibidas' => count($camposFormulario)
+                ]
             ]);
 
         } catch (\Exception $e) {
             Log::error('Error al guardar formulario: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Error al guardar el formulario: ' . $e->getMessage()
+                'message' => 'Error al guardar el formulario: ' . $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => basename($e->getFile())
             ], 500);
         }
     }
@@ -3155,14 +3515,131 @@ class Ejecucion extends Controller
      */
     private function obtenerRespuestasFormRun($formRunId)
     {
-        $respuestas = \App\Models\FormAnswer::where('id_run', $formRunId)->get();
-        $resultado = [];
+        Log::info("=== OBTENER RESPUESTAS FormRun {$formRunId} ===");
         
-        foreach ($respuestas as $respuesta) {
-            $resultado[$respuesta->id_field] = $respuesta->valor;
+        // Cargar el FormRun con todas sus respuestas (igual que en FormRunController)
+        $formRun = FormRun::with(['answers.field', 'rows.values.field'])->find($formRunId);
+        
+        if (!$formRun) {
+            Log::warning("FormRun {$formRunId} no encontrado");
+            return [];
         }
         
+        Log::info("FormRun encontrado", [
+            'id' => $formRun->id,
+            'correlativo' => $formRun->correlativo,
+            'estado' => $formRun->estado,
+            'answers_count' => $formRun->answers->count(),
+            'rows_count' => $formRun->rows->count()
+        ]);
+        
+        Log::info("DEBUG: Answers crudos", [
+            'answers' => $formRun->answers->map(function($answer) {
+                return [
+                    'id' => $answer->id,
+                    'field_id' => $answer->id_field,
+                    'field_codigo' => $answer->field ? $answer->field->codigo : 'SIN_FIELD',
+                    'value_text' => $answer->value_text,
+                    'value_number' => $answer->value_number,
+                    'value_date' => $answer->value_date,
+                    'value_bool' => $answer->value_bool
+                ];
+            })->toArray()
+        ]);
+        
+        $resultado = [];
+        
+        // 1. Procesar respuestas simples (form_answers)
+        foreach ($formRun->answers as $answer) {
+            if (!$answer->field) {
+                Log::warning("Answer sin field asociado: " . $answer->id);
+                continue;
+            }
+            
+            $field = $answer->field;
+            
+            // Obtener el valor según el tipo de campo
+            $valor = $this->extraerValorDeAnswer($answer, $field);
+            
+            // IMPORTANTE: El frontend espera las respuestas indexadas por field_id, no por codigo
+            $resultado[$field->id] = $valor;
+            Log::info("Campo simple: {$field->codigo} (ID: {$field->id}) = {$valor} (tipo: {$field->datatype})");
+        }
+        
+        // 2. Procesar respuestas de grupos (form_answer_rows)
+        if ($formRun->rows->count() > 0) {
+            Log::info("Procesando " . $formRun->rows->count() . " filas de grupos");
+            
+            // Agrupar por grupo
+            $gruposPorId = [];
+            foreach ($formRun->rows as $row) {
+                $gruposPorId[$row->id_group] = $gruposPorId[$row->id_group] ?? [];
+                $gruposPorId[$row->id_group][] = $row;
+            }
+            
+            foreach ($gruposPorId as $groupId => $rows) {
+                // Obtener el código del grupo
+                $grupo = \App\Models\FormGroup::find($groupId);
+                if (!$grupo) continue;
+                
+                $resultado['groups'] = $resultado['groups'] ?? [];
+                $resultado['groups'][$grupo->codigo] = [];
+                
+                foreach ($rows as $row) {
+                    $filaData = [];
+                    
+                    foreach ($row->values as $value) {
+                        if ($value->field) {
+                            $valorCampo = $this->extraerValorDeAnswer($value, $value->field);
+                            $filaData[$value->field->codigo] = $valorCampo;
+                        }
+                    }
+                    
+                    $resultado['groups'][$grupo->codigo][$row->row_index] = $filaData;
+                    Log::info("Grupo {$grupo->codigo}, fila {$row->row_index}: " . json_encode($filaData));
+                }
+            }
+        }
+        
+        Log::info("Resultado final:", [
+            'campos_simples' => count($resultado) - (isset($resultado['groups']) ? 1 : 0),
+            'grupos' => isset($resultado['groups']) ? count($resultado['groups']) : 0,
+            'estructura' => $resultado
+        ]);
+        
         return $resultado;
+    }
+    
+    /**
+     * Extrae el valor de un FormAnswer o FormAnswerRowValue según el tipo de campo
+     */
+    private function extraerValorDeAnswer($answer, $field)
+    {
+        switch ($field->datatype) {
+            case 'text':
+            case 'textarea':
+            case 'select':
+            case 'radio':
+                return $answer->value_text;
+            case 'number':
+            case 'decimal':
+                return $answer->value_number;
+            case 'integer':
+            case 'int':
+                return $answer->value_int;
+            case 'date':
+                return $answer->value_date;
+            case 'datetime':
+                return $answer->value_datetime;
+            case 'checkbox':
+            case 'boolean':
+                return $answer->value_bool ? '1' : '0';
+            case 'multiselect':
+            case 'json':
+                return $answer->value_json;
+            default:
+                return $answer->value_text;
+        }
     }
 
     /**
@@ -3172,26 +3649,65 @@ class Ejecucion extends Controller
     {
         try {
             $etapaForm = $formRun->etapaForm;
-            if (!$etapaForm) return;
+            if (!$etapaForm) {
+                Log::warning('EtapaForm no encontrado para FormRun', ['form_run_id' => $formRun->id]);
+                return;
+            }
 
             $etapa = $etapaForm->etapa;
-            if (!$etapa) return;
+            if (!$etapa) {
+                Log::warning('Etapa no encontrada para EtapaForm', ['etapa_form_id' => $etapaForm->id]);
+                return;
+            }
 
-            // Buscar el detalle de la etapa actual
+            $flujo = $etapa->flujo;
+            if (!$flujo) {
+                Log::warning('Flujo no encontrado para Etapa', ['etapa_id' => $etapa->id]);
+                return;
+            }
+
+            // Buscar el detalle_flujo activo para esta empresa y flujo
+            $detalleFlujo = \App\Models\DetalleFlujo::where('id_flujo', $flujo->id)
+                ->where('id_emp', $formRun->id_emp)
+                ->where('estado', 2) // Solo ejecuciones activas
+                ->orderBy('updated_at', 'desc')
+                ->first();
+
+            if (!$detalleFlujo) {
+                Log::warning('DetalleFlujo activo no encontrado', [
+                    'flujo_id' => $flujo->id,
+                    'empresa_id' => $formRun->id_emp
+                ]);
+                return;
+            }
+
+            // Buscar el detalle de la etapa correspondiente
             $detalleEtapa = \App\Models\DetalleEtapa::where('id_etapa', $etapa->id)
-                ->whereHas('detalleFlujo', function($query) use ($formRun) {
-                    $query->where('id_emp', $formRun->id_emp);
-                })
-                ->whereIn('estado', [1, 2]) // pendiente o en progreso
+                ->where('id_detalle_flujo', $detalleFlujo->id)
                 ->first();
 
             if ($detalleEtapa) {
+                Log::info('Verificando completitud de etapa por formulario completado', [
+                    'form_run_id' => $formRun->id,
+                    'etapa_id' => $etapa->id,
+                    'detalle_etapa_id' => $detalleEtapa->id,
+                    'detalle_flujo_id' => $detalleFlujo->id
+                ]);
+                
                 // Verificar si todos los elementos de la etapa están completados
                 $this->verificarYActualizarCompletitudEtapa($detalleEtapa);
+            } else {
+                Log::warning('DetalleEtapa no encontrado', [
+                    'etapa_id' => $etapa->id,
+                    'detalle_flujo_id' => $detalleFlujo->id
+                ]);
             }
 
         } catch (\Exception $e) {
-            Log::error('Error al actualizar progreso de etapa por formulario: ' . $e->getMessage());
+            Log::error('Error al actualizar progreso de etapa por formulario: ' . $e->getMessage(), [
+                'form_run_id' => $formRun->id,
+                'trace' => $e->getTraceAsString()
+            ]);
         }
     }
 
@@ -3200,37 +3716,102 @@ class Ejecucion extends Controller
      */
     private function verificarYActualizarCompletitudEtapa($detalleEtapa)
     {
-        $etapa = $detalleEtapa->etapa;
-        
-        // Verificar tareas completadas
-        $totalTareas = $etapa->tareas()->count();
-        $tareasCompletadas = \App\Models\DetalleTarea::where('id_detalle_etapa', $detalleEtapa->id)
-            ->where('completada', true)->count();
-
-        // Verificar documentos validados
-        $totalDocumentos = $etapa->documentos()->count();
-        $documentosValidados = \App\Models\DetalleDocumento::where('id_detalle_etapa', $detalleEtapa->id)
-            ->where('validado', true)->count();
-
-        // Verificar formularios completados
-        $totalFormularios = $etapa->etapaForms()->count();
-        $formulariosCompletados = \App\Models\FormRun::whereIn('id_etapas_forms', 
-            $etapa->etapaForms()->pluck('id')
-        )->where('id_emp', $detalleEtapa->detalleFlujo->id_emp)
-        ->where('estado', 'completado')->count();
-
-        // Una etapa está completada si TODOS sus elementos están completados
-        $etapaCompleta = ($totalTareas == $tareasCompletadas) && 
-                        ($totalDocumentos == $documentosValidados) &&
-                        ($totalFormularios == $formulariosCompletados);
-
-        if ($etapaCompleta && $detalleEtapa->estado != 3) {
-            $detalleEtapa->update([
-                'estado' => 3, // completada
-                'fecha_fin' => now()
+        try {
+            $etapa = $detalleEtapa->etapa;
+            $detalleFlujo = $detalleEtapa->detalleFlujo;
+            
+            Log::info('Verificando completitud de etapa', [
+                'etapa_id' => $etapa->id,
+                'detalle_etapa_id' => $detalleEtapa->id,
+                'detalle_flujo_id' => $detalleFlujo->id
             ]);
 
-            Log::info("Etapa {$etapa->nombre} completada automáticamente por formulario");
+            // Verificar tareas completadas (usando la nueva lógica de DetalleTarea)
+            $totalTareas = \App\Models\DetalleTarea::where('id_detalle_etapa', $detalleEtapa->id)
+                ->whereNotIn('estado', [66, 99]) // Excluir no influyentes y canceladas
+                ->count();
+            $tareasCompletadas = \App\Models\DetalleTarea::where('id_detalle_etapa', $detalleEtapa->id)
+                ->where('estado', 3) // Solo completadas
+                ->whereNotIn('estado', [66, 99])
+                ->count();
+
+            // Verificar documentos validados (usando la nueva lógica de DetalleDocumento)
+            $totalDocumentos = \App\Models\DetalleDocumento::whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                    $query->where('id_detalle_etapa', $detalleEtapa->id);
+                })
+                ->whereNotIn('estado', [66, 99]) // Excluir no influyentes y cancelados
+                ->count();
+            $documentosValidados = \App\Models\DetalleDocumento::whereHas('detalleTarea', function($query) use ($detalleEtapa) {
+                    $query->where('id_detalle_etapa', $detalleEtapa->id);
+                })
+                ->where('estado', 3) // Solo validados
+                ->whereNotIn('estado', [66, 99])
+                ->count();
+
+            // Verificar formularios completados
+            $etapaFormsIds = $etapa->etapaForms()->pluck('id')->toArray();
+            $totalFormularios = count($etapaFormsIds);
+            $formulariosCompletados = 0;
+            
+            if ($totalFormularios > 0) {
+                // Contar solo FormRuns específicos para esta ejecución de flujo
+                $formulariosCompletados = \App\Models\FormRun::whereIn('id_etapas_forms', $etapaFormsIds)
+                    ->where('id_emp', $detalleFlujo->id_emp)
+                    ->where('estado', 'completado')
+                    ->where(function($query) use ($detalleFlujo) {
+                        $query->where('correlativo', 'LIKE', "DF{$detalleFlujo->id}-%")
+                              ->orWhere('created_by', $detalleFlujo->id);
+                    })
+                    ->count();
+                    
+                Log::info('Conteo de formularios específicos para ejecución:', [
+                    'detalle_flujo_id' => $detalleFlujo->id,
+                    'total_formularios' => $totalFormularios,
+                    'formularios_completados_especificos' => $formulariosCompletados
+                ]);
+            }
+
+            Log::info('Conteo de elementos de etapa', [
+                'etapa_id' => $etapa->id,
+                'total_tareas' => $totalTareas,
+                'tareas_completadas' => $tareasCompletadas,
+                'total_documentos' => $totalDocumentos,
+                'documentos_validados' => $documentosValidados,
+                'total_formularios' => $totalFormularios,
+                'formularios_completados' => $formulariosCompletados
+            ]);
+
+            // Una etapa está completada si TODOS sus elementos están completados
+            $etapaCompleta = ($totalTareas == $tareasCompletadas) && 
+                            ($totalDocumentos == $documentosValidados) &&
+                            ($totalFormularios == $formulariosCompletados);
+
+            if ($etapaCompleta && $detalleEtapa->estado != 3) {
+                $detalleEtapa->update([
+                    'estado' => 3, // completada
+                    'updated_at' => now()
+                ]);
+
+                Log::info("Etapa {$etapa->nombre} (ID: {$etapa->id}) completada automáticamente", [
+                    'detalle_etapa_id' => $detalleEtapa->id,
+                    'detalle_flujo_id' => $detalleFlujo->id
+                ]);
+
+                // Verificar si todo el flujo está completado
+                $this->verificarYActualizarEstados(null, 'etapa', $detalleFlujo->id);
+            } else {
+                Log::info("Etapa no completada aún", [
+                    'etapa_id' => $etapa->id,
+                    'etapa_completa' => $etapaCompleta,
+                    'estado_actual' => $detalleEtapa->estado
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error verificando completitud de etapa: ' . $e->getMessage(), [
+                'detalle_etapa_id' => $detalleEtapa->id ?? null,
+                'trace' => $e->getTraceAsString()
+            ]);
         }
     }
 
@@ -3304,4 +3885,114 @@ class Ejecucion extends Controller
 
         return $opciones;
     }
+
+    /**
+     * Borrar un formulario completado
+     */
+    public function borrarFormulario($formRunId)
+    {
+        try {
+            $formRun = \App\Models\FormRun::with(['etapasForm', 'answers.rows.values'])
+                ->findOrFail($formRunId);
+
+            // Verificar que el usuario tenga acceso
+            if ($formRun->id_emp != Auth::user()->id_emp) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes acceso a este formulario'
+                ], 403);
+            }
+
+            // Verificar que el formulario esté completado
+            if ($formRun->estado !== 'completado') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Solo se pueden borrar formularios completados'
+                ], 400);
+            }
+
+            DB::beginTransaction();
+
+            try {
+                // Borrar respuestas relacionadas
+                foreach ($formRun->answers as $answer) {
+                    // Borrar valores de filas
+                    foreach ($answer->rows as $row) {
+                        $row->values()->delete();
+                    }
+                    // Borrar filas
+                    $answer->rows()->delete();
+                }
+                // Borrar respuestas
+                $formRun->answers()->delete();
+
+                // Borrar el FormRun
+                $formRun->delete();
+
+                DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Formulario borrado exitosamente'
+                ]);
+
+            } catch (\Exception $e) {
+                DB::rollback();
+                throw $e;
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error borrando formulario: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al borrar el formulario: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Normalizar el estado del formulario a valores válidos
+     */
+    private function normalizarEstadoFormulario($estado)
+    {
+        // Normalizar el estado a minúsculas y eliminar espacios
+        $estado = strtolower(trim($estado));
+        
+        // Mapear estados válidos a los estados de la base de datos: draft, submitted, approved, void
+        switch ($estado) {
+            case 'completado':
+            case 'completo':
+            case 'finished':
+            case 'complete':
+            case 'submitted':
+                return 'submitted';  // Estado para formularios completados y enviados
+                
+            case 'borrador':
+            case 'draft':
+            case 'pendiente':
+            case 'pending':
+            case 'en_progreso':
+            case 'en progreso':
+            case 'in_progress':
+                return 'draft';  // Estado para borradores
+                
+            case 'approved':
+            case 'aprobado':
+                return 'approved';  // Estado para formularios aprobados
+                
+            case 'void':
+            case 'anulado':
+            case 'cancelado':
+            case 'cancelled':
+            case 'canceled':
+                return 'void';  // Estado para formularios anulados
+                
+            default:
+                // Si no coincide con ningún estado conocido, defaultear a 'draft'
+                Log::warning("Estado desconocido recibido: {$estado}, normalizando a 'draft'");
+                return 'draft';
+        }
+    }
+
 }

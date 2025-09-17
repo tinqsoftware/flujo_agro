@@ -195,6 +195,7 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::get('ejecucion/formulario/editar/{formRunId}', [Ejecucion::class, 'editarFormulario'])->name('ejecucion.formulario.editar');
         Route::get('ejecucion/formulario/ver/{formRunId}', [Ejecucion::class, 'verFormulario'])->name('ejecucion.formulario.ver');
         Route::post('ejecucion/formulario/guardar', [Ejecucion::class, 'guardarFormulario'])->name('ejecucion.formulario.guardar');
+        Route::delete('ejecucion/formulario/borrar/{formRunId}', [Ejecucion::class, 'borrarFormulario'])->name('ejecucion.formulario.borrar');
 
     
         // Gestión de Usuarios (SUPERADMIN y ADMINISTRADOR)

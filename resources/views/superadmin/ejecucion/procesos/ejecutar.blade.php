@@ -889,15 +889,10 @@ button[disabled] {
                     
                     @foreach($etapa->etapaForms as $etapaForm)
                     @php
-                        // Verificar si existe un FormRun para este formulario y esta ejecución
-                        $formRun = null;
-                        if ($flujo->proceso_iniciado && $flujo->detalle_flujo_id) {
-                            $formRun = \App\Models\FormRun::where('id_etapas_forms', $etapaForm->id)
-                                ->where('id_emp', Auth::user()->id_emp)
-                                ->first();
-                        }
-                        $formularioCompletado = $formRun && $formRun->estado === 'completado';
-                        $formularioIniciado = $formRun && in_array($formRun->estado, ['en_progreso', 'completado']);
+                        // Usar los datos procesados en el controlador para esta ejecución específica
+                        $formRun = $etapaForm->formRun ?? null;
+                        $formularioCompletado = $etapaForm->formularioCompletado ?? false;
+                        $formularioIniciado = $formRun && in_array($formRun->estado, ['draft', 'submitted', 'approved']);
                     @endphp
                     
                     <div class="formulario-container mb-3 p-3 border rounded" style="background-color: #f0f8f0; border-left: 4px solid #28a745 !important;">
@@ -1656,7 +1651,7 @@ document.addEventListener('DOMContentLoaded', function() {
             grabarCambiosDeEtapa(etapaId)
                 .then(() => {
                     // Limpiar cambios pendientes de esta etapa
-                    cambiosPendientesPorEtapa[etapaId] = [];
+                    delete cambiosPendientesPorEtapa[etapaId];
                     actualizarContadorCambiosEtapa(etapaId);
                     
                     // Limpiar estilos visuales de cambios pendientes en esta etapa
@@ -1683,22 +1678,52 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para grabar cambios de una etapa específica
     async function grabarCambiosDeEtapa(etapaId) {
-        const cambiosEtapa = cambiosPendientesPorEtapa[etapaId] || [];
+        const cambiosEtapa = cambiosPendientesPorEtapa[etapaId] || {};
         const promesas = [];
         
-        console.log(`Grabando ${cambiosEtapa.length} cambios para etapa ${etapaId}:`, cambiosEtapa);
+        console.log(`Grabando cambios para etapa ${etapaId}:`, cambiosEtapa);
         
-        for (const cambio of cambiosEtapa) {
-            if (cambio.tipo === 'tarea') {
-                promesas.push(actualizarTareaIndividual(cambio.id, cambio.completada));
-            } else if (cambio.tipo === 'documento') {
-                promesas.push(actualizarDocumentoIndividual(cambio.id, cambio.validado));
+        // Procesar tareas pendientes
+        if (cambiosEtapa.tareas) {
+            for (const [tareaId, cambio] of Object.entries(cambiosEtapa.tareas)) {
+                console.log(`Procesando tarea ${tareaId}:`, cambio);
+                promesas.push(actualizarTareaIndividual(tareaId, cambio.completada));
+            }
+        }
+        
+        // Procesar documentos pendientes
+        if (cambiosEtapa.documentos) {
+            for (const [documentoId, cambio] of Object.entries(cambiosEtapa.documentos)) {
+                console.log(`Procesando documento ${documentoId}:`, cambio);
+                promesas.push(actualizarDocumentoIndividual(documentoId, cambio.validado));
+            }
+        }
+        
+        // Procesar formularios pendientes
+        if (cambiosEtapa.formularios) {
+            for (const [etapaFormId, cambio] of Object.entries(cambiosEtapa.formularios)) {
+                console.log(`Procesando formulario ${etapaFormId}:`, cambio);
+                // Los formularios ya están guardados en la BD, solo necesitamos actualizar la vista
+                promesas.push(Promise.resolve({
+                    success: true,
+                    tipo: 'formulario',
+                    etapaFormId: etapaFormId,
+                    formRunId: cambio.formRunId
+                }));
             }
         }
         
         try {
             const resultados = await Promise.all(promesas);
             console.log('Todos los cambios procesados exitosamente:', resultados);
+            
+            // Actualizar vistas de formularios que estaban pendientes
+            if (cambiosEtapa.formularios) {
+                for (const [etapaFormId, cambio] of Object.entries(cambiosEtapa.formularios)) {
+                    console.log(`Actualizando vista de formulario completado: ${etapaFormId}`);
+                    actualizarVistaFormularioCompletado(etapaFormId, cambio.formRunId, false);
+                }
+            }
             
             // Actualizar contadores y progreso solo después de que todos los cambios se hayan guardado
             actualizarContadoresYProgreso();
@@ -1741,23 +1766,34 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para actualizar el contador de cambios pendientes de una etapa
     function actualizarContadorCambiosEtapa(etapaId) {
-        const cambiosEtapa = cambiosPendientesPorEtapa[etapaId] || [];
+        const cambiosEtapa = cambiosPendientesPorEtapa[etapaId] || {};
         const etapaCard = document.querySelector(`[data-etapa-id="${etapaId}"]`);
+        
+        // Contar todos los cambios pendientes
+        const totalCambios = (
+            Object.keys(cambiosEtapa.tareas || {}).length +
+            Object.keys(cambiosEtapa.documentos || {}).length +
+            Object.keys(cambiosEtapa.formularios || {}).length
+        );
         
         if (etapaCard) {
             const contador = etapaCard.querySelector('.contador-cambios-etapa');
             const boton = etapaCard.querySelector('.grabar-cambios-etapa');
             
-            console.log(`Actualizando contador para etapa ${etapaId}: ${cambiosEtapa.length} cambios pendientes`);
+            console.log(`Actualizando contador para etapa ${etapaId}: ${totalCambios} cambios pendientes`, {
+                tareas: Object.keys(cambiosEtapa.tareas || {}).length,
+                documentos: Object.keys(cambiosEtapa.documentos || {}).length,
+                formularios: Object.keys(cambiosEtapa.formularios || {}).length
+            });
             
             if (contador) {
-                contador.textContent = cambiosEtapa.length;
+                contador.textContent = totalCambios;
             }
             
             if (boton) {
                 console.log(`Botón grabar cambios encontrado para etapa ${etapaId}, disabled: ${boton.disabled}`);
                 
-                if (cambiosEtapa.length > 0) {
+                if (totalCambios > 0) {
                     boton.style.display = 'inline-block';
                     // Asegurar que el botón esté habilitado si la etapa no está bloqueada
                     if (!etapaCard.classList.contains('bloqueada')) {
@@ -1775,37 +1811,35 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Función para agregar un cambio pendiente a una etapa específica
-    function agregarCambioPendienteEtapa(etapaId, tipo, id, estado) {
-        // Inicializar array para la etapa si no existe
+    function agregarCambioPendienteEtapa(etapaId, tipo, id, estado, datos = {}) {
+        // Inicializar estructura para la etapa si no existe
         if (!cambiosPendientesPorEtapa[etapaId]) {
-            cambiosPendientesPorEtapa[etapaId] = [];
+            cambiosPendientesPorEtapa[etapaId] = {
+                tareas: {},
+                documentos: {},
+                formularios: {}
+            };
         }
         
         const cambiosEtapa = cambiosPendientesPorEtapa[etapaId];
         
-        // Buscar si ya existe un cambio para este elemento
-        const indiceExistente = cambiosEtapa.findIndex(cambio => 
-            cambio.tipo === tipo && cambio.id === id
-        );
-        
-        if (indiceExistente !== -1) {
-            // Actualizar el cambio existente
-            if (tipo === 'tarea') {
-                cambiosEtapa[indiceExistente].completada = estado;
-            } else if (tipo === 'documento') {
-                cambiosEtapa[indiceExistente].validado = estado;
-            }
-        } else {
-            // Agregar nuevo cambio
-            const nuevoCambio = { tipo, id };
-            if (tipo === 'tarea') {
-                nuevoCambio.completada = estado;
-            } else if (tipo === 'documento') {
-                nuevoCambio.validado = estado;
-            }
-            cambiosEtapa.push(nuevoCambio);
+        // Agregar cambio según el tipo
+        if (tipo === 'tarea') {
+            cambiosEtapa.tareas[id] = { completada: estado };
+        } else if (tipo === 'documento') {
+            cambiosEtapa.documentos[id] = { validado: estado };
+        } else if (tipo === 'formulario') {
+            cambiosEtapa.formularios[id] = { 
+                completado: estado,
+                formRunId: datos.formRunId,
+                nombre: datos.nombre 
+            };
         }
         
+        console.log(`✅ Cambio agregado para etapa ${etapaId}:`, { tipo, id, estado, datos });
+        console.log('📊 Estado actual de cambios pendientes:', cambiosPendientesPorEtapa[etapaId]);
+        
+        // Actualizar contador de cambios para esta etapa
         actualizarContadorCambiosEtapa(etapaId);
     }
 
@@ -3657,8 +3691,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Event listener para completar formulario
         document.getElementById('completar-formulario')?.addEventListener('click', function() {
+            console.log('🚀 Botón Completar Formulario presionado');
+            
+            // Verificar que existe el formulario
+            const form = document.getElementById('dynamic-form');
+            if (!form) {
+                console.error('❌ No se encontró el formulario dynamic-form');
+                mostrarNotificacion('Error: No se encontró el formulario', 'error');
+                return;
+            }
+            
+            console.log('✅ Formulario encontrado, procediendo con validación');
+            
             if (validarFormulario()) {
+                console.log('✅ Validación exitosa, guardando formulario como completado');
                 guardarFormulario('completado');
+            } else {
+                console.log('❌ Validación falló');
             }
         });
     }
@@ -3692,9 +3741,16 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
 
         // Hacer petición al servidor para obtener la estructura del formulario
-        const url = formRunId ? 
-            `{{ route('ejecucion.formulario.editar', ':formRunId') }}`.replace(':formRunId', formRunId) :
-            `{{ route('ejecucion.formulario.nuevo', ':etapaFormId') }}`.replace(':etapaFormId', etapaFormId);
+        let url;
+        if (formRunId) {
+            url = `{{ route('ejecucion.formulario.editar', ':formRunId') }}`.replace(':formRunId', formRunId);
+        } else {
+            url = `{{ route('ejecucion.formulario.nuevo', ':etapaFormId') }}`.replace(':etapaFormId', etapaFormId);
+            // Agregar detalleFlujoId como parámetro para asociar al FormRun correcto
+            if (detalleFlujoId) {
+                url += `?detalle_flujo_id=${detalleFlujoId}`;
+            }
+        }
 
         fetch(url)
         .then(response => response.json())
@@ -3737,12 +3793,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para renderizar el formulario dinámico
     function renderizarFormulario(formulario, respuestas = {}) {
+        console.log('🎨 Renderizando formulario con respuestas:', respuestas);
+        
         const contenedor = document.getElementById('formulario-contenido');
         let html = '<form id="dynamic-form">';
 
         // Agrupar campos por grupos si existen
         const grupos = formulario.groups || [];
         const camposSinGrupo = formulario.fields.filter(field => !field.id_group);
+
+        console.log('📊 Campos sin grupo encontrados:', camposSinGrupo.length);
+        console.log('📂 Grupos encontrados:', grupos.length);
 
         // Renderizar grupos
         grupos.forEach(grupo => {
@@ -3809,7 +3870,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 `;
 
                 camposGrupo.forEach(field => {
-                    const valor = respuestas.fields && respuestas.fields[field.codigo] || '';
+                    // Usar field.codigo para buscar la respuesta (que viene del controlador como {field_codigo: valor})
+                    const valor = respuestas[field.codigo] || '';
                     html += renderizarCampo(field, valor);
                 });
 
@@ -3821,7 +3883,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (camposSinGrupo.length > 0) {
             html += '<div class="card mb-3"><div class="card-body"><div class="row">';
             camposSinGrupo.forEach(field => {
-                const valor = respuestas.fields && respuestas.fields[field.codigo] || '';
+                // Usar field.codigo para buscar la respuesta (que viene del controlador como {field_codigo: valor})
+                const valor = respuestas[field.codigo] || '';
+                console.log(`📝 Campo ${field.codigo}: valor="${valor}" (etiqueta: ${field.etiqueta})`);
                 html += renderizarCampo(field, valor);
             });
             html += '</div></div></div>';
@@ -3843,7 +3907,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const disabled = field.kind === 'output' ? 'disabled' : '';
         const colClass = field.ancho ? `col-md-${field.ancho}` : 'col-md-3';
         
-        // Construir el name del campo
+        // Construir el name del campo - usar field.codigo como espera el controlador
         let fieldName;
         if (isInGroup) {
             fieldName = `groups[${groupName}][${rowIndex}][${field.codigo}]`;
@@ -4013,23 +4077,38 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para validar el formulario
     function validarFormulario() {
+        console.log('🔍 Iniciando validación del formulario');
+        
         const form = document.getElementById('dynamic-form');
-        if (!form) return false;
+        if (!form) {
+            console.error('❌ No se encontró el formulario para validar');
+            return false;
+        }
 
         const elementos = form.querySelectorAll('[required]');
+        console.log(`📋 Elementos requeridos encontrados: ${elementos.length}`);
+        
         let valido = true;
 
-        elementos.forEach(elemento => {
-            if (!elemento.value.trim()) {
+        elementos.forEach((elemento, index) => {
+            const valor = elemento.value?.trim() || '';
+            console.log(`Campo ${index + 1}: ${elemento.name || elemento.id} = "${valor}" (requerido: ${elemento.required})`);
+            
+            if (!valor) {
                 elemento.classList.add('is-invalid');
                 valido = false;
+                console.log(`❌ Campo ${elemento.name || elemento.id} está vacío`);
             } else {
                 elemento.classList.remove('is-invalid');
+                console.log(`✅ Campo ${elemento.name || elemento.id} validado`);
             }
         });
 
         if (!valido) {
+            console.log('❌ Validación falló - campos requeridos vacíos');
             mostrarNotificacion('Por favor, complete todos los campos requeridos', 'warning');
+        } else {
+            console.log('✅ Validación exitosa - todos los campos completos');
         }
 
         return valido;
@@ -4037,25 +4116,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para guardar el formulario
     function guardarFormulario(estado) {
+        console.log(`💾 Iniciando guardado del formulario con estado: ${estado}`);
+        
         const form = document.getElementById('dynamic-form');
         if (!form) {
+            console.error('❌ No se encontró el formulario para guardar');
             mostrarNotificacion('Error: No se encontró el formulario', 'error');
             return;
         }
+
+        // Verificar que window.formularioActual existe
+        if (!window.formularioActual) {
+            console.error('❌ No se encontró window.formularioActual');
+            mostrarNotificacion('Error: Datos del formulario no encontrados', 'error');
+            return;
+        }
+
+        console.log('📊 Datos del formulario actual:', window.formularioActual);
 
         const formData = new FormData(form);
         const data = {
             estado: estado,
             etapa_form_id: window.formularioActual.etapaFormId,
             form_run_id: window.formularioActual.formRunId,
+            detalle_flujo_id: detalleFlujoId, // Agregar contexto de ejecución de flujo
             respuestas: {}
         };
+
+        console.log('📝 Recopilando respuestas del formulario...');
 
         // Recopilar respuestas
         for (let [key, value] of formData.entries()) {
             if (key.startsWith('field_')) {
                 const fieldId = key.replace('field_', '');
                 data.respuestas[fieldId] = value;
+                console.log(`Campo ${fieldId}: ${value}`);
             }
         }
 
@@ -4064,8 +4159,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!checkbox.checked && checkbox.name.startsWith('field_')) {
                 const fieldId = checkbox.name.replace('field_', '');
                 data.respuestas[fieldId] = '0';
+                console.log(`Checkbox no marcado ${fieldId}: 0`);
             }
         });
+
+        console.log('📦 Datos a enviar:', data);
 
         // Enviar al servidor
         fetch(`{{ route('ejecucion.formulario.guardar') }}`, {
@@ -4076,8 +4174,12 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: JSON.stringify(data)
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('📡 Respuesta del servidor:', response.status, response.statusText);
+            return response.json();
+        })
         .then(data => {
+            console.log('📥 Datos de respuesta:', data);
             if (data.success) {
                 mostrarNotificacion(
                     estado === 'completado' ? 
@@ -4089,17 +4191,47 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Cerrar modal
                 bootstrap.Modal.getInstance(document.getElementById('rellenarFormularioModal')).hide();
                 
-                // Actualizar página para reflejar cambios
-                setTimeout(() => {
-                    location.reload();
-                }, 1500);
+                // Si el formulario se completó, actualizar la vista dinámicamente E INTEGRAR CON CAMBIOS PENDIENTES
+                if (estado === 'completado' && data.formRunId) {
+                    console.log('📋 Actualizando vista del formulario completado');
+                    console.log('🔍 Datos recibidos del servidor:', data);
+                    
+                    // Usar etapaFormId del servidor si está disponible, sino usar el de window.formularioActual
+                    const etapaFormId = data.etapaFormId || window.formularioActual.etapaFormId;
+                    console.log('🎯 Usando etapaFormId:', etapaFormId);
+                    
+                    // NUEVA LÓGICA: Agregar al sistema de cambios pendientes
+                    const etapaId = obtenerEtapaIdDesdeEtapaFormId(etapaFormId);
+                    if (etapaId) {
+                        console.log('🔄 Agregando formulario a cambios pendientes de etapa:', etapaId);
+                        agregarCambioPendienteEtapa(etapaId, 'formulario', data.formRunId, 'completado');
+                        
+                        // Actualizar vista para mostrar cambio pendiente
+                        actualizarVistaFormularioCompletado(etapaFormId, data.formRunId, true); // true = cambio pendiente
+                        
+                        // Expandir la etapa para que el usuario vea los cambios
+                        expandirEtapa(etapaId);
+                        
+                        mostrarNotificacion('Formulario completado. Presiona "Grabar Cambios de esta Etapa" para confirmar.', 'warning');
+                    } else {
+                        console.warn('No se pudo determinar el etapaId para integrar con cambios pendientes');
+                        // Fallback al comportamiento anterior
+                        actualizarVistaFormularioCompletado(etapaFormId, data.formRunId);
+                    }
+                } else {
+                    // Solo recargar para borradores
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                }
                 
             } else {
+                console.error('❌ Error en respuesta del servidor:', data);
                 mostrarNotificacion(`Error al guardar: ${data.message || 'Error desconocido'}`, 'error');
             }
         })
         .catch(error => {
-            console.error('Error al guardar formulario:', error);
+            console.error('❌ Error al guardar formulario:', error);
             mostrarNotificacion('Error al guardar el formulario', 'error');
         });
     }
@@ -4162,6 +4294,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para renderizar formulario completado (solo lectura)
     function renderizarFormularioCompletado(formulario, respuestas) {
+        console.log('📖 Renderizando formulario completado:', formulario);
+        console.log('📝 Respuestas recibidas:', respuestas);
+        
         const contenedor = document.getElementById('formulario-completado-contenido');
         let html = '<div class="form-readonly">';
 
@@ -4194,7 +4329,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const camposGrupo = formulario.fields.filter(field => field.id_group === grupo.id);
             camposGrupo.forEach(field => {
-                html += renderizarCampoSoloLectura(field, respuestas[field.id] || '');
+                // Usar field.codigo para buscar la respuesta (consistente con el controlador)
+                const valor = respuestas[field.codigo] || '';
+                console.log(`📖 Campo completado ${field.codigo}: valor="${valor}" (etiqueta: ${field.etiqueta})`);
+                html += renderizarCampoSoloLectura(field, valor);
             });
 
             html += '</div></div>';
@@ -4203,7 +4341,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (camposSinGrupo.length > 0) {
             html += '<div class="row">';
             camposSinGrupo.forEach(field => {
-                html += renderizarCampoSoloLectura(field, respuestas[field.id] || '');
+                // Usar field.codigo para buscar la respuesta (consistente con el controlador)
+                const valor = respuestas[field.codigo] || '';
+                console.log(`📖 Campo sin grupo completado ${field.codigo}: valor="${valor}" (etiqueta: ${field.etiqueta})`);
+                html += renderizarCampoSoloLectura(field, valor);
             });
             html += '</div>';
         }
@@ -4740,122 +4881,173 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para guardar el formulario
     function guardarFormulario(estado) {
-        const form = document.getElementById('dynamic-form');
-        if (!form || !window.formularioActual) {
-            mostrarMensaje('Error: No se puede guardar el formulario', 'error');
+        console.log(`💾 Iniciando guardado del formulario con estado: ${estado}`);
+        
+        // Validar formulario solo si se está completando
+        if (estado === 'completado' && !validarFormulario()) {
+            console.log('❌ Validación falló, no se puede completar');
             return;
         }
         
-        // Recopilar datos del formulario
-        const formData = new FormData();
-        
-        // Datos básicos
-        formData.append('estado', estado);
-        formData.append('etapa_form_id', window.formularioActual.etapaFormId);
-        formData.append('form_id', window.formularioActual.formId);
-        if (window.formularioActual.formRunId) {
-            formData.append('form_run_id', window.formularioActual.formRunId);
+        const form = document.getElementById('dynamic-form');
+        if (!form) {
+            console.error('❌ No se encontró el formulario para guardar');
+            mostrarNotificacion('Error: No se encontró el formulario', 'error');
+            return;
         }
-        
-        // Recopilar valores de campos normales
-        const normalFields = form.querySelectorAll('[name^="fields["]');
-        normalFields.forEach(field => {
-            if (field.type === 'file') {
-                if (field.files && field.files.length > 0) {
-                    formData.append(field.name, field.files[0]);
+
+        if (!window.formularioActual) {
+            console.error('❌ No se encontró window.formularioActual');
+            mostrarNotificacion('Error: Datos del formulario no encontrados', 'error');
+            return;
+        }
+
+        console.log('📊 Datos del formulario actual:', window.formularioActual);
+
+        const formData = new FormData(form);
+        const data = {
+            estado: estado,
+            etapa_form_id: window.formularioActual.etapaFormId,
+            form_run_id: window.formularioActual.formRunId || null,
+            detalle_flujo_id: detalleFlujoId, // Agregar contexto de ejecución de flujo
+            respuestas: {}
+        };
+
+        console.log('📝 Recopilando respuestas del formulario...');
+
+        // Recopilar respuestas de campos normales
+        for (let [key, value] of formData.entries()) {
+            if (key.startsWith('fields[')) {
+                const match = key.match(/fields\[(\d+)\]/);
+                if (match) {
+                    const fieldId = match[1];
+                    data.respuestas[fieldId] = value;
+                    console.log(`Campo normal ${fieldId}: ${value}`);
                 }
-            } else if (field.type === 'checkbox') {
-                formData.append(field.name, field.checked ? '1' : '0');
-            } else {
-                formData.append(field.name, field.value);
-            }
-        });
-        
-        // Recopilar valores de grupos repetibles
-        const groupData = {};
-        const groupFields = form.querySelectorAll('[name^="groups["]');
-        
-        groupFields.forEach(field => {
-            const match = field.name.match(/groups\[([^\]]+)\]\[(\d+)\]\[([^\]]+)\]/);
-            if (match) {
-                const groupName = match[1];
-                const rowIndex = parseInt(match[2]);
-                const fieldCode = match[3];
-                
-                if (!groupData[groupName]) {
-                    groupData[groupName] = {};
-                }
-                if (!groupData[groupName][rowIndex]) {
-                    groupData[groupName][rowIndex] = {};
-                }
-                
-                if (field.type === 'file') {
-                    if (field.files && field.files.length > 0) {
-                        formData.append(`groups[${groupName}][${rowIndex}][${fieldCode}]`, field.files[0]);
+            } else if (key.startsWith('groups[')) {
+                const match = key.match(/groups\[([^\]]+)\]\[(\d+)\]\[(\d+)\]/);
+                if (match) {
+                    const grupoId = match[1];
+                    const filaIndex = match[2];
+                    const fieldId = match[3];
+                    
+                    if (!data.grupos) {
+                        data.grupos = {};
                     }
-                } else if (field.type === 'checkbox') {
-                    groupData[groupName][rowIndex][fieldCode] = field.checked ? '1' : '0';
-                } else {
-                    groupData[groupName][rowIndex][fieldCode] = field.value;
+                    if (!data.grupos[grupoId]) {
+                        data.grupos[grupoId] = [];
+                    }
+                    if (!data.grupos[grupoId][filaIndex]) {
+                        data.grupos[grupoId][filaIndex] = {};
+                    }
+                    
+                    data.grupos[grupoId][filaIndex][fieldId] = value;
+                    console.log(`Grupo ${grupoId}, fila ${filaIndex}, campo ${fieldId}: ${value}`);
+                }
+            }
+        }
+
+        // También incluir checkboxes no marcados
+        form.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            if (!checkbox.checked) {
+                const name = checkbox.name;
+                if (name.startsWith('fields[')) {
+                    const match = name.match(/fields\[(\d+)\]/);
+                    if (match) {
+                        const fieldId = match[1];
+                        if (!data.respuestas.hasOwnProperty(fieldId)) {
+                            data.respuestas[fieldId] = '0';
+                            console.log(`Checkbox no marcado ${fieldId}: 0`);
+                        }
+                    }
+                } else if (name.startsWith('groups[')) {
+                    const match = name.match(/groups\[([^\]]+)\]\[(\d+)\]\[(\d+)\]/);
+                    if (match) {
+                        const grupoId = match[1];
+                        const filaIndex = match[2];
+                        const fieldId = match[3];
+                        
+                        if (!data.grupos) data.grupos = {};
+                        if (!data.grupos[grupoId]) data.grupos[grupoId] = [];
+                        if (!data.grupos[grupoId][filaIndex]) data.grupos[grupoId][filaIndex] = {};
+                        
+                        if (!data.grupos[grupoId][filaIndex].hasOwnProperty(fieldId)) {
+                            data.grupos[grupoId][filaIndex][fieldId] = '0';
+                            console.log(`Checkbox grupo no marcado ${grupoId}[${filaIndex}][${fieldId}]: 0`);
+                        }
+                    }
                 }
             }
         });
+
+        console.log('📦 Datos a enviar:', data);
+
+        // Deshabilitar botones durante el guardado
+        const btnGuardar = document.getElementById('guardar-borrador-formulario');
+        const btnCompletar = document.getElementById('completar-formulario');
         
-        // Agregar datos de grupos como JSON
-        if (Object.keys(groupData).length > 0) {
-            formData.append('groups_data', JSON.stringify(groupData));
+        if (estado === 'borrador' && btnGuardar) {
+            btnGuardar.disabled = true;
+            btnGuardar.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Guardando...';
+        } else if (estado === 'completado' && btnCompletar) {
+            btnCompletar.disabled = true;
+            btnCompletar.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Completando...';
         }
-        
-        // Mostrar indicador de carga
-        const button = estado === 'borrador' ? 
-            document.getElementById('guardar-borrador-formulario') : 
-            document.getElementById('completar-formulario');
-            
-        const originalText = button.textContent;
-        button.disabled = true;
-        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
-        
-        // Enviar datos al servidor (siempre usar la misma ruta para crear y actualizar)
-        const url = `{{ route('ejecucion.formulario.guardar') }}`;
-            
-        fetch(url, {
+
+        fetch(`{{ route('ejecucion.formulario.guardar') }}`, {
             method: 'POST',
-            body: formData,
             headers: {
+                'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-            }
+            },
+            body: JSON.stringify(data)
         })
         .then(response => response.json())
         .then(data => {
+            console.log('✅ Respuesta del servidor:', data);
+            
             if (data.success) {
-                // Actualizar ID si es nuevo
+                // Actualizar form_run_id si es nuevo
                 if (data.formRunId) {
                     window.formularioActual.formRunId = data.formRunId;
+                    console.log(`📄 FormRun ID actualizado: ${data.formRunId}`);
                 }
                 
                 if (estado === 'completado') {
-                    mostrarMensaje('Formulario completado exitosamente', 'success');
+                    mostrarNotificacion('Formulario completado exitosamente', 'success');
+                    console.log('🎉 Formulario completado');
                     
-                    // Cerrar modal y actualizar vista
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('formulario-modal'));
-                    if (modal) modal.hide();
+                    // Cerrar modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('rellenarFormularioModal'));
+                    if (modal) {
+                        modal.hide();
+                    }
                     
-                    // Recargar la vista de la etapa
-                    location.reload();
+                    // Actualizar la vista del formulario dinámicamente
+                    actualizarVistaFormularioCompletado(window.formularioActual.etapaFormId, data.formRunId);
                 } else {
-                    mostrarMensaje('Borrador guardado exitosamente', 'success');
+                    mostrarNotificacion('Borrador guardado exitosamente', 'success');
+                    console.log('💾 Borrador guardado');
                 }
             } else {
-                mostrarMensaje(data.message || 'Error al guardar el formulario', 'error');
+                console.error('❌ Error del servidor:', data.message);
+                mostrarNotificacion(data.message || 'Error al guardar el formulario', 'error');
             }
         })
         .catch(error => {
-            console.error('Error:', error);
-            mostrarMensaje('Error de conexión al guardar el formulario', 'error');
+            console.error('❌ Error de conexión:', error);
+            mostrarNotificacion('Error de conexión al guardar el formulario', 'error');
         })
         .finally(() => {
-            button.disabled = false;
-            button.textContent = originalText;
+            // Restaurar botones
+            if (estado === 'borrador' && btnGuardar) {
+                btnGuardar.disabled = false;
+                btnGuardar.innerHTML = '<i class="fas fa-save me-2"></i>Guardar como Borrador';
+            } else if (estado === 'completado' && btnCompletar) {
+                btnCompletar.disabled = false;
+                btnCompletar.innerHTML = '<i class="fas fa-check me-2"></i>Completar Formulario';
+            }
+            console.log('🔄 Botones restaurados');
         });
     }
 
@@ -4885,6 +5077,393 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }, 5000);
         }
+    }
+
+    // ============================================
+    // FUNCIONES PARA GESTIÓN DE FORMULARIOS COMPLETADOS
+    // ============================================
+
+    // Función para actualizar la vista cuando un formulario se completa
+    function actualizarVistaFormularioCompletado(etapaFormId, formRunId, esCambioPendiente = false) {
+        console.log('🔄 Actualizando vista de formulario completado:', { etapaFormId, formRunId, esCambioPendiente });
+        
+        // Buscar el botón específico con data-etapa-form-id y obtener su contenedor
+        const botonRellenar = document.querySelector(`button[data-etapa-form-id="${etapaFormId}"]`);
+        
+        if (!botonRellenar) {
+            console.error('❌ No se encontró el botón del formulario con etapaFormId:', etapaFormId);
+            // Como fallback, buscar todos los botones y ver si alguno coincide
+            const todosLosBotones = document.querySelectorAll('[data-etapa-form-id]');
+            console.log('🔍 Botones disponibles:', Array.from(todosLosBotones).map(b => ({
+                etapaFormId: b.dataset.etapaFormId,
+                formNombre: b.dataset.formNombre
+            })));
+            return;
+        }
+
+        const formularioContainer = botonRellenar.closest('.formulario-container');
+        
+        if (!formularioContainer) {
+            console.error('❌ No se encontró el contenedor del formulario');
+            return;
+        }
+
+        console.log('✅ Contenedor encontrado, actualizando elementos...');
+
+        // Buscar elementos a actualizar
+        const badge = formularioContainer.querySelector('.badge');
+        const botones = formularioContainer.querySelector('.d-flex.gap-2');
+        const nombreFormulario = formularioContainer.querySelector('strong').textContent;
+
+        console.log('📝 Datos del formulario:', { nombreFormulario, badge: !!badge, botones: !!botones, esCambioPendiente });
+
+        // Si es un cambio pendiente, aplicar estilos visuales especiales
+        if (esCambioPendiente) {
+            formularioContainer.classList.add('cambio-pendiente-formulario');
+            formularioContainer.style.backgroundColor = '#fff3cd';
+            formularioContainer.style.border = '2px solid #ffc107';
+            formularioContainer.style.borderRadius = '0.5rem';
+            
+            // Actualizar badge a "Pendiente de Confirmar"
+            if (badge) {
+                badge.className = 'badge bg-warning text-dark ms-2';
+                badge.innerHTML = '<i class="fas fa-clock"></i> Pendiente de Confirmar';
+                console.log('⏳ Badge actualizado a pendiente de confirmar');
+            }
+            
+            // Agregar mensaje informativo
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'alert alert-warning mt-2 mb-0 cambio-pendiente-info';
+            infoDiv.innerHTML = `
+                <small>
+                    <i class="fas fa-info-circle me-1"></i>
+                    Formulario completado. <strong>Presiona "Grabar Cambios de esta Etapa"</strong> para confirmar.
+                </small>
+            `;
+            formularioContainer.appendChild(infoDiv);
+            
+        } else {
+            // Comportamiento normal - formulario definitivamente completado
+            formularioContainer.classList.remove('cambio-pendiente-formulario');
+            formularioContainer.style.backgroundColor = '';
+            formularioContainer.style.border = '';
+            
+            // Actualizar badge a completado
+            if (badge) {
+                badge.className = 'badge bg-success ms-2';
+                badge.innerHTML = '<i class="fas fa-check-circle"></i> Completado';
+                console.log('✅ Badge actualizado a completado');
+            }
+        }
+
+        // Reemplazar botones según el estado
+        if (botones) {
+            if (esCambioPendiente) {
+                // Para cambios pendientes, mantener el botón de rellenar pero deshabilitado temporalmente
+                botones.innerHTML = `
+                    <button type="button" class="btn btn-outline-warning btn-sm" disabled
+                            title="Formulario completado, pendiente de confirmación">
+                        <i class="fas fa-clock"></i> Pendiente
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm cancelar-formulario-pendiente" 
+                            data-etapa-form-id="${etapaFormId}"
+                            data-form-nombre="${nombreFormulario}"
+                            title="Cancelar y volver a estado anterior">
+                        <i class="fas fa-undo"></i> Cancelar
+                    </button>
+                `;
+                
+                // Agregar event listener al botón cancelar
+                const cancelarBtn = botones.querySelector('.cancelar-formulario-pendiente');
+                if (cancelarBtn) {
+                    cancelarBtn.addEventListener('click', function() {
+                        console.log('❌ Cancelando formulario pendiente:', etapaFormId);
+                        cancelarFormularioPendiente(etapaFormId);
+                    });
+                }
+                
+            } else {
+                // Para formularios completados definitivamente
+                botones.innerHTML = `
+                    <button type="button" class="btn btn-outline-success btn-sm ver-formulario-completado" 
+                            data-form-run-id="${formRunId}"
+                            data-form-nombre="${nombreFormulario}"
+                            title="Ver formulario completado">
+                        <i class="fas fa-eye"></i> Ver
+                    </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm borrar-formulario" 
+                            data-form-run-id="${formRunId}"
+                            data-etapa-form-id="${etapaFormId}"
+                            data-form-nombre="${nombreFormulario}"
+                            title="Borrar formulario y volver al estado anterior">
+                        <i class="fas fa-trash"></i> Borrar
+                    </button>
+                `;
+                
+                // Agregar event listeners a los nuevos botones
+                const verBtn = botones.querySelector('.ver-formulario-completado');
+                const borrarBtn = botones.querySelector('.borrar-formulario');
+                
+                if (verBtn) {
+                    verBtn.addEventListener('click', function() {
+                        console.log('👁️ Abriendo formulario completado:', formRunId);
+                        abrirFormularioCompletado(formRunId, nombreFormulario);
+                    });
+                    console.log('✅ Event listener agregado al botón Ver');
+                }
+                
+                if (borrarBtn) {
+                    borrarBtn.addEventListener('click', function() {
+                        console.log('🗑️ Confirmando borrado de formulario:', formRunId);
+                        confirmarBorrarFormulario(formRunId, etapaFormId, nombreFormulario);
+                    });
+                    console.log('✅ Event listener agregado al botón Borrar');
+                }
+            }
+        }
+
+        // Actualizar contador de formularios completados
+        actualizarContadorFormulariosCompletados();
+        
+        console.log('🎉 Vista de formulario actualizada exitosamente');
+    }
+
+    // Función auxiliar para obtener etapaId desde etapaFormId
+    function obtenerEtapaIdDesdeEtapaFormId(etapaFormId) {
+        // Buscar en el DOM el contenedor que tenga el etapaFormId
+        const botonFormulario = document.querySelector(`button[data-etapa-form-id="${etapaFormId}"]`);
+        if (!botonFormulario) {
+            console.error('❌ No se encontró botón con etapaFormId:', etapaFormId);
+            return null;
+        }
+
+        // Buscar el contenedor de la etapa que contiene este formulario
+        const etapaContainer = botonFormulario.closest('[data-etapa-id]');
+        if (!etapaContainer) {
+            console.error('❌ No se encontró contenedor de etapa para etapaFormId:', etapaFormId);
+            return null;
+        }
+
+        const etapaId = etapaContainer.dataset.etapaId;
+        console.log('✅ EtapaId encontrado:', { etapaFormId, etapaId });
+        return etapaId;
+    }
+
+    // Función para cancelar un formulario pendiente
+    function cancelarFormularioPendiente(etapaFormId) {
+        console.log('❌ Cancelando formulario pendiente:', etapaFormId);
+        
+        const etapaId = obtenerEtapaIdDesdeEtapaFormId(etapaFormId);
+        if (!etapaId) {
+            console.error('❌ No se pudo obtener etapaId para cancelar formulario');
+            return;
+        }
+
+        // Remover del objeto de cambios pendientes
+        if (cambiosPendientesPorEtapa[etapaId] && cambiosPendientesPorEtapa[etapaId].formularios) {
+            delete cambiosPendientesPorEtapa[etapaId].formularios[etapaFormId];
+            
+            // Si no quedan más cambios pendientes en esta etapa, limpiar el objeto
+            const tieneCambios = (
+                Object.keys(cambiosPendientesPorEtapa[etapaId].formularios || {}).length > 0 ||
+                Object.keys(cambiosPendientesPorEtapa[etapaId].tareas || {}).length > 0 ||
+                Object.keys(cambiosPendientesPorEtapa[etapaId].documentos || {}).length > 0
+            );
+            
+            if (!tieneCambios) {
+                delete cambiosPendientesPorEtapa[etapaId];
+            }
+        }
+
+        // Restaurar el formulario a su estado original
+        const botonFormulario = document.querySelector(`button[data-etapa-form-id="${etapaFormId}"]`);
+        if (botonFormulario) {
+            const formularioContainer = botonFormulario.closest('.formulario-container');
+            if (formularioContainer) {
+                // Remover estilos de cambio pendiente
+                formularioContainer.classList.remove('cambio-pendiente-formulario');
+                formularioContainer.style.backgroundColor = '';
+                formularioContainer.style.border = '';
+                
+                // Remover mensaje informativo
+                const infoDiv = formularioContainer.querySelector('.cambio-pendiente-info');
+                if (infoDiv) {
+                    infoDiv.remove();
+                }
+                
+                // Restaurar badge a "Pendiente"
+                const badge = formularioContainer.querySelector('.badge');
+                if (badge) {
+                    badge.className = 'badge bg-secondary ms-2';
+                    badge.innerHTML = '<i class="fas fa-clock"></i> Pendiente';
+                }
+                
+                // Restaurar botón original
+                const botones = formularioContainer.querySelector('.d-flex.gap-2');
+                const nombreFormulario = formularioContainer.querySelector('strong').textContent;
+                if (botones) {
+                    botones.innerHTML = `
+                        <button type="button" class="btn btn-primary btn-sm rellenar-formulario" 
+                                data-etapa-form-id="${etapaFormId}"
+                                data-form-id="${botonFormulario.dataset.formId}"
+                                data-form-nombre="${nombreFormulario}"
+                                title="Rellenar formulario">
+                            <i class="fas fa-edit"></i> Rellenar
+                        </button>
+                    `;
+                    
+                    // Re-agregar event listener
+                    const nuevoBoton = botones.querySelector('.rellenar-formulario');
+                    if (nuevoBoton) {
+                        nuevoBoton.addEventListener('click', function() {
+                            const formId = this.dataset.formId;
+                            const etapaFormId = this.dataset.etapaFormId;
+                            const nombreForm = this.dataset.formNombre;
+                            console.log('📝 Abriendo formulario:', { formId, etapaFormId, nombreForm });
+                            abrirFormulario(formId, etapaFormId, nombreForm);
+                        });
+                    }
+                }
+            }
+        }
+
+        // Actualizar contadores
+        actualizarContadorFormulariosCompletados();
+        
+        // Actualizar botón de grabar cambios
+        actualizarBotonGrabarCambios();
+        
+        mostrarNotificacion('Formulario cancelado', 'info', 2000);
+        console.log('✅ Formulario pendiente cancelado exitosamente');
+    }
+
+    // Función para abrir formulario completado en modo lectura
+    function abrirFormularioCompletado(formRunId, nombreFormulario) {
+        console.log('Abriendo formulario completado:', { formRunId, nombreFormulario });
+        
+        // Mostrar indicador de carga
+        mostrarNotificacion('Cargando formulario...', 'info', 2000);
+        
+        fetch(`{{ route('ejecucion.formulario.ver', ':formRunId') }}`.replace(':formRunId', formRunId))
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Abrir modal con formulario en modo lectura
+                    abrirModalFormularioCompletado(formRunId, nombreFormulario);
+                } else {
+                    mostrarNotificacion(data.message || 'Error al cargar el formulario', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                mostrarNotificacion('Error de conexión al cargar el formulario', 'error');
+            });
+    }
+
+    // Función para confirmar borrado de formulario
+    function confirmarBorrarFormulario(formRunId, etapaFormId, nombreFormulario) {
+        if (confirm(`¿Estás seguro de que deseas borrar el formulario "${nombreFormulario}"?\n\nEsta acción no se puede deshacer y el formulario volverá al estado pendiente.`)) {
+            borrarFormulario(formRunId, etapaFormId, nombreFormulario);
+        }
+    }
+
+    // Función para borrar formulario
+    function borrarFormulario(formRunId, etapaFormId, nombreFormulario) {
+        console.log('Borrando formulario:', { formRunId, etapaFormId, nombreFormulario });
+        
+        // Mostrar indicador de carga
+        mostrarNotificacion('Borrando formulario...', 'warning', 0);
+        
+        fetch(`{{ route('ejecucion.formulario.borrar', ':formRunId') }}`.replace(':formRunId', formRunId), {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                mostrarNotificacion('Formulario borrado exitosamente', 'success');
+                
+                // Actualizar la vista para mostrar el formulario como pendiente
+                actualizarVistaFormularioPendiente(etapaFormId, nombreFormulario);
+            } else {
+                mostrarNotificacion(data.message || 'Error al borrar el formulario', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarNotificacion('Error de conexión al borrar el formulario', 'error');
+        });
+    }
+
+    // Función para actualizar vista a formulario pendiente
+    function actualizarVistaFormularioPendiente(etapaFormId, nombreFormulario) {
+        console.log('Actualizando vista a formulario pendiente:', { etapaFormId, nombreFormulario });
+        
+        // Buscar el contenedor del formulario en la vista por el botón de borrar
+        const borrarBtn = document.querySelector(`[data-etapa-form-id="${etapaFormId}"]`);
+        const formularioContainer = borrarBtn ? borrarBtn.closest('.formulario-container') : null;
+        
+        if (!formularioContainer) {
+            console.error('No se encontró el contenedor del formulario');
+            return;
+        }
+
+        // Buscar elementos a actualizar
+        const badge = formularioContainer.querySelector('.badge');
+        const botones = formularioContainer.querySelector('.d-flex.gap-2');
+
+        // Actualizar badge a pendiente
+        if (badge) {
+            badge.className = 'badge bg-secondary ms-2';
+            badge.innerHTML = '<i class="fas fa-minus-circle"></i> Pendiente';
+        }
+
+        // Reemplazar botones con el botón de rellenar
+        if (botones) {
+            botones.innerHTML = `
+                <button type="button" class="btn btn-success btn-sm rellenar-formulario" 
+                        data-etapa-form-id="${etapaFormId}"
+                        data-form-nombre="${nombreFormulario}"
+                        data-form-run-id=""
+                        title="Rellenar formulario">
+                    <i class="fas fa-edit"></i> Rellenar
+                </button>
+            `;
+            
+            // Agregar event listener al nuevo botón
+            const rellenarBtn = botones.querySelector('.rellenar-formulario');
+            if (rellenarBtn) {
+                rellenarBtn.addEventListener('click', function() {
+                    const etapaFormId = this.getAttribute('data-etapa-form-id');
+                    const formNombre = this.getAttribute('data-form-nombre');
+                    abrirModalFormulario(etapaFormId, null, formNombre);
+                });
+            }
+        }
+
+        // Actualizar contador de formularios completados
+        actualizarContadorFormulariosCompletados();
+        
+        console.log('Vista actualizada a formulario pendiente');
+    }
+
+    // Función para actualizar contador de formularios completados
+    function actualizarContadorFormulariosCompletados() {
+        // Contar formularios completados en todas las etapas
+        const formulariosCompletados = document.querySelectorAll('.badge.bg-success').length;
+        const totalFormularios = document.querySelectorAll('.formulario-container').length;
+        
+        // Actualizar contadores
+        document.querySelectorAll('.formularios-completados').forEach(span => {
+            span.textContent = formulariosCompletados;
+        });
+        
+        document.querySelectorAll('.total-formularios').forEach(span => {
+            span.textContent = totalFormularios;
+        });
     }
 });
 </script>
