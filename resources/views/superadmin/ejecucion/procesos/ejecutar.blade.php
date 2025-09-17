@@ -927,13 +927,30 @@ button[disabled] {
                             <div class="d-flex gap-2">
                                 @if($flujo->proceso_iniciado)
                                     @if($formularioCompletado)
-                                        <!-- Botón para ver formulario completado -->
-                                        <button type="button" class="btn btn-outline-success btn-sm ver-formulario-completado" 
-                                                data-form-run-id="{{ $formRun->id }}"
-                                                data-form-nombre="{{ $etapaForm->form->nombre }}"
-                                                title="Ver formulario completado">
-                                            <i class="fas fa-eye"></i> Ver
-                                        </button>
+                                        <!-- Botones para formulario completado -->
+                                        <div class="btn-group" role="group">
+                                            <!-- Botón para ver formulario completado -->
+                                            <button type="button" class="btn btn-outline-success btn-sm ver-formulario-completado" 
+                                                    data-form-run-id="{{ $formRun->id }}"
+                                                    data-form-nombre="{{ $etapaForm->form->nombre }}"
+                                                    title="Ver formulario completado">
+                                                <i class="fas fa-eye"></i> Ver
+                                            </button>
+                                            
+                                            @php
+                                                $pdfTemplate = $etapaForm->form->pdfTemplates->first();
+                                            @endphp
+                                            @if($pdfTemplate)
+                                                <!-- Botón para generar PDF -->
+                                                <button type="button" class="btn btn-outline-danger btn-sm ver-formulario-pdf"
+                                                        data-form-run-id="{{ $formRun->id }}"
+                                                        data-template-id="{{ $pdfTemplate->id }}"
+                                                        data-form-nombre="{{ $etapaForm->form->nombre }}"
+                                                        title="Descargar formulario como PDF">
+                                                    <i class="fas fa-file-pdf"></i> PDF
+                                                </button>
+                                            @endif
+                                        </div>
                                     @else
                                         <!-- Botón para rellenar formulario -->
                                         <button type="button" class="btn btn-success btn-sm rellenar-formulario" 
@@ -3684,6 +3701,21 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
+        // Event listener para ver formulario como PDF
+        document.querySelectorAll('.ver-formulario-pdf').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const formRunId = this.dataset.formRunId;
+                const templateId = this.dataset.templateId;
+                const formNombre = this.dataset.formNombre;
+                
+                console.log('Generando PDF de formulario:', {formRunId, templateId, formNombre});
+                
+                // Abrir PDF en nueva pestaña - construir URL directamente
+                const pdfUrl = `/form-runs/${formRunId}/pdf/${templateId}`;
+                window.open(pdfUrl, '_blank');
+            });
+        });
+
         // Event listener para guardar borrador
         document.getElementById('guardar-borrador-formulario')?.addEventListener('click', function() {
             guardarFormulario('borrador');
@@ -5185,13 +5217,22 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 // Para formularios completados definitivamente
                 botones.innerHTML = `
-                    <button type="button" class="btn btn-outline-success btn-sm ver-formulario-completado" 
-                            data-form-run-id="${formRunId}"
-                            data-form-nombre="${nombreFormulario}"
-                            title="Ver formulario completado">
-                        <i class="fas fa-eye"></i> Ver
-                    </button>
-                    <button type="button" class="btn btn-outline-danger btn-sm borrar-formulario" 
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-outline-success btn-sm ver-formulario-completado" 
+                                data-form-run-id="${formRunId}"
+                                data-form-nombre="${nombreFormulario}"
+                                title="Ver formulario completado">
+                            <i class="fas fa-eye"></i> Ver
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm ver-formulario-pdf-dinamico" 
+                                data-form-run-id="${formRunId}"
+                                data-form-nombre="${nombreFormulario}"
+                                title="Descargar formulario como PDF"
+                                style="display: none;">
+                            <i class="fas fa-file-pdf"></i> PDF
+                        </button>
+                    </div>
+                    <button type="button" class="btn btn-outline-danger btn-sm borrar-formulario ms-2" 
                             data-form-run-id="${formRunId}"
                             data-etapa-form-id="${etapaFormId}"
                             data-form-nombre="${nombreFormulario}"
@@ -5202,7 +5243,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Agregar event listeners a los nuevos botones
                 const verBtn = botones.querySelector('.ver-formulario-completado');
+                const pdfBtn = botones.querySelector('.ver-formulario-pdf-dinamico');
                 const borrarBtn = botones.querySelector('.borrar-formulario');
+                
+                // Verificar si existe plantilla PDF para este formulario
+                verificarPlantillaPDF(formRunId, pdfBtn);
                 
                 if (verBtn) {
                     verBtn.addEventListener('click', function() {
@@ -5218,6 +5263,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         confirmarBorrarFormulario(formRunId, etapaFormId, nombreFormulario);
                     });
                     console.log('✅ Event listener agregado al botón Borrar');
+                }
+                
+                if (pdfBtn) {
+                    pdfBtn.addEventListener('click', function() {
+                        const templateId = this.dataset.templateId;
+                        console.log('📄 Generando PDF de formulario:', {formRunId, templateId, nombreFormulario});
+                        
+                        // Abrir PDF en nueva pestaña - construir URL directamente
+                        const pdfUrl = `/form-runs/${formRunId}/pdf/${templateId}`;
+                        window.open(pdfUrl, '_blank');
+                    });
+                    console.log('✅ Event listener agregado al botón PDF');
                 }
             }
         }
@@ -5464,6 +5521,35 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.total-formularios').forEach(span => {
             span.textContent = totalFormularios;
         });
+    }
+
+    // Función para verificar si existe plantilla PDF para un formulario
+    async function verificarPlantillaPDF(formRunId, pdfBtn) {
+        try {
+            const response = await fetch(`/ejecucion/formulario/verificar-plantilla-pdf/${formRunId}`, {
+                method: 'GET',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'Accept': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+            
+            if (data.success && data.template_id) {
+                // Mostrar el botón PDF
+                pdfBtn.style.display = 'block';
+                pdfBtn.dataset.templateId = data.template_id;
+                console.log('✅ Plantilla PDF encontrada para FormRun:', formRunId, 'Template:', data.template_id);
+            } else {
+                // Ocultar el botón PDF
+                pdfBtn.style.display = 'none';
+                console.log('ℹ️ No hay plantilla PDF para FormRun:', formRunId);
+            }
+        } catch (error) {
+            console.error('❌ Error verificando plantilla PDF:', error);
+            pdfBtn.style.display = 'none';
+        }
     }
 });
 </script>

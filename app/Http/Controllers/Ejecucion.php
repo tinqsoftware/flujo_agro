@@ -3995,4 +3995,53 @@ class Ejecucion extends Controller
         }
     }
 
+    /**
+     * Verificar si existe plantilla PDF para un FormRun
+     */
+    public function verificarPlantillaPdf($formRunId)
+    {
+        try {
+            $formRun = FormRun::find($formRunId);
+            
+            if (!$formRun) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'FormRun no encontrado'
+                ], 404);
+            }
+
+            // Verificar que el usuario tenga acceso
+            if ($formRun->id_emp != Auth::user()->id_emp) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes acceso a este formulario'
+                ], 403);
+            }
+
+            // Buscar plantilla PDF para este formulario
+            $pdfTemplate = \App\Models\PdfTemplate::where('id_form', $formRun->id_form)->first();
+            
+            if ($pdfTemplate) {
+                return response()->json([
+                    'success' => true,
+                    'template_id' => $pdfTemplate->id,
+                    'template_name' => $pdfTemplate->nombre
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No hay plantilla PDF disponible para este formulario'
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error verificando plantilla PDF: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error verificando plantilla PDF'
+            ], 500);
+        }
+    }
+
 }

@@ -196,6 +196,7 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::get('ejecucion/formulario/ver/{formRunId}', [Ejecucion::class, 'verFormulario'])->name('ejecucion.formulario.ver');
         Route::post('ejecucion/formulario/guardar', [Ejecucion::class, 'guardarFormulario'])->name('ejecucion.formulario.guardar');
         Route::delete('ejecucion/formulario/borrar/{formRunId}', [Ejecucion::class, 'borrarFormulario'])->name('ejecucion.formulario.borrar');
+        Route::get('ejecucion/formulario/verificar-plantilla-pdf/{formRunId}', [Ejecucion::class, 'verificarPlantillaPdf'])->name('ejecucion.verificar-plantilla-pdf');
 
     
         // Gestión de Usuarios (SUPERADMIN y ADMINISTRADOR)
@@ -212,6 +213,7 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::post('form-runs/{run}/submit',   [FormRunController::class,'submit'])->name('form-runs.submit');
         Route::post('form-runs/{run}/approve',  [FormRunController::class,'approve'])->name('form-runs.approve');
         Route::get ('form-runs/{run}/pdf/{template}', [PdfRenderController::class,'show'])->name('form-runs.pdf');
+        Route::get ('form-runs/{run}/pdf', [PdfRenderController::class,'showWithoutTemplate'])->name('form-runs.pdf.basic');
 
     });
     

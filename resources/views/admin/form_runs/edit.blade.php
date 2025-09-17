@@ -18,7 +18,8 @@
       <a class="btn btn-outline-secondary"
          href="{{ route('form-runs.pdf', [$run->id, $templateId]) }}" target="_blank">Generar PDF</a>
     @else
-      <a class="btn btn-outline-secondary disabled" href="#">PDF (sin plantilla)</a>
+      <a class="btn btn-outline-secondary" 
+         href="{{ route('form-runs.pdf.basic', $run->id) }}" target="_blank">Generar PDF</a>
     @endif
   </div>
 </div>
