@@ -1853,7 +1853,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         }
         
-        console.log(`✅ Cambio agregado para etapa ${etapaId}:`, { tipo, id, estado, datos });
+        console.log(` Cambio agregado para etapa ${etapaId}:`, { tipo, id, estado, datos });
         console.log('📊 Estado actual de cambios pendientes:', cambiosPendientesPorEtapa[etapaId]);
         
         // Actualizar contador de cambios para esta etapa
@@ -2495,16 +2495,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
                 
-                console.log('📋 TareaElement encontrado:', tareaElement);
+                console.log(' TareaElement encontrado:', tareaElement);
                 
                 if (tareaElement) {
-                    console.log('✅ Ejecutando verificación automática de tarea...');
+                    console.log(' Ejecutando verificación automática de tarea...');
                     setTimeout(() => {
                         console.log('⏰ Timeout ejecutado, llamando verificarYActualizarEstadoTarea');
                         verificarYActualizarEstadoTarea(tareaElement);
                     }, 100);
                 } else {
-                    console.log('❌ No se encontró tareaElement para verificación automática');
+                    console.log(' No se encontró tareaElement para verificación automática');
                     console.log('📄 DocumentoItem:', documentoItem);
                     console.log('🔍 Buscando [data-tarea-id] en ancestors...');
                     let ancestor = documentoItem.parentElement;
@@ -2512,7 +2512,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     while (ancestor && level <= 10) {
                         console.log(`  Nivel ${level}:`, ancestor, ancestor.getAttribute('data-tarea-id'));
                         if (ancestor.getAttribute('data-tarea-id')) {
-                            console.log(`  ✅ Encontrado en nivel ${level}!`);
+                            console.log(`   Encontrado en nivel ${level}!`);
                             break;
                         }
                         ancestor = ancestor.parentElement;
@@ -3503,11 +3503,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para verificar automáticamente si una tarea debe marcarse/desmarcarse basándose en sus documentos
     function verificarYActualizarEstadoTarea(tareaElement) {
-        console.log('🚀 === INICIANDO verificarYActualizarEstadoTarea ===');
-        console.log('📋 TareaElement recibido:', tareaElement);
+        console.log(' === INICIANDO verificarYActualizarEstadoTarea ===');
+        console.log(' TareaElement recibido:', tareaElement);
         
         if (!tareaElement) {
-            console.log('❌ TareaElement es null o undefined');
+            console.log(' TareaElement es null o undefined');
             return;
         }
 
@@ -3515,7 +3515,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('🆔 TareaId extraído:', tareaId);
         
         if (!tareaId) {
-            console.log('❌ No se pudo extraer tareaId del elemento');
+            console.log(' No se pudo extraer tareaId del elemento');
             return;
         }
 
@@ -3622,11 +3622,11 @@ document.addEventListener('DOMContentLoaded', function() {
             // Actualizar en el servidor
             actualizarTareaIndividual(tareaId, true)
                 .then(() => {
-                    console.log(`✅ Tarea ${tareaId} marcada exitosamente en BD`);
+                    console.log(` Tarea ${tareaId} marcada exitosamente en BD`);
                     mostrarMensajeExito('Tarea completada automáticamente al subir todos los documentos.');
                 })
                 .catch(error => {
-                    console.error('❌ Error al actualizar tarea:', error);
+                    console.error(' Error al actualizar tarea:', error);
                     // Revertir cambio visual si falla
                     tareaCheckbox.checked = false;
                     actualizarVisualTarea(tareaCheckbox, false);
@@ -3658,11 +3658,11 @@ document.addEventListener('DOMContentLoaded', function() {
             // Actualizar en el servidor
             actualizarTareaIndividual(tareaId, false)
                 .then(() => {
-                    console.log(`✅ Tarea ${tareaId} desmarcada exitosamente en BD`);
+                    console.log(` Tarea ${tareaId} desmarcada exitosamente en BD`);
                     mostrarMensajeExito('Tarea desmarcada automáticamente porque faltan documentos.');
                 })
                 .catch(error => {
-                    console.error('❌ Error al actualizar tarea:', error);
+                    console.error(' Error al actualizar tarea:', error);
                     // Revertir cambio visual si falla
                     tareaCheckbox.checked = true;
                     actualizarVisualTarea(tareaCheckbox, true);
@@ -3723,23 +3723,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Event listener para completar formulario
         document.getElementById('completar-formulario')?.addEventListener('click', function() {
-            console.log('🚀 Botón Completar Formulario presionado');
+            console.log(' Botón Completar Formulario presionado');
             
             // Verificar que existe el formulario
             const form = document.getElementById('dynamic-form');
             if (!form) {
-                console.error('❌ No se encontró el formulario dynamic-form');
+                console.error(' No se encontró el formulario dynamic-form');
                 mostrarNotificacion('Error: No se encontró el formulario', 'error');
                 return;
             }
             
-            console.log('✅ Formulario encontrado, procediendo con validación');
+            console.log(' Formulario encontrado, procediendo con validación');
             
             if (validarFormulario()) {
-                console.log('✅ Validación exitosa, guardando formulario como completado');
+                console.log(' Validación exitosa, guardando formulario como completado');
                 guardarFormulario('completado');
             } else {
-                console.log('❌ Validación falló');
+                console.log(' Validación falló');
             }
         });
     }
@@ -3825,7 +3825,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para renderizar el formulario dinámico
     function renderizarFormulario(formulario, respuestas = {}) {
-        console.log('🎨 Renderizando formulario con respuestas:', respuestas);
+        console.log(' Renderizando formulario con respuestas:', respuestas);
         
         const contenedor = document.getElementById('formulario-contenido');
         let html = '<form id="dynamic-form">';
@@ -3834,8 +3834,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const grupos = formulario.groups || [];
         const camposSinGrupo = formulario.fields.filter(field => !field.id_group);
 
-        console.log('📊 Campos sin grupo encontrados:', camposSinGrupo.length);
-        console.log('📂 Grupos encontrados:', grupos.length);
+        console.log('Campos sin grupo encontrados:', camposSinGrupo.length);
+        console.log(' Grupos encontrados:', grupos.length);
 
         // Renderizar grupos
         grupos.forEach(grupo => {
@@ -3917,7 +3917,7 @@ document.addEventListener('DOMContentLoaded', function() {
             camposSinGrupo.forEach(field => {
                 // Usar field.codigo para buscar la respuesta (que viene del controlador como {field_codigo: valor})
                 const valor = respuestas[field.codigo] || '';
-                console.log(`📝 Campo ${field.codigo}: valor="${valor}" (etiqueta: ${field.etiqueta})`);
+                console.log(` Campo ${field.codigo}: valor="${valor}" (etiqueta: ${field.etiqueta})`);
                 html += renderizarCampo(field, valor);
             });
             html += '</div></div></div>';
@@ -4109,16 +4109,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para validar el formulario
     function validarFormulario() {
-        console.log('🔍 Iniciando validación del formulario');
+        console.log(' Iniciando validación del formulario');
         
         const form = document.getElementById('dynamic-form');
         if (!form) {
-            console.error('❌ No se encontró el formulario para validar');
+            console.error(' No se encontró el formulario para validar');
             return false;
         }
 
         const elementos = form.querySelectorAll('[required]');
-        console.log(`📋 Elementos requeridos encontrados: ${elementos.length}`);
+        console.log(` Elementos requeridos encontrados: ${elementos.length}`);
         
         let valido = true;
 
@@ -4129,18 +4129,18 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!valor) {
                 elemento.classList.add('is-invalid');
                 valido = false;
-                console.log(`❌ Campo ${elemento.name || elemento.id} está vacío`);
+                console.log(` Campo ${elemento.name || elemento.id} está vacío`);
             } else {
                 elemento.classList.remove('is-invalid');
-                console.log(`✅ Campo ${elemento.name || elemento.id} validado`);
+                console.log(` Campo ${elemento.name || elemento.id} validado`);
             }
         });
 
         if (!valido) {
-            console.log('❌ Validación falló - campos requeridos vacíos');
+            console.log(' Validación falló - campos requeridos vacíos');
             mostrarNotificacion('Por favor, complete todos los campos requeridos', 'warning');
         } else {
-            console.log('✅ Validación exitosa - todos los campos completos');
+            console.log(' Validación exitosa - todos los campos completos');
         }
 
         return valido;
@@ -4148,23 +4148,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para guardar el formulario
     function guardarFormulario(estado) {
-        console.log(`💾 Iniciando guardado del formulario con estado: ${estado}`);
+        console.log(` Iniciando guardado del formulario con estado: ${estado}`);
         
         const form = document.getElementById('dynamic-form');
         if (!form) {
-            console.error('❌ No se encontró el formulario para guardar');
+            console.error(' No se encontró el formulario para guardar');
             mostrarNotificacion('Error: No se encontró el formulario', 'error');
             return;
         }
 
         // Verificar que window.formularioActual existe
         if (!window.formularioActual) {
-            console.error('❌ No se encontró window.formularioActual');
+            console.error(' No se encontró window.formularioActual');
             mostrarNotificacion('Error: Datos del formulario no encontrados', 'error');
             return;
         }
 
-        console.log('📊 Datos del formulario actual:', window.formularioActual);
+        console.log(' Datos del formulario actual:', window.formularioActual);
 
         const formData = new FormData(form);
         const data = {
@@ -4175,7 +4175,7 @@ document.addEventListener('DOMContentLoaded', function() {
             respuestas: {}
         };
 
-        console.log('📝 Recopilando respuestas del formulario...');
+        console.log(' Recopilando respuestas del formulario...');
 
         // Recopilar respuestas
         for (let [key, value] of formData.entries()) {
@@ -4195,7 +4195,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        console.log('📦 Datos a enviar:', data);
+        console.log(' Datos a enviar:', data);
 
         // Enviar al servidor
         fetch(`{{ route('ejecucion.formulario.guardar') }}`, {
@@ -4225,7 +4225,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Si el formulario se completó, actualizar la vista dinámicamente E INTEGRAR CON CAMBIOS PENDIENTES
                 if (estado === 'completado' && data.formRunId) {
-                    console.log('📋 Actualizando vista del formulario completado');
+                    console.log(' Actualizando vista del formulario completado');
                     console.log('🔍 Datos recibidos del servidor:', data);
                     
                     // Usar etapaFormId del servidor si está disponible, sino usar el de window.formularioActual
@@ -4258,12 +4258,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
             } else {
-                console.error('❌ Error en respuesta del servidor:', data);
+                console.error(' Error en respuesta del servidor:', data);
                 mostrarNotificacion(`Error al guardar: ${data.message || 'Error desconocido'}`, 'error');
             }
         })
         .catch(error => {
-            console.error('❌ Error al guardar formulario:', error);
+            console.error(' Error al guardar formulario:', error);
             mostrarNotificacion('Error al guardar el formulario', 'error');
         });
     }
@@ -4537,11 +4537,11 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             // Calcular valor inicial
-            console.log(`🚀 Calculando valor inicial para ${fieldCode}`);
+            console.log(` Calculando valor inicial para ${fieldCode}`);
             calculateFormula(field, expression, outputType);
         });
         
-        console.log('✅ Cálculos en tiempo real configurados');
+        console.log(' Cálculos en tiempo real configurados');
     }
 
     // Función para encontrar campos relacionados en una expresión
@@ -4661,7 +4661,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     hiddenInput.value = formattedResult;
                     console.log(`🔒 Input hidden actualizado con: ${formattedResult}`);
                 } else {
-                    console.log(`❌ No se encontró input hidden para ${fieldCode}`);
+                    console.log(` No se encontró input hidden para ${fieldCode}`);
                 }
             } else if (outputField.type === 'hidden') {
                 // Es un input hidden de output, buscar el DIV visual correspondiente
@@ -4673,7 +4673,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log(`📺 Actualizando DIV visual con resultado: ${formattedResult}`);
                     visualDiv.innerHTML = `<span class="fw-bold text-success">${formattedResult}</span>`;
                 } else {
-                    console.log(`❌ No se encontró DIV visual para ${fieldCode}`);
+                    console.log(` No se encontró DIV visual para ${fieldCode}`);
                 }
                 
                 // Actualizar el input hidden también
@@ -4685,10 +4685,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 outputField.value = formattedResult;
             }
             
-            console.log(`✅ Cálculo completado exitosamente`);
+            console.log(` Cálculo completado exitosamente`);
             
         } catch (error) {
-            console.error('❌ Error calculando fórmula:', error);
+            console.error(' Error calculando fórmula:', error);
             if (outputField.tagName === 'DIV') {
                 outputField.innerHTML = '<span class="text-danger">Error en cálculo</span>';
                 
@@ -4759,13 +4759,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         value = input.checked ? 1 : 0;
                     }
                     
-                    console.log(`✅ Valor encontrado para ${fieldCode}: ${value} (usando ${selector})`);
+                    console.log(` Valor encontrado para ${fieldCode}: ${value} (usando ${selector})`);
                     return parseFloat(value) || 0;
                 }
             }
         }
         
-        console.log(`❌ No se encontró valor para campo: ${fieldCode}, retornando 0`);
+        console.log(` No se encontró valor para campo: ${fieldCode}, retornando 0`);
         return 0;
     }
 
@@ -4782,16 +4782,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const allowedChars = /^[0-9+\-*/.() ]+$/;
         
         if (!allowedChars.test(expression)) {
-            console.log(`❌ Caracteres no permitidos en: "${expression}"`);
+            console.log(` Caracteres no permitidos en: "${expression}"`);
             throw new Error(`Expresión contiene caracteres no permitidos: ${expression}`);
         }
         
         try {
             const result = Function(`"use strict"; return (${expression})`)();
-            console.log(`✅ Resultado de evaluación: ${result}`);
+            console.log(` Resultado de evaluación: ${result}`);
             return result;
         } catch (error) {
-            console.log(`❌ Error en evaluación:`, error);
+            console.log(` Error en evaluación:`, error);
             throw new Error('Error evaluando expresión: ' + error.message);
         }
     }
@@ -4917,19 +4917,19 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Validar formulario solo si se está completando
         if (estado === 'completado' && !validarFormulario()) {
-            console.log('❌ Validación falló, no se puede completar');
+            console.log(' Validación falló, no se puede completar');
             return;
         }
         
         const form = document.getElementById('dynamic-form');
         if (!form) {
-            console.error('❌ No se encontró el formulario para guardar');
+            console.error(' No se encontró el formulario para guardar');
             mostrarNotificacion('Error: No se encontró el formulario', 'error');
             return;
         }
 
         if (!window.formularioActual) {
-            console.error('❌ No se encontró window.formularioActual');
+            console.error(' No se encontró window.formularioActual');
             mostrarNotificacion('Error: Datos del formulario no encontrados', 'error');
             return;
         }
@@ -5036,7 +5036,7 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(response => response.json())
         .then(data => {
-            console.log('✅ Respuesta del servidor:', data);
+            console.log(' Respuesta del servidor:', data);
             
             if (data.success) {
                 // Actualizar form_run_id si es nuevo
@@ -5062,12 +5062,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log('💾 Borrador guardado');
                 }
             } else {
-                console.error('❌ Error del servidor:', data.message);
+                console.error(' Error del servidor:', data.message);
                 mostrarNotificacion(data.message || 'Error al guardar el formulario', 'error');
             }
         })
         .catch(error => {
-            console.error('❌ Error de conexión:', error);
+            console.error(' Error de conexión:', error);
             mostrarNotificacion('Error de conexión al guardar el formulario', 'error');
         })
         .finally(() => {
@@ -5123,7 +5123,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const botonRellenar = document.querySelector(`button[data-etapa-form-id="${etapaFormId}"]`);
         
         if (!botonRellenar) {
-            console.error('❌ No se encontró el botón del formulario con etapaFormId:', etapaFormId);
+            console.error(' No se encontró el botón del formulario con etapaFormId:', etapaFormId);
             // Como fallback, buscar todos los botones y ver si alguno coincide
             const todosLosBotones = document.querySelectorAll('[data-etapa-form-id]');
             console.log('🔍 Botones disponibles:', Array.from(todosLosBotones).map(b => ({
@@ -5136,11 +5136,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const formularioContainer = botonRellenar.closest('.formulario-container');
         
         if (!formularioContainer) {
-            console.error('❌ No se encontró el contenedor del formulario');
+            console.error(' No se encontró el contenedor del formulario');
             return;
         }
 
-        console.log('✅ Contenedor encontrado, actualizando elementos...');
+        console.log(' Contenedor encontrado, actualizando elementos...');
 
         // Buscar elementos a actualizar
         const badge = formularioContainer.querySelector('.badge');
@@ -5184,7 +5184,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (badge) {
                 badge.className = 'badge bg-success ms-2';
                 badge.innerHTML = '<i class="fas fa-check-circle"></i> Completado';
-                console.log('✅ Badge actualizado a completado');
+                console.log(' Badge actualizado a completado');
             }
         }
 
@@ -5209,7 +5209,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const cancelarBtn = botones.querySelector('.cancelar-formulario-pendiente');
                 if (cancelarBtn) {
                     cancelarBtn.addEventListener('click', function() {
-                        console.log('❌ Cancelando formulario pendiente:', etapaFormId);
+                        console.log(' Cancelando formulario pendiente:', etapaFormId);
                         cancelarFormularioPendiente(etapaFormId);
                     });
                 }
@@ -5254,7 +5254,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         console.log('👁️ Abriendo formulario completado:', formRunId);
                         abrirFormularioCompletado(formRunId, nombreFormulario);
                     });
-                    console.log('✅ Event listener agregado al botón Ver');
+                    console.log(' Event listener agregado al botón Ver');
                 }
                 
                 if (borrarBtn) {
@@ -5262,7 +5262,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         console.log('🗑️ Confirmando borrado de formulario:', formRunId);
                         confirmarBorrarFormulario(formRunId, etapaFormId, nombreFormulario);
                     });
-                    console.log('✅ Event listener agregado al botón Borrar');
+                    console.log(' Event listener agregado al botón Borrar');
                 }
                 
                 if (pdfBtn) {
@@ -5274,7 +5274,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         const pdfUrl = `/form-runs/${formRunId}/pdf/${templateId}`;
                         window.open(pdfUrl, '_blank');
                     });
-                    console.log('✅ Event listener agregado al botón PDF');
+                    console.log(' Event listener agregado al botón PDF');
                 }
             }
         }
@@ -5290,29 +5290,29 @@ document.addEventListener('DOMContentLoaded', function() {
         // Buscar en el DOM el contenedor que tenga el etapaFormId
         const botonFormulario = document.querySelector(`button[data-etapa-form-id="${etapaFormId}"]`);
         if (!botonFormulario) {
-            console.error('❌ No se encontró botón con etapaFormId:', etapaFormId);
+            console.error(' No se encontró botón con etapaFormId:', etapaFormId);
             return null;
         }
 
         // Buscar el contenedor de la etapa que contiene este formulario
         const etapaContainer = botonFormulario.closest('[data-etapa-id]');
         if (!etapaContainer) {
-            console.error('❌ No se encontró contenedor de etapa para etapaFormId:', etapaFormId);
+            console.error(' No se encontró contenedor de etapa para etapaFormId:', etapaFormId);
             return null;
         }
 
         const etapaId = etapaContainer.dataset.etapaId;
-        console.log('✅ EtapaId encontrado:', { etapaFormId, etapaId });
+        console.log(' EtapaId encontrado:', { etapaFormId, etapaId });
         return etapaId;
     }
 
     // Función para cancelar un formulario pendiente
     function cancelarFormularioPendiente(etapaFormId) {
-        console.log('❌ Cancelando formulario pendiente:', etapaFormId);
+        console.log(' Cancelando formulario pendiente:', etapaFormId);
         
         const etapaId = obtenerEtapaIdDesdeEtapaFormId(etapaFormId);
         if (!etapaId) {
-            console.error('❌ No se pudo obtener etapaId para cancelar formulario');
+            console.error(' No se pudo obtener etapaId para cancelar formulario');
             return;
         }
 
@@ -5391,7 +5391,7 @@ document.addEventListener('DOMContentLoaded', function() {
         actualizarBotonGrabarCambios();
         
         mostrarNotificacion('Formulario cancelado', 'info', 2000);
-        console.log('✅ Formulario pendiente cancelado exitosamente');
+        console.log(' Formulario pendiente cancelado exitosamente');
     }
 
     // Función para abrir formulario completado en modo lectura
@@ -5540,14 +5540,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Mostrar el botón PDF
                 pdfBtn.style.display = 'block';
                 pdfBtn.dataset.templateId = data.template_id;
-                console.log('✅ Plantilla PDF encontrada para FormRun:', formRunId, 'Template:', data.template_id);
+                console.log(' Plantilla PDF encontrada para FormRun:', formRunId, 'Template:', data.template_id);
             } else {
                 // Ocultar el botón PDF
                 pdfBtn.style.display = 'none';
                 console.log('ℹ️ No hay plantilla PDF para FormRun:', formRunId);
             }
         } catch (error) {
-            console.error('❌ Error verificando plantilla PDF:', error);
+            console.error(' Error verificando plantilla PDF:', error);
             pdfBtn.style.display = 'none';
         }
     }
