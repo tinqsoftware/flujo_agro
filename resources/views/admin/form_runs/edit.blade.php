@@ -61,6 +61,9 @@
       @endif
     @endif
     @endif
+
+    {{-- Fallback visible siempre: permitir generar PDF aunque la búsqueda de archivo guardado falle en producción --}}
+    <a class="btn btn-outline-secondary ms-2" href="{{ $templateId ? route('form-runs.pdf', [$run->id, $templateId]) : route('form-runs.pdf.basic', $run->id) }}" target="_blank" title="Generar PDF (fallback)">Generar PDF</a>
   </div>
 </div>
 
