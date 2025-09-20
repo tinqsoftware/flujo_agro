@@ -1214,9 +1214,23 @@ button[disabled] {
 @push('scripts')
 <script>
 // Variables globales desde PHP
-const flujoId = {{ $flujo->id }};
-let detalleFlujoId = {{ $flujo->detalle_flujo_id ?? 'null' }};
-let procesoIniciado = {{ $flujo->proceso_iniciado ? 'true' : 'false' }};
+const flujoId = {!! json_encode($flujo->id) !!};
+let detalleFlujoId = {!! json_encode($flujo->detalle_flujo_id ?? null) !!};
+let procesoIniciado = {!! json_encode($flujo->proceso_iniciado ? true : false) !!};
+
+// Rutas usadas por JS (usar placeholders ':detalleFlujoId', ':formRunId', ':etapaFormId', ':flujoId' cuando sea necesario)
+const ROUTES = {
+    detalle_progreso: {!! json_encode(route('ejecucion.detalle.progreso', ':detalleFlujoId')) !!},
+    crear: {!! json_encode(route('ejecucion.crear', ':flujoId')) !!},
+    tarea_actualizar: {!! json_encode(route('ejecucion.detalle.tarea.actualizar')) !!},
+    documento_validar: {!! json_encode(route('ejecucion.detalle.documento.validar')) !!},
+    documento_subir: {!! json_encode(route('ejecucion.detalle.documento.subir')) !!},
+    formulario_guardar: {!! json_encode(route('ejecucion.formulario.guardar')) !!},
+    formulario_ver: {!! json_encode(route('ejecucion.formulario.ver', ':formRunId')) !!},
+    formulario_editar: {!! json_encode(route('ejecucion.formulario.editar', ':formRunId')) !!},
+    formulario_nuevo: {!! json_encode(route('ejecucion.formulario.nuevo', ':etapaFormId')) !!},
+    formulario_borrar: {!! json_encode(route('ejecucion.formulario.borrar', ':formRunId')) !!}
+};
 
 // Variables para el manejo de cambios pendientes por etapa
 let cambiosPendientesPorEtapa = {};
@@ -1461,8 +1475,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         console.log('Verificando estados de etapas desde BD...');
         
-        // Consultar estado real de las etapas desde el servidor
-        fetch(`{{ route('ejecucion.detalle.progreso', ':detalleFlujoId') }}`.replace(':detalleFlujoId', detalleFlujoId))
+    // Consultar estado real de las etapas desde el servidor
+    fetch(ROUTES.detalle_progreso.replace(':detalleFlujoId', detalleFlujoId))
         .then(response => response.json())
         .then(data => {
             if (data && data.etapas) {
@@ -1601,7 +1615,7 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Iniciando...';
             
-            fetch(`{{ route('ejecucion.crear', $flujo->id) }}`, {
+            fetch(ROUTES.crear.replace(':flujoId', flujoId), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -2004,7 +2018,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tareaItem.classList.add('border', 'border-info');
         
         // Enviar al servidor
-        return fetch('{{ route('ejecucion.detalle.tarea.actualizar') }}', {
+    return fetch(ROUTES.tarea_actualizar, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -2158,7 +2172,7 @@ document.addEventListener('DOMContentLoaded', function() {
         documentoItem.classList.add('border', 'border-info');
         
         // Enviar al servidor
-        return fetch('{{ route('ejecucion.detalle.documento.validar') }}', {
+    return fetch(ROUTES.documento_validar, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -2323,7 +2337,7 @@ document.addEventListener('DOMContentLoaded', function() {
         this.disabled = true;
         this.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Subiendo...';
 
-        fetch('{{ route('ejecucion.detalle.documento.subir') }}', {
+    fetch(ROUTES.documento_subir, {
             method: 'POST',
             headers: {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
@@ -2627,7 +2641,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Esta función ahora obtiene datos reales del servidor
-        fetch(`{{ route('ejecucion.detalle.progreso', ':detalleFlujoId') }}`.replace(':detalleFlujoId', detalleFlujoId))
+    fetch(ROUTES.detalle_progreso.replace(':detalleFlujoId', detalleFlujoId))
         .then(response => response.json())
         .then(data => {
             if (data && data.progreso_general !== undefined) {
@@ -2728,7 +2742,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        fetch(`{{ route('ejecucion.detalle.progreso', ':detalleFlujoId') }}`.replace(':detalleFlujoId', detalleFlujoId))
+    fetch(ROUTES.detalle_progreso.replace(':detalleFlujoId', detalleFlujoId))
         .then(response => response.json())
         .then(data => {
             if (data && data.progreso_general !== undefined) {
@@ -2902,7 +2916,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         console.log('Verificando estado completado del flujo...');
         
-        fetch(`{{ route('ejecucion.detalle.progreso', ':detalleFlujoId') }}`.replace(':detalleFlujoId', detalleFlujoId))
+    fetch(ROUTES.detalle_progreso.replace(':detalleFlujoId', detalleFlujoId))
         .then(response => response.json())
         .then(data => {
             console.log('Datos de progreso obtenidos:', data);
@@ -2912,7 +2926,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Si el flujo está al 100%, debería activarse la animación automáticamente
                 // Simular que se está completando ahora mismo
                 setTimeout(() => {
-                    const flujoNombre = '{{ $flujo->nombre ?? "Flujo" }}';
+                    const flujoNombre = {!! json_encode($flujo->nombre ?? 'Flujo') !!};
                     console.log('Activando animación para flujo completado:', flujoNombre);
                     mostrarAnimacionComplecion(flujoNombre);
                 }, 500);
@@ -3275,7 +3289,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 bootstrap.Modal.getInstance(document.getElementById('confirmarDesmarcarTarea')).hide();
                 
                 // Actualizar al servidor y luego recargar página
-                fetch('{{ route('ejecucion.detalle.tarea.actualizar') }}', {
+                fetch(ROUTES.tarea_actualizar, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -3317,7 +3331,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 bootstrap.Modal.getInstance(document.getElementById('confirmarDesmarcarTarea')).hide();
                 
                 // Actualizar al servidor y luego recargar página
-                fetch('{{ route('ejecucion.detalle.documento.validar') }}', {
+                fetch(ROUTES.documento_validar, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -3775,9 +3789,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Hacer petición al servidor para obtener la estructura del formulario
         let url;
         if (formRunId) {
-            url = `{{ route('ejecucion.formulario.editar', ':formRunId') }}`.replace(':formRunId', formRunId);
+            url = ROUTES.formulario_editar.replace(':formRunId', formRunId);
         } else {
-            url = `{{ route('ejecucion.formulario.nuevo', ':etapaFormId') }}`.replace(':etapaFormId', etapaFormId);
+            url = ROUTES.formulario_nuevo.replace(':etapaFormId', etapaFormId);
             // Agregar detalleFlujoId como parámetro para asociar al FormRun correcto
             if (detalleFlujoId) {
                 url += `?detalle_flujo_id=${detalleFlujoId}`;
@@ -4198,7 +4212,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(' Datos a enviar:', data);
 
         // Enviar al servidor
-        fetch(`{{ route('ejecucion.formulario.guardar') }}`, {
+    fetch(ROUTES.formulario_guardar, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -4296,7 +4310,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         `;
 
-        fetch(`{{ route('ejecucion.formulario.ver', ':formRunId') }}`.replace(':formRunId', formRunId))
+    fetch(ROUTES.formulario_ver.replace(':formRunId', formRunId))
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -4950,14 +4964,14 @@ document.addEventListener('DOMContentLoaded', function() {
         // Recopilar respuestas de campos normales
         for (let [key, value] of formData.entries()) {
             if (key.startsWith('fields[')) {
-                const match = key.match(/fields\[(\d+)\]/);
+                const match = key.match(/fields\[([^\]]+)\]/);
                 if (match) {
                     const fieldId = match[1];
                     data.respuestas[fieldId] = value;
                     console.log(`Campo normal ${fieldId}: ${value}`);
                 }
             } else if (key.startsWith('groups[')) {
-                const match = key.match(/groups\[([^\]]+)\]\[(\d+)\]\[(\d+)\]/);
+                const match = key.match(/groups\[([^\]]+)\]\[(\d+)\]\[([^\]]+)\]/);
                 if (match) {
                     const grupoId = match[1];
                     const filaIndex = match[2];
@@ -4984,7 +4998,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!checkbox.checked) {
                 const name = checkbox.name;
                 if (name.startsWith('fields[')) {
-                    const match = name.match(/fields\[(\d+)\]/);
+                    const match = name.match(/fields\[([^\]]+)\]/);
                     if (match) {
                         const fieldId = match[1];
                         if (!data.respuestas.hasOwnProperty(fieldId)) {
@@ -4993,7 +5007,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     }
                 } else if (name.startsWith('groups[')) {
-                    const match = name.match(/groups\[([^\]]+)\]\[(\d+)\]\[(\d+)\]/);
+                    const match = name.match(/groups\[([^\]]+)\]\[(\d+)\]\[([^\]]+)\]/);
                     if (match) {
                         const grupoId = match[1];
                         const filaIndex = match[2];
@@ -5026,7 +5040,7 @@ document.addEventListener('DOMContentLoaded', function() {
             btnCompletar.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Completando...';
         }
 
-        fetch(`{{ route('ejecucion.formulario.guardar') }}`, {
+    fetch(ROUTES.formulario_guardar, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -5401,7 +5415,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Mostrar indicador de carga
         mostrarNotificacion('Cargando formulario...', 'info', 2000);
         
-        fetch(`{{ route('ejecucion.formulario.ver', ':formRunId') }}`.replace(':formRunId', formRunId))
+    fetch(ROUTES.formulario_ver.replace(':formRunId', formRunId))
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
@@ -5431,7 +5445,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Mostrar indicador de carga
         mostrarNotificacion('Borrando formulario...', 'warning', 0);
         
-        fetch(`{{ route('ejecucion.formulario.borrar', ':formRunId') }}`.replace(':formRunId', formRunId), {
+    fetch(ROUTES.formulario_borrar.replace(':formRunId', formRunId), {
             method: 'DELETE',
             headers: {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),

@@ -18,6 +18,8 @@ use App\Models\FormAnswer;
 use App\Models\FormField;
 use App\Models\FormGroup;
 use App\Models\EtapaForm;
+use App\Models\FormAnswerRow;
+use App\Models\FormAnswerRowValue;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -3382,6 +3384,14 @@ class Ejecucion extends Controller
                     }
                 }
             }
+
+            // Soporte adicional: aceptar payload JSON { respuestas: {...}, grupos: {...} }
+            $payloadRespuestas = $request->input('respuestas', []);
+            if (is_array($payloadRespuestas) && count($payloadRespuestas) > 0) {
+                foreach ($payloadRespuestas as $k => $v) {
+                    $camposFormulario[$k] = $v;
+                }
+            }
             
             Log::info('Campos del formulario encontrados:', [
                 'total' => count($camposFormulario),
@@ -3397,9 +3407,15 @@ class Ejecucion extends Controller
                 ]);
                 
                 // Buscar el campo por ID (el JavaScript envía field IDs)
-                $field = FormField::find($fieldId);
+                if (is_numeric($fieldId)) {
+                    $field = FormField::find($fieldId);
+                } else {
+                    // Si el frontend envía el código del campo (codigo), buscar por codigo
+                    $field = FormField::where('codigo', $fieldId)->first();
+                }
+
                 if (!$field) {
-                    Log::warning("Campo no encontrado con ID: {$fieldId}");
+                    Log::warning("Campo no encontrado (id/codigo): {$fieldId}");
                     continue;
                 }
 
@@ -3469,6 +3485,83 @@ class Ejecucion extends Controller
                     'form_answer_id' => $formAnswer->id,
                     'answer_data_saved' => $answerData
                 ]);
+            }
+
+            // Procesar grupos si vienen en el payload
+            $gruposPayload = $request->input('grupos', []);
+            if (is_array($gruposPayload) && count($gruposPayload) > 0) {
+                Log::info('Procesando grupos payload', ['groups' => array_keys($gruposPayload)]);
+                foreach ($gruposPayload as $groupCode => $rows) {
+                    $group = FormGroup::where('codigo', $groupCode)->first();
+                    if (!$group) {
+                        Log::warning("Grupo no encontrado por codigo: {$groupCode}");
+                        continue;
+                    }
+
+                    foreach ($rows as $rowIndex => $cols) {
+                        // Crear fila
+                        $row = FormAnswerRow::create([
+                            'id_run' => $formRun->id,
+                            'id_group' => $group->id,
+                            'row_index' => $rowIndex
+                        ]);
+
+                        foreach ($cols as $fieldCodigo => $value) {
+                            // Buscar campo por codigo
+                            $field = FormField::where('codigo', $fieldCodigo)->first();
+                            if (!$field) {
+                                Log::warning("Campo de grupo no encontrado: {$fieldCodigo}");
+                                continue;
+                            }
+
+                            $rowValueData = [
+                                'id_row' => $row->id,
+                                'id_field' => $field->id,
+                                'value_text' => null,
+                                'value_number' => null,
+                                'value_int' => null,
+                                'value_date' => null,
+                                'value_datetime' => null,
+                                'value_bool' => null,
+                                'value_json' => null
+                            ];
+
+                            switch ($field->datatype) {
+                                case 'text':
+                                case 'textarea':
+                                case 'select':
+                                case 'radio':
+                                    $rowValueData['value_text'] = (string)$value;
+                                    break;
+                                case 'number':
+                                case 'decimal':
+                                    $rowValueData['value_number'] = is_numeric($value) ? (float)$value : null;
+                                    break;
+                                case 'integer':
+                                    $rowValueData['value_int'] = is_numeric($value) ? (int)$value : null;
+                                    break;
+                                case 'date':
+                                    $rowValueData['value_date'] = $value ? date('Y-m-d', strtotime($value)) : null;
+                                    break;
+                                case 'datetime':
+                                    $rowValueData['value_datetime'] = $value ? date('Y-m-d H:i:s', strtotime($value)) : null;
+                                    break;
+                                case 'checkbox':
+                                    $rowValueData['value_bool'] = (bool)$value;
+                                    break;
+                                case 'multiselect':
+                                case 'json':
+                                    $rowValueData['value_json'] = is_array($value) ? $value : [$value];
+                                    break;
+                                default:
+                                    $rowValueData['value_text'] = (string)$value;
+                                    break;
+                            }
+
+                            FormAnswerRowValue::create($rowValueData);
+                        }
+                    }
+                }
             }
 
             Log::info("Total de respuestas procesadas: {$respuestasGuardadas}");
@@ -3555,14 +3648,14 @@ class Ejecucion extends Controller
                 Log::warning("Answer sin field asociado: " . $answer->id);
                 continue;
             }
-            
+
             $field = $answer->field;
-            
+
             // Obtener el valor según el tipo de campo
             $valor = $this->extraerValorDeAnswer($answer, $field);
-            
-            // IMPORTANTE: El frontend espera las respuestas indexadas por field_id, no por codigo
-            $resultado[$field->id] = $valor;
+
+            // El frontend espera las respuestas indexadas por field.codigo para campos simples
+            $resultado[$field->codigo] = $valor;
             Log::info("Campo simple: {$field->codigo} (ID: {$field->id}) = {$valor} (tipo: {$field->datatype})");
         }
         
