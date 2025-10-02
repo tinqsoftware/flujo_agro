@@ -44,8 +44,10 @@
                 </div>
                 {{-- Si no es superadmin, ya los trajimos del controlador --}}
                 @include('superadmin.clientes.partials.attrs', ['atributos' => $atributos, 'valores' => []])
+                @include('superadmin.clientes.partials.ficha_groups', ['groupDefs'=>$groupDefs, 'relOptions'=>$relOptions])
                 </div>
             </div>
+            
 
             <div class="mt-3 d-flex gap-2">
                 <a href="{{ route('clientes.index') }}" class="btn btn-secondary">Cancelar</a>

@@ -170,6 +170,155 @@
                     </div>
                 </div>
             </div>
+
+            <div class="card mt-3">
+                <div class="card-header">Relaciones e Items</strong></div>
+                <div class="card-body">
+
+                    <div id="groups-container" class="d-flex flex-column gap-3">
+                    {{-- Aquí se agregan las tarjetitas de grupos --}}
+                    </div>
+
+                    <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="addGroupCard()">+ Añadir grupo</button>
+                </div>
+            </div>
+
+            @push('scripts')
+            <script>
+            (function () {
+            const container = document.getElementById('groups-container');
+
+            // Crea una tarjetita de grupo NUEVO (solo en CREAR)
+            window.addGroupCard = function(initial = {}) {
+                const idx = container.querySelectorAll('.group-card').length;
+                const card = document.createElement('div');
+                card.className = 'group-card border rounded p-3';
+
+                const _code    = initial.code  || '';
+                const _label   = initial.label || '';
+                const _type    = initial.group_type || 'list';
+                const _related = initial.related_entity_type || 'cliente';
+                const _allow   = (typeof initial.allow_multiple !== 'undefined') ? !!initial.allow_multiple : true;
+
+                card.innerHTML = `
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                    <label class="form-label">Código</label>
+                    <input class="form-control" name="group_defs[new][${idx}][code]" value="${_code}" placeholder="p.ej. precios" required>
+                    </div>
+                    <div class="col-md-4">
+                    <label class="form-label">Etiqueta</label>
+                    <input class="form-control" name="group_defs[new][${idx}][label]" value="${_label}" placeholder="p.ej. Ingrese precios" required>
+                    </div>
+                    <div class="col-md-3">
+                    <label class="form-label">Tipo</label>
+                    <select class="form-select group-type" name="group_defs[new][${idx}][group_type]">
+                        <option value="list" ${_type==='list'?'selected':''}>Lista (ítems)</option>
+                        <option value="relation" ${_type==='relation'?'selected':''}>Relación</option>
+                    </select>
+                    </div>
+                    <div class="col-md-2 text-end">
+                    <button type="button" class="btn btn-outline-danger" onclick="this.closest('.group-card').remove()">Quitar</button>
+                    </div>
+                </div>
+
+                <!-- BLOQUE RELACIÓN -->
+                <div class="row g-3 mt-2 relation-row">
+                    <div class="col-md-4">
+                    <label class="form-label">Relacionado con</label>
+                    <select class="form-select" name="group_defs[new][${idx}][related_entity_type]">
+                        <option value="cliente"  ${_related==='cliente'?'selected':''}>Cliente</option>
+                        <option value="proveedor"${_related==='proveedor'?'selected':''}>Proveedor</option>
+                        <option value="producto" ${_related==='producto'?'selected':''}>Producto</option>
+                    </select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-center">
+                    <div class="form-check form-switch mt-4">
+                        <!-- hidden para enviar 0 cuando está desmarcado -->
+                        <input type="hidden" name="group_defs[new][${idx}][allow_multiple]" value="0">
+                        <input class="form-check-input" type="checkbox"
+                            id="allow_${idx}"
+                            name="group_defs[new][${idx}][allow_multiple]"
+                            value="1" ${_allow?'checked':''}>
+                        <label for="allow_${idx}" class="form-check-label">Permitir múltiples</label>
+                    </div>
+                    </div>
+                </div>
+
+                <!-- BLOQUE LISTA -->
+                <div class="mt-3 list-row">
+                    <div class="row g-2">
+                    <div class="col-12">
+                        <div class="small text-muted">Campos del ítem (LISTA): code / label / type</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="vf-rows" data-next-index="0"></div>
+                        <button type="button" class="btn btn-xs btn-outline-primary mt-2" onclick="addItemFieldRow(this, ${idx})">+ Campo</button>
+                    </div>
+                    </div>
+                </div>
+                `;
+
+                container.appendChild(card);
+
+                // Semillas útiles para LISTA
+                const rowsWrap = card.querySelector('.vf-rows');
+                rowsWrap.setAttribute('data-next-index', '0');
+                appendFieldRowIndexed(rowsWrap, idx, 0, 'tipo',   'Tipo',   'text');
+                rowsWrap.setAttribute('data-next-index', '1');
+                appendFieldRowIndexed(rowsWrap, idx, 1, 'precio', 'Precio', 'decimal');
+                rowsWrap.setAttribute('data-next-index', '2');
+
+                // Toggle inicial y onChange
+                const sel = card.querySelector('.group-type');
+                toggleRowsForType(sel);
+                sel.addEventListener('change', function(){ toggleRowsForType(sel); });
+            };
+
+            // Añade una fila indexada a los campos de ítem (LISTA)
+            window.addItemFieldRow = function(btn, groupIdx){
+                const wrap = btn.closest('.list-row').querySelector('.vf-rows');
+                const next = parseInt(wrap.getAttribute('data-next-index') || '0', 10);
+                appendFieldRowIndexed(wrap, groupIdx, next, '', '', 'text');
+                wrap.setAttribute('data-next-index', String(next + 1));
+            };
+
+            // Crea la fila (con índice correcto para que el JSON quede bien)
+            function appendFieldRowIndexed(wrap, groupIdx, rowIndex, code, label, type){
+                const row = document.createElement('div');
+                row.className = 'd-flex gap-2 mb-2 flex-wrap';
+                row.setAttribute('data-row-index', rowIndex);
+                row.innerHTML = `
+                <input class="form-control" style="max-width:180px" placeholder="code"
+                        name="group_defs[new][${groupIdx}][item_fields][${rowIndex}][code]"  value="${code||''}">
+                <input class="form-control" style="max-width:220px" placeholder="label"
+                        name="group_defs[new][${groupIdx}][item_fields][${rowIndex}][label]" value="${label||''}">
+                <select class="form-select" style="max-width:160px"
+                        name="group_defs[new][${groupIdx}][item_fields][${rowIndex}][type]">
+                    <option value="text" ${(!type||type==='text')?'selected':''}>text</option>
+                    <option value="decimal" ${(type==='decimal')?'selected':''}>decimal</option>
+                    <option value="int" ${(type==='int')?'selected':''}>int</option>
+                </select>
+                <button type="button" class="btn btn-outline-danger" onclick="this.parentElement.remove()">x</button>
+                `;
+                wrap.appendChild(row);
+            }
+
+            // Muestra/oculta bloques según tipo
+            function toggleRowsForType(selectEl){
+                const card = selectEl.closest('.group-card');
+                const isRelation = (selectEl.value === 'relation');
+                card.querySelector('.relation-row').style.display = isRelation ? '' : 'none';
+                card.querySelector('.list-row').style.display     = isRelation ? 'none' : '';
+            }
+
+            // Inicia con una card lista para llenar
+            addGroupCard();
+            })();
+            </script>
+            @endpush
+
+
             
             <div class="d-flex gap-2 justify-content-end mt-4">
                 <a href="{{ route('fichas.index') }}" class="btn btn-secondary">

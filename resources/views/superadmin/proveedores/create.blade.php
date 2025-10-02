@@ -42,6 +42,7 @@
       </div>
 
       @include('superadmin.proveedores.partials.attrs', ['atributos'=>$atributos, 'valores'=>[]])
+      @include('superadmin.proveedores.partials.ficha_groups', ['groupDefs'=>$groupDefs, 'relOptions'=>$relOptions])
     </div>
   </div>
 
@@ -55,21 +56,87 @@
   @push('scripts')
   <script>
   document.addEventListener('DOMContentLoaded', function () {
-    const emp = document.getElementById('id_emp');
-    const cont = document.getElementById('attrsContainer');
+    const isSuper = {{ $isSuper ? 'true' : 'false' }};
+    if (isSuper) {
 
-    function render(attrs){
-      if(!attrs.length){ cont.innerHTML = '<div class="text-muted">.</div>'; return; }
-      // (Para carga dinámica podrías generar inputs básicos como hiciste en clientes)
-      location.reload(); // atajo simple: recarga para que el server pinte partial correcto al cambiar empresa
-    }
+      const emp = document.getElementById('id_emp');
+      const cont = document.getElementById('attrsContainer');
 
-    if(emp){
+
+      function renderAttrs(attrs) {
+        let html = '';
+        if (!attrs.length) {
+          html = '<div class="text-muted">.</div>';
+        } else {
+          html = `{!! str_replace("\n","", addslashes(view('superadmin.proveedores.partials.attrs', ['atributos' => collect(), 'valores'=>[]])->render())) !!}`;
+          // Eso imprime un contenedor vacío; lo sustituimos dinámicamente:
+          html = '<div class="row g-3">' +
+            attrs.map(a => {
+              const req = a.obligatorio ? 'required' : '';
+              const col = 'col-12'; // puedes usar a.ancho si quieres grid 12
+              if (['texto','cajatexto','decimal','entero','fecha','imagen'].includes(a.tipo)) {
+                const type = (a.tipo==='fecha') ? 'date' : 'text';
+                return `<div class="${col}">
+                  <label class="form-label">${a.titulo}${a.obligatorio?' *':''}</label>
+                  <input ${req} type="${type}" name="atributos[${a.id}]" class="form-control">
+                </div>`;
+              }
+              if (['desplegable','radio','checkbox'].includes(a.tipo)) {
+                const opts = (a.opciones||[]).map(o => o).filter(Boolean);
+                if (a.tipo==='desplegable') {
+                  return `<div class="${col}">
+                    <label class="form-label">${a.titulo}${a.obligatorio?' *':''}</label>
+                    <select ${req} name="atributos[${a.id}]" class="form-select">
+                      <option value="">Seleccionar</option>
+                      ${opts.map(o=>`<option value="${o}">${o}</option>`).join('')}
+                    </select>
+                  </div>`;
+                }
+                if (a.tipo==='radio') {
+                  return `<div class="${col}">
+                    <label class="form-label d-block">${a.titulo}${a.obligatorio?' *':''}</label>
+                    ${opts.map(o=>`
+                      <div class="form-check form-check-inline">
+                        <input ${req} class="form-check-input" type="radio" name="atributos[${a.id}]" value="${o}">
+                        <label class="form-check-label">${o}</label>
+                      </div>`).join('')}
+                  </div>`;
+                }
+                if (a.tipo==='checkbox') {
+                  return `<div class="${col}">
+                    <label class="form-label d-block">${a.titulo}${a.obligatorio?' *':''}</label>
+                    ${opts.map(o=>`
+                      <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" name="atributos[${a.id}][]" value="${o}">
+                        <label class="form-check-label">${o}</label>
+                      </div>`).join('')}
+                  </div>`;
+                }
+              }
+              return '';
+            }).join('') + '</div>';
+        }
+        cont.innerHTML = html;
+      }
+
       emp.addEventListener('change', function(){
-        fetch(`{{ route('proveedores.atributosByEmpresa') }}?empresa_id=${this.value}`)
-          .then(r=>r.json()).then(render).catch(()=>{});
+        const id = this.value;
+        cont.innerHTML = '<div class="text-muted">Cargando campos…</div>';
+        if (!id) { renderAttrs([]); return; }
+        fetch(`{{ route('proveedores.atributosByEmpresa') }}?empresa_id=${id}`)
+          .then(r=>r.json())
+          .then(renderAttrs)
+          .catch(()=> cont.innerHTML = '<div class="text-danger">Error al cargar atributos.</div>');
       });
+
+      if (emp.value) {
+        emp.dispatchEvent(new Event('change'));
+      }
+      
+      
     }
+    
+
   });
   </script>
   @endpush

@@ -52,7 +52,8 @@
       </div>
 
       {{-- Campos dinámicos de la ficha Producto --}}
-      @include('superadmin.clientes.partials.attrs', ['atributos' => $atributos, 'valores' => []])
+      @include('superadmin.productos.partials.attrs', ['atributos' => $atributos, 'valores' => []])
+      @include('superadmin.productos.partials.ficha_groups', ['groupDefs'=>$groupDefs, 'relOptions'=>$relOptions])
     </div>
   </div>
 
@@ -68,45 +69,80 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   const isSuper = {{ $isSuper ? 'true' : 'false' }};
-  if (!isSuper) return;
-  const emp = document.getElementById('id_emp');
-  const cont = document.getElementById('attrsContainer') || document.querySelector('#attrsContainer') || document.querySelector('.row.g-3');
+  if (isSuper) {
+    const emp = document.getElementById('id_emp');
+    const cont = document.getElementById('attrsContainer');
 
-  function renderAttrs(attrs){
-    if (!attrs || !attrs.length) { cont.innerHTML = '<div class="text-muted">Esta empresa no tiene ficha de tipo Producto.</div>'; return; }
-    // Sencillo: solo pinta inputs básicos (igual que en clientes)
-    cont.innerHTML = '<div class="row g-3">' + attrs.map(a=>{
-      const req = a.obligatorio ? 'required' : '';
-      if (['texto','cajatexto','decimal','entero','fecha','imagen'].includes(a.tipo)) {
-        const type = (a.tipo==='fecha') ? 'date' : 'text';
-        return `<div class="col-12"><label class="form-label">${a.titulo}${a.obligatorio?' *':''}</label><input ${req} type="${type}" name="atributos[${a.id}]" class="form-control"></div>`;
+    function renderAttrs(attrs) {
+      let html = '';
+      if (!attrs.length) {
+        html = '<div class="text-muted">.</div>';
+      } else {
+        html = `{!! str_replace("\n","", addslashes(view('superadmin.clientes.partials.attrs', ['atributos' => collect(), 'valores'=>[]])->render())) !!}`;
+        // Eso imprime un contenedor vacío; lo sustituimos dinámicamente:
+        html = '<div class="row g-3">' +
+          attrs.map(a => {
+            const req = a.obligatorio ? 'required' : '';
+            const col = 'col-12'; // puedes usar a.ancho si quieres grid 12
+            if (['texto','cajatexto','decimal','entero','fecha','imagen'].includes(a.tipo)) {
+              const type = (a.tipo==='fecha') ? 'date' : 'text';
+              return `<div class="${col}">
+                <label class="form-label">${a.titulo}${a.obligatorio?' *':''}</label>
+                <input ${req} type="${type}" name="atributos[${a.id}]" class="form-control">
+              </div>`;
+            }
+            if (['desplegable','radio','checkbox'].includes(a.tipo)) {
+              const opts = (a.opciones||[]).map(o => o).filter(Boolean);
+              if (a.tipo==='desplegable') {
+                return `<div class="${col}">
+                  <label class="form-label">${a.titulo}${a.obligatorio?' *':''}</label>
+                  <select ${req} name="atributos[${a.id}]" class="form-select">
+                    <option value="">Seleccionar</option>
+                    ${opts.map(o=>`<option value="${o}">${o}</option>`).join('')}
+                  </select>
+                </div>`;
+              }
+              if (a.tipo==='radio') {
+                return `<div class="${col}">
+                  <label class="form-label d-block">${a.titulo}${a.obligatorio?' *':''}</label>
+                  ${opts.map(o=>`
+                    <div class="form-check form-check-inline">
+                      <input ${req} class="form-check-input" type="radio" name="atributos[${a.id}]" value="${o}">
+                      <label class="form-check-label">${o}</label>
+                    </div>`).join('')}
+                </div>`;
+              }
+              if (a.tipo==='checkbox') {
+                return `<div class="${col}">
+                  <label class="form-label d-block">${a.titulo}${a.obligatorio?' *':''}</label>
+                  ${opts.map(o=>`
+                    <div class="form-check form-check-inline">
+                      <input class="form-check-input" type="checkbox" name="atributos[${a.id}][]" value="${o}">
+                      <label class="form-check-label">${o}</label>
+                    </div>`).join('')}
+                </div>`;
+              }
+            }
+            return '';
+          }).join('') + '</div>';
       }
-      if (a.tipo==='desplegable') {
-        const opts = (a.opciones||[]).map(o=>`<option value="${o}">${o}</option>`).join('');
-        return `<div class="col-12"><label class="form-label">${a.titulo}${a.obligatorio?' *':''}</label><select ${req} name="atributos[${a.id}]" class="form-select"><option value="">Seleccionar</option>${opts}</select></div>`;
-      }
-      if (a.tipo==='radio') {
-        const opts = (a.opciones||[]).map(o=>`<div class="form-check form-check-inline"><input ${req} class="form-check-input" type="radio" name="atributos[${a.id}]" value="${o}"><label class="form-check-label">${o}</label></div>`).join('');
-        return `<div class="col-12"><label class="form-label d-block">${a.titulo}${a.obligatorio?' *':''}</label>${opts}</div>`;
-      }
-      if (a.tipo==='checkbox') {
-        const opts = (a.opciones||[]).map(o=>`<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="atributos[${a.id}][]" value="${o}"><label class="form-check-label">${o}</label></div>`).join('');
-        return `<div class="col-12"><label class="form-label d-block">${a.titulo}${a.obligatorio?' *':''}</label>${opts}</div>`;
-      }
-      return '';
-    }).join('') + '</div>';
+      cont.innerHTML = html;
+    }
+
+    emp.addEventListener('change', function(){
+      const id = this.value;
+      cont.innerHTML = '<div class="text-muted">Cargando campos…</div>';
+      if (!id) { renderAttrs([]); return; }
+      fetch(`{{ route('clientes.atributosByEmpresa') }}?empresa_id=${id}`)
+        .then(r=>r.json())
+        .then(renderAttrs)
+        .catch(()=> cont.innerHTML = '<div class="text-danger">Error al cargar atributos.</div>');
+    });
+
+    if (emp.value) {
+      emp.dispatchEvent(new Event('change'));
+    }
   }
-
-  emp.addEventListener('change', function(){
-    const id = this.value;
-    cont.innerHTML = '<div class="text-muted">Cargando campos…</div>';
-    if (!id) { renderAttrs([]); return; }
-    fetch(`{{ route('productos.atributosByEmpresa') }}?empresa_id=${id}`)
-      .then(r=>r.json()).then(renderAttrs)
-      .catch(()=> cont.innerHTML = '<div class="text-danger">Error al cargar atributos.</div>');
-  });
-
-  if (emp && emp.value) emp.dispatchEvent(new Event('change'));
 });
 </script>
 @endpush

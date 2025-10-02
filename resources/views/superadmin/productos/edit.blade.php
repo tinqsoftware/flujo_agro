@@ -69,7 +69,8 @@
       </div>
 
       {{-- Atributos dinámicos --}}
-      @include('superadmin.clientes.partials.attrs', ['atributos' => $atributos, 'valores' => $valores])
+      @include('superadmin.productos.partials.attrs', ['atributos' => $atributos, 'valores' => $valores])
+      @include('superadmin.productos.partials.ficha_groups', ['groupDefs'=>$groupDefs, 'relOptions'=>$relOptions, 'listValues'=>$listValues ?? collect(), 'relValues'=>$relValues ?? collect()  ])
     </div>
   </div>
 

@@ -14,6 +14,12 @@ use Illuminate\Validation\Rule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use App\Models\FichaGroupDef;
+use App\Models\FichaListItem;
+use App\Models\FichaRelationLink;
+use App\Models\Cliente;
+use App\Models\Proveedor;
+use App\Models\Producto;
 
 class FichaController extends Controller
 {
@@ -119,7 +125,7 @@ class FichaController extends Controller
             }
         }
 
-        DB::transaction(function () use ($validated, $empresaId, $tipoFicha) {
+        $f = DB::transaction(function () use ($validated, $empresaId, $tipoFicha) {
             // 1) Crear ficha (sin id_flujo / id_etapa)
             $ficha = new \App\Models\Ficha();
             $ficha->nombre         = $validated['nombre'];
@@ -167,7 +173,11 @@ class FichaController extends Controller
                 $meta->id_user_create = Auth::id();
                 $meta->save();
             }
+            return $ficha;
         });
+
+        $entityType = $this->tipoToEntity($request->input('tipo')); // "Producto" -> "producto"
+        $this->upsertGroupDefinitions($entityType, $f->id, $request);
 
         return redirect()->route('fichas.index')->with('success', 'Ficha creada correctamente.');
     }
@@ -200,6 +210,15 @@ class FichaController extends Controller
             }
         }
 
+        $entityType = $this->tipoToEntity($ficha->tipo);
+        $groupDefs  = in_array($entityType, ['cliente','proveedor','producto'])
+            ? \App\Models\FichaGroupDef::where('entity_type',$entityType)
+                ->where('id_ficha', $ficha->id)
+                ->where('is_active', 1)
+                ->orderBy('id')
+                ->get()
+            : collect();
+
         // Cargar datos adicionales para el contexto
         $flujo = null;
         $etapa = null;
@@ -212,7 +231,7 @@ class FichaController extends Controller
             }
         }
 
-        return view('superadmin.fichas.show', compact('ficha', 'atributos', 'contexto', 'flujo', 'etapa'));
+        return view('superadmin.fichas.show', compact('ficha', 'groupDefs','atributos', 'contexto', 'flujo', 'etapa'));
     }
 
     public function edit(Ficha $ficha)
@@ -412,6 +431,10 @@ class FichaController extends Controller
                 $meta->save();
             }
         });
+        
+        // NUEVO: sincroniza definiciones de grupos según el tipo seleccionado
+        $entityType = $this->tipoToEntity($request->input('tipo'));
+        $this->upsertGroupDefinitions($entityType, $ficha->id, $request);
 
         return redirect()->route('fichas.index')->with('success', 'Ficha actualizada correctamente.');
     }
@@ -614,4 +637,79 @@ class FichaController extends Controller
         
         return is_string($campo['opciones']) ? $campo['opciones'] : json_encode($campo['opciones']);
     }
+
+    // ---- helpers internos (dentro de la clase) ----
+    private function tipoToEntity(string $tipo): string
+    {
+        $map = ['Producto'=>'producto','Cliente'=>'cliente','Proveedor'=>'proveedor'];
+        return $map[$tipo] ?? strtolower($tipo);
+    }
+
+
+    /**
+     * Crea/actualiza definiciones de grupos (relación / lista) **scoped por ficha**.
+     * - entityType: 'cliente' | 'proveedor' | 'producto'
+     * - fichaId: ID de la ficha a la que pertenecen las defs
+     * - $r: Request con:
+     *    group_defs[new][] = [code,label,group_type,related_entity_type,item_fields[],allow_multiple,is_active]
+     *    group_defs[existing][<id>] = ...
+     */
+    private function upsertGroupDefinitions(string $entityType, int $fichaId, \Illuminate\Http\Request $r): void
+    {
+        // 1) CREAR nuevos
+        foreach ((array) $r->input('group_defs.new', []) as $row) {
+            $code  = trim($row['code']  ?? '');
+            $label = trim($row['label'] ?? '');
+            if ($code === '' || $label === '') continue;
+
+            $groupType     = $row['group_type'] ?? 'list';
+            $allowMultiple = array_key_exists('allow_multiple', $row) && (int)$row['allow_multiple'] === 1 ? 1 : 0;
+            $isActive      = array_key_exists('is_active', $row)      && (int)$row['is_active']      === 1 ? 1 : 0;
+
+            \App\Models\FichaGroupDef::create([
+                'id_ficha'            => $fichaId,
+                'entity_type'         => $entityType,
+                'code'                => $code,
+                'label'               => $label,
+                'group_type'          => $groupType, // 'list' | 'relation'
+                'related_entity_type' => $groupType === 'relation' ? ($row['related_entity_type'] ?? null) : null,
+                'item_fields_json'    => $groupType === 'list' ? array_values((array)($row['item_fields'] ?? [])) : null,
+                'allow_multiple'      => $groupType === 'relation' ? $allowMultiple : 1, // para lista no aplica, déjalo 1
+                'is_active'           => $isActive,
+            ]);
+        }
+
+        // 2) ACTUALIZAR existentes (solo dentro de esta ficha + entityType)
+        foreach ((array) $r->input('group_defs.existing', []) as $id => $row) {
+            $id    = (int)$id;
+            $code  = trim($row['code']  ?? '');
+            $label = trim($row['label'] ?? '');
+            if ($code === '' || $label === '') continue;
+
+            $groupType     = $row['group_type'] ?? 'list';
+            $allowMultiple = array_key_exists('allow_multiple',$row) && (int)$row['allow_multiple']===1 ? 1 : 0;
+            $isActive      = array_key_exists('is_active',$row)      && (int)$row['is_active']===1      ? 1 : 0;
+
+            \App\Models\FichaGroupDef::where('id', $id)
+                ->where('id_ficha', $fichaId)
+                ->where('entity_type', $entityType)
+                ->update([
+                    'code'                => $code,
+                    'label'               => $label,
+                    'group_type'          => $groupType,
+                    'related_entity_type' => $groupType === 'relation' ? ($row['related_entity_type'] ?? null) : null,
+                    'item_fields_json'    => $groupType === 'list' ? array_values((array)($row['item_fields'] ?? [])) : null,
+                    'allow_multiple'      => $groupType === 'relation' ? $allowMultiple : 1,
+                    'is_active'           => $isActive,
+                ]);
+        }
+
+        // 3) (Opcional) DESACTIVAR los que ya no fueron enviados (limpieza segura)
+        $enviadosIds = collect(array_keys((array)$r->input('group_defs.existing', [])))->map(fn($v)=>(int)$v)->all();
+        \App\Models\FichaGroupDef::where('id_ficha', $fichaId)
+            ->where('entity_type', $entityType)
+            ->when(!empty($enviadosIds), fn($q)=>$q->whereNotIn('id', $enviadosIds))
+            ->update(['is_active' => 0]);
+    }
+
 }

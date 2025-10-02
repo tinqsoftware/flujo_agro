@@ -15,6 +15,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Cliente;
+use App\Models\FichaListItem;
+use App\Models\FichaRelationLink;
+
 use App\Models\DatosAtributosFicha; // Alias del modelo de datos_atributos_fichas
 
 
@@ -151,15 +154,18 @@ class ProveedorController extends Controller
             ? AtributoFicha::where('id_ficha',$ficha->id)->where('nro','>',0)->orderBy('nro')->get()
             : collect();
 
-        return view('superadmin.proveedores.create', compact('empresas','atributos','ficha','isSuper'));
+        $groupDefs  = $this->loadGroupDefsForProv($ficha?->id);
+        $relOptions = $this->loadRelationOptions($ficha?->id_emp);
+
+        return view('superadmin.proveedores.create', compact('groupDefs','relOptions','empresas','atributos','ficha','isSuper'));
     }
 
     /** Guardar */
     public function store(Request $request)
     {
         $user      = Auth::user();
-        $isSuper   = ($user->rol->nombre === 'SUPERADMIN');
         $empresaId = $request->input('id_emp') ?: $user->id_emp;
+        $isSuper   = ($user->rol->nombre === 'SUPERADMIN');
 
         $ficha = Ficha::where('id_emp',$empresaId)->where('tipo','Proveedor')->first();
         $atributos = $ficha
@@ -211,7 +217,7 @@ class ProveedorController extends Controller
         }
         if ($ficha) $prov->id_ficha = $ficha->id;
         $prov->save();
-
+        $this->saveFichaValuesForProveedor($prov->id, $request);
         // guardar atributos
         foreach ($atributos as $a) {
             $dato = null; $json = null;
@@ -245,6 +251,7 @@ class ProveedorController extends Controller
                 'dato'          => $dato,
                 'json'          => $json,
                 'id_user_create'=> $user->id,
+                'isSuper'     => $isSuper,
             ]);
         }
 
@@ -256,28 +263,43 @@ class ProveedorController extends Controller
     {
         $user = Auth::user();
         $isSuper = ($user->rol->nombre === 'SUPERADMIN');
-        if (!$isSuper && $proveedor->id_emp != $user->id_emp) {
-            abort(403);
-        }
-
         $empresas = $isSuper
             ? Empresa::where('estado',1)->orderBy('nombre')->get(['id','nombre'])
             : Empresa::where('id',$user->id_emp)->get(['id','nombre']);
 
-        $atributos = collect(); $valores = [];
+        $ficha = Ficha::where('id_emp', $user->rol->nombre === 'SUPERADMIN' ? ($empresas->first()->id ?? null) : $user->id_emp)
+            ->where('tipo','Proveedor')->first();
+        $groupDefs  = $this->loadGroupDefsForProv($ficha?->id);
+        $relOptions = $this->loadRelationOptions($ficha?->id_emp);
+
+        if (!$isSuper && $proveedor->id_emp != $user->id_emp) {
+            abort(403);
+        }
+
+        $atributos = collect(); 
+        $valores = [];
         if ($proveedor->id_ficha) {
             $atributos = AtributoFicha::where('id_ficha',$proveedor->id_ficha)
                 ->where('nro','>',0)->orderBy('nro')->get();
 
             $rows = DatosAtributosFicha::where('id_relacion',$proveedor->id)
-                ->whereIn('id_atributo',$atributos->pluck('id'))->get();
+                ->whereIn('id_atributo',$atributos->pluck('id'))
+                ->get();
 
             foreach ($rows as $r) {
                 $valores[$r->id_atributo] = $r->json ?? $r->dato;
             }
         }
 
-        return view('superadmin.proveedores.edit', compact('proveedor','empresas','atributos','valores','isSuper'));
+        // Valores actuales (para pre-llenar el form)
+        $listValues = FichaListItem::where('entity_type','proveedor')
+            ->where('entity_id',$proveedor->id)->get()->groupBy('group_code');
+
+        $relValues  = FichaRelationLink::where('entity_type','proveedor')
+            ->where('entity_id',$proveedor->id)->get()->groupBy('group_code');
+
+
+        return view('superadmin.proveedores.edit', compact('proveedor','groupDefs','relOptions','listValues','relValues','empresas','atributos','valores','isSuper'));
     }
 
     /** Actualizar */
@@ -303,21 +325,25 @@ class ProveedorController extends Controller
             $proveedor->estado = $request->boolean('estado');
 
             if ($request->hasFile('logo')) {
-                if ($proveedor->ruta_logo) Storage::disk('public')->delete($proveedor->ruta_logo);
-                $proveedor->ruta_logo = $request->file('logo')->store('proveedores','public');
+                if ($proveedor->ruta_logo) {
+                    \Storage::disk('public')->delete($proveedor->ruta_logo);
+                }
+                $proveedor->ruta_logo = $request->file('logo')->store('logos/proveedores','public');
             }
 
             $proveedor->save();
 
             if ($proveedor->id_ficha) {
-                $atributos = AtributoFicha::where('id_ficha',$proveedor->id_ficha)->where('nro','>',0)->get();
+                $atributos = AtributoFicha::where('id_ficha',$proveedor->id_ficha)
+                ->where('nro','>',0)->get();
                 $valsReq = (array) $request->input('atributos', []);
 
                 foreach ($atributos as $attr) {
                     $valorReq = $valsReq[$attr->id] ?? null;
 
                     $dato = DatosAtributosFicha::where('id_atributo',$attr->id)
-                        ->where('id_relacion',$proveedor->id)->first();
+                        ->where('id_relacion',$proveedor->id)
+                        ->first();
 
                     if (!$dato) {
                         $dato = new DatosAtributosFicha();
@@ -326,7 +352,8 @@ class ProveedorController extends Controller
                         $dato->id_user_create = $user->id;
                     }
 
-                    $dato->dato = null; $dato->json = null;
+                    $dato->dato = null; 
+                    $dato->json = null;
 
                     switch ($attr->tipo) {
                         case 'checkbox':
@@ -358,6 +385,7 @@ class ProveedorController extends Controller
                 }
             }
         });
+         $this->saveFichaValuesForProveedor($proveedor->id, $request);
 
         return redirect()->route('proveedores.index')->with('success','Proveedor actualizado correctamente.');
     }
@@ -372,6 +400,8 @@ class ProveedorController extends Controller
         if ($proveedor->ruta_logo) Storage::disk('public')->delete($proveedor->ruta_logo);
         // si deseas: borrar attrs asociados
         // DatosAtributosFicha::where('id_relacion',$proveedor->id)->delete();
+        // borrar valores de atributos asociados
+        DatosAtributosFicha::where('ref_tipo','proveedor')->where('ref_id',$proveedor->id)->delete();
 
         $proveedor->delete();
         return back()->with('success','Proveedor eliminado correctamente.');
@@ -404,5 +434,152 @@ class ProveedorController extends Controller
             })
         );
     }
+
+    private function fichaEntity(): string { return 'proveedor'; }
+
+    
+    private function loadGroupDefsForProv(?int $idFicha)
+    {
+        if (!$idFicha) return collect(); // si no hay ficha, no hay defs
+        return \App\Models\FichaGroupDef::where('entity_type','proveedor')
+            ->where('id_ficha', $idFicha)
+            ->where('is_active', 1)
+            ->orderBy('id')
+            ->get();
+    }
+
+    private function loadRelationOptions(?int $idEmp): array
+    {
+        return [
+            'cliente'   => \App\Models\Cliente::orderBy('nombre')->where('id_emp',$idEmp)->where('estado','1')->get(['id','nombre']),
+            'proveedor' => \App\Models\Proveedor::orderBy('nombre')->where('id_emp',$idEmp)->where('estado','1')->get(['id','nombre']),
+            'producto'  => \App\Models\Producto::orderBy('nombre')->where('id_emp',$idEmp)->where('estado','1')->get(['id','nombre']),
+        ];
+    }
+
+
+    /** Devuelve la ficha de tipo 'Cliente' que aplica al usuario actual (ADMIN) o la que venga por request (SUPERADMIN). */
+    private function resolveProveedorFichaId(?int $requestedFichaId = null): ?int
+    {
+        $user = \Auth::user();
+
+        // SUPERADMIN puede elegir explícitamente una ficha (por request o por el <select>)
+        if ($user->rol->nombre === 'SUPERADMIN') {
+            if ($requestedFichaId) {
+                return \App\Models\Ficha::where('id', $requestedFichaId)
+                    ->whereIn('tipo', ['Proveedor','proveedor'])
+                    ->value('id');
+            }
+            // Si no manda, no forzamos nada (podrás poner un <select> de fichas en el create de SUPERADMIN)
+            return null;
+        }
+
+        // ADMIN: la ficha debe ser de su empresa y tipo Cliente
+        return \App\Models\Ficha::where('id_emp', $user->id_emp)
+            ->whereIn('tipo', ['Proveedor','proveedor'])
+            ->where('estado', 1)
+            ->orderByDesc('id')
+            ->value('id'); // la más reciente
+    }
+
+
+    /** Carga definiciones de grupos solo de ESA ficha. */
+    private function loadProveedorGroupDefsForFicha(?int $idFicha): \Illuminate\Support\Collection
+    {
+        if (!$idFicha) return collect();
+        return \App\Models\FichaGroupDef::where('entity_type','proveedor')
+            ->where('id_ficha', $idFicha)
+            ->where('is_active', 1)
+            ->orderBy('id')
+            ->get();
+    }
+
    
+    /** Carga valores existentes (listas y relaciones) del cliente, scoping por id_ficha. */
+    private function loadProveedorFichaValues(int $proveedorId, ?int $idFicha): array
+    {
+        if (!$idFicha) return ['lists'=>collect(), 'rels'=>collect()];
+
+        $lists = \App\Models\FichaListItem::where('entity_type','proveedor')
+            ->where('entity_id', $proveedorId)
+            ->where('id_ficha', $idFicha)
+            ->orderBy('sort_order')->get()
+            ->groupBy('group_code');
+
+        $rels  = \App\Models\FichaRelationLink::where('entity_type','proveedor')
+            ->where('entity_id', $proveedorId)
+            ->where('id_ficha', $idFicha)
+            ->get()->groupBy('group_code');
+
+        return ['lists'=>$lists, 'rels'=>$rels];
+    }
+
+    /** Guarda valores LIST/REL del cliente, scoping por id_ficha (versión robusta). */
+    private function saveFichaValuesForProveedor(int $proveedorId, \Illuminate\Http\Request $r): void
+    {
+        $entityType = 'proveedor';
+        $idFicha = \App\Models\Proveedor::where('id',$proveedorId)->value('id_ficha');
+
+        // Borrar SOLO dentro de esta ficha
+        \App\Models\FichaListItem::where('entity_type',$entityType)->where('entity_id',$proveedorId)
+            ->when($idFicha, fn($q)=>$q->where('id_ficha',$idFicha))->delete();
+        \App\Models\FichaRelationLink::where('entity_type',$entityType)->where('entity_id',$proveedorId)
+            ->when($idFicha, fn($q)=>$q->where('id_ficha',$idFicha))->delete();
+
+        // Defs de esa ficha
+        $defs    = $this->loadProveedorGroupDefsForFicha($idFicha);
+        $payload = (array) $r->input('groups', []);
+
+        foreach ($defs as $def) {
+            $code = $def->code;
+
+            if ($def->group_type === 'list') {
+                $rows = array_values((array) data_get($payload, "$code.items", []));
+                $fields = is_array($def->item_fields_json)
+                    ? $def->item_fields_json
+                    : (json_decode($def->item_fields_json, true) ?: []);
+                $sort = 0;
+
+                foreach ($rows as $row) {
+                    if (!is_array($row)) continue;
+                    $has = false;
+                    foreach ($fields as $f) {
+                        $k = $f['code'] ?? null; if(!$k)continue;
+                        if (trim((string)($row[$k] ?? '')) !== '') { $has = true; break; }
+                    }
+                    if (!$has) continue;
+
+                    \App\Models\FichaListItem::create([
+                        'entity_type' => $entityType,
+                        'entity_id'   => $proveedorId,
+                        'id_ficha'    => $idFicha,
+                        'group_code'  => $code,
+                        'value_json'  => $row,
+                        'sort_order'  => $sort++,
+                    ]);
+                }
+
+            } else { // relation
+                $ids = [];
+                if ((int)$def->allow_multiple === 1) {
+                    $ids = array_values(array_map('intval', (array) data_get($payload, "$code.related_ids", [])));
+                } else {
+                    $rid  = (int) data_get($payload, "$code.related_id", 0);
+                    if ($rid > 0) $ids[] = $rid;
+                }
+                $ids = array_values(array_unique(array_filter($ids, fn($v)=>(int)$v>0)));
+
+                foreach ($ids as $rid) {
+                    \App\Models\FichaRelationLink::create([
+                        'entity_type'         => $entityType,
+                        'entity_id'           => $proveedorId,
+                        'id_ficha'            => $idFicha,
+                        'group_code'          => $code,
+                        'related_entity_type' => $def->related_entity_type,
+                        'related_entity_id'   => $rid,
+                    ]);
+                }
+            }
+        }
+    }
 }

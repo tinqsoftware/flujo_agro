@@ -11,15 +11,20 @@ use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\TipoFlujoController;
 use App\Http\Controllers\Ejecucion;
+use App\Http\Controllers\FormBuilderOrderController;
 use App\Http\Controllers\{
     FormTypeController, FormController,
     FormGroupController, FormFieldController,
-    FormFieldSourceController, FormFieldFormulaController,
+    FormFieldSourceController, FormFieldFormulaController,FormulaEvalController,
     FormRunController, PdfRenderController, DataSourceApiController
 };
 
 Route::get('/', function () {
     return view('welcome');
+});
+
+Route::get('/ejemplo', function () {
+    return view('ejemplo');
 });
 
 Auth::routes(['register' => false]);
@@ -34,6 +39,7 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
 
     Route::resource('form-types', App\Http\Controllers\FormTypeController::class)->except(['show']);
     Route::resource('forms', App\Http\Controllers\FormController::class)->except(['show']);
+    Route::get('/forms/{form}/edit', [FormController::class, 'edit'])->name('forms.edit');
 
     // APIs para selects dinámicos
     Route::get('datasource/options', [DataSourceApiController::class,'options'])->name('datasource.options');
@@ -67,8 +73,18 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
             Route::post('fields/{field}/formula',  [FormFieldFormulaController::class,'upsert'])->name('forms.fields.formula.upsert');
             Route::delete('fields/{field}/formula',[FormFieldFormulaController::class,'destroy'])->name('forms.fields.formula.destroy');
 
-            // Route::resource('pdf-templates', PdfTemplateController::class)->except(['show','edit','create','index']);
-            // Route::post('pdf-templates/{template}/elements', [PdfElementController::class,'upsert'])->name('forms.pdf.elements.upsert');
+            Route::get('/formula-context', [FormFieldController::class, 'formulaContext'])->name('forms.formula.context');
+
+             // AJAX para origen de datos
+            Route::get('/sources/tables', [\App\Http\Controllers\FormFieldSourceController::class, 'tables'])->name('forms.sources.tables');
+            Route::get('/sources/columns', [\App\Http\Controllers\FormFieldSourceController::class, 'columns'])->name('forms.sources.columns'); // ?table=clientes
+            Route::get('/sources/table-table', [\App\Http\Controllers\FormFieldSourceController::class, 'tableTable'])->name('forms.sources.table_table'); // ?root=cliente&empresa_id=...
+            Route::get('/sources/table-table-root', [\App\Http\Controllers\FormFieldSourceController::class, 'tableTableRoot'])->name('forms.sources.table_table_root'); // ?root=cliente&empresa_id=...
+            Route::get('/sources/forms', [\App\Http\Controllers\FormFieldSourceController::class, 'forms'])->name('forms.sources.forms'); // lista forms empresa
+            Route::get('/sources/form-fields', [\App\Http\Controllers\FormFieldSourceController::class, 'formFields'])->name('forms.sources.form_fields'); // ?form_id=...
+
+            Route::resource('pdf-templates', PdfTemplateController::class)->except(['show','edit','create','index']);
+            Route::post('pdf-templates/{template}/elements', [PdfElementController::class,'upsert'])->name('forms.pdf.elements.upsert');
         });
 
     });
@@ -99,6 +115,16 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::get('/fichas/etapas-by-flujo', [FichaController::class, 'etapasByFlujo'])->name('fichas.etapasByFlujo');
         Route::get('/fichas/check-tipo-disponible', [FichaController::class, 'checkTipoDisponible'])->name('fichas.checkTipoDisponible');
 
+        // --- FICHAS: Grupos (relación / lista) dentro del módulo existente ---
+        Route::middleware(['auth'])->group(function () {
+            // Crear/actualizar un grupo para la ficha del módulo $entity (cliente|proveedor|producto)
+            Route::post('/fichas/{entity}/groups/store', [FichaController::class, 'storeGroupDef'])
+                ->name('fichas.groups.store');
+
+            // Eliminar grupo
+            Route::delete('/fichas/{entity}/groups/{id}', [FichaController::class, 'deleteGroupDef'])
+                ->name('fichas.groups.delete');
+        });
 
         //CLIENTES
         Route::resource('clientes', ClienteController::class)->only(['show','index','create','store','edit','update','destroy']);
@@ -213,11 +239,22 @@ Route::middleware(['auth', 'role:SUPERADMIN,ADMINISTRADOR,ADMINISTRATIVO'])
         Route::post('form-runs/{run}/submit',   [FormRunController::class,'submit'])->name('form-runs.submit');
         Route::post('form-runs/{run}/approve',  [FormRunController::class,'approve'])->name('form-runs.approve');
         Route::get ('form-runs/{run}/pdf/{template}', [PdfRenderController::class,'show'])->name('form-runs.pdf');
-        Route::get ('form-runs/{run}/pdf', [PdfRenderController::class,'showWithoutTemplate'])->name('form-runs.pdf.basic');
+        Route::post('/forms/{form}/reorder', [FormBuilderOrderController::class, 'reorder'])->name('forms.reorder');
+
+        Route::post('/form-runs/{run}/create-po', [\App\Http\Controllers\FormRunController::class, 'createPurchaseOrder'])
+            ->name('form-runs.create-po');
+
+        Route::post('/form-runs/{run}/create-so', [\App\Http\Controllers\FormRunController::class, 'createSalesOrder'])
+            ->name('form-runs.create-so');
 
     });
     
     // Perfil de usuario (todos)
     Route::get('/perfil', [UserController::class, 'perfil'])->name('perfil');
     Route::put('/perfil', [UserController::class, 'updatePerfil'])->name('perfil.update');
+    Route::post('/formulas/eval', [FormulaEvalController::class, 'eval'])->name('formulas.eval');
+
+    Route::get('/api/datasource/table-options', [DataSourceApiController::class, 'tableOptions']);
+    Route::get('/api/datasource/table-table-options', [DataSourceApiController::class, 'tabletableOptions']);
+
 });

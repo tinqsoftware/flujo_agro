@@ -18,4 +18,6 @@ class FormRun extends Model {
     public function etapaForm(){ return $this->belongsTo(EtapaForm::class,'id_etapas_forms'); }
     public function answers(){ return $this->hasMany(FormAnswer::class,'id_run'); }
     public function rows(){ return $this->hasMany(FormAnswerRow::class,'id_run'); }
+    public function purchaseOrders(){ return $this->hasMany(\App\Models\PurchaseOrder::class, 'run_id'); }
+    public function salesOrders(){ return $this->hasMany(\App\Models\SalesOrder::class, 'run_id'); }
 }

@@ -13,7 +13,7 @@
 
 <form action="{{ route('proveedores.update',$proveedor) }}" method="POST" enctype="multipart/form-data">
   @csrf @method('PUT')
-
+  <input type="hidden" name="id_ficha" value="{{ $proveedor->id_ficha }}">
   <div class="card mb-4">
     <div class="card-header"><strong>Información básica</strong></div>
     <div class="card-body">
@@ -56,6 +56,8 @@
       </div>
 
       @include('superadmin.proveedores.partials.attrs', ['atributos'=>$atributos, 'valores'=>$valores])
+      @include('superadmin.proveedores.partials.ficha_groups', ['groupDefs'=>$groupDefs, 'relOptions'=>$relOptions, 'listValues'=>$listValues ?? collect(), 'relValues'=>$relValues ?? collect()  ])
+
     </div>
   </div>
 

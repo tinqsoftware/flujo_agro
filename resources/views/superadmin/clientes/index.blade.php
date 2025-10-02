@@ -85,6 +85,7 @@
                     @endif
                     <th>{!! $sortLink('estado') !!}</th>
                     <th>{!! $sortLink('created_at') !!}</th>
+                    <th>Grupos</th>
                     {{-- columnas dinámicas --}}
                     @foreach($atributos as $a)
                     <th>{{ $a->titulo }}</th>
@@ -107,6 +108,15 @@
                         </span>
                     </td>
                     <td>{{ optional($c->created_at)->format('d/m/Y') }}</td>
+                    <td>
+                      @if(isset($groupTitles) && $groupTitles->isNotEmpty())
+                        <div class="mt-2 d-flex flex-wrap gap-1">
+                          @foreach($groupTitles as $label)
+                            <span class="badge bg-light text-dark">{{ $label }}</span>
+                          @endforeach
+                        </div>
+                      @endif
+                    </td>
 
                     {{-- valores dinámicos --}}
                     @foreach($atributos as $a)

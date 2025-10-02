@@ -15,6 +15,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Cliente;
+use App\Models\FichaListItem;
+use App\Models\FichaRelationLink;
+
 use App\Models\DatosAtributosFicha; // Alias del modelo de datos_atributos_fichas
 
 
@@ -33,7 +36,8 @@ class ProductoController extends Controller
         $sort   = $request->get('sort', 'created_at');         // nombre | created_at | estado | fecha_inicio
         $dir    = strtolower($request->get('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
 
-        $query = Producto::with(['empresa','userCreate']);
+        $query = Producto::with(['empresa','userCreate'])
+            ->orderBy('created_at','desc');
 
         // ámbito empresa
         if (!$isSuper) {
@@ -46,10 +50,8 @@ class ProductoController extends Controller
 
         // búsqueda por nombre y descripción
         if ($q !== '') {
-            $query->where(function($s) use ($q){
-                $s->where('nombre','like',"%{$q}%")
-                  ->orWhere('descripcion','like',"%{$q}%");
-            });
+            $query->where('nombre', 'like', "%{$q}%");
+
         }
 
         // sort
@@ -118,6 +120,9 @@ class ProductoController extends Controller
             }
         }
 
+        $groupTitles = \App\Models\FichaGroupDef::where('entity_type','producto')
+        ->where('is_active',1)->pluck('label','code');
+
         return view('superadmin.productos.index', [
             'productos'        => $productos,
             'atributos'        => $atributos,
@@ -129,6 +134,7 @@ class ProductoController extends Controller
             'sort'             => $sort,
             'dir'              => $dir,
             'valoresByProducto'=> $valoresByProducto,
+            'groupTitles'      => $groupTitles,
         ]);
     }
 
@@ -157,15 +163,19 @@ class ProductoController extends Controller
             ? AtributoFicha::where('id_ficha',$ficha->id)->where('nro','>',0)->orderBy('nro')->get()
             : collect();
 
-        return view('superadmin.productos.create', compact('empresas','atributos','ficha','isSuper'));
+        $groupDefs  = $this->loadGroupDefsForProductos($ficha?->id);
+        $relOptions = $this->loadRelationOptions($ficha?->id_emp);
+
+        return view('superadmin.productos.create', compact('groupDefs','relOptions','empresas','atributos','ficha','isSuper'));
     }
 
     /** Guardar */
     public function store(Request $request)
     {
         $user      = Auth::user();
-        $isSuper   = ($user->rol->nombre === 'SUPERADMIN');
         $empresaId = $request->input('id_emp') ?: $user->id_emp;
+        $isSuper   = ($user->rol->nombre === 'SUPERADMIN');
+        
 
         $ficha = Ficha::where('id_emp',$empresaId)->where('tipo','Producto')->first();
         $atributos = $ficha
@@ -222,6 +232,7 @@ class ProductoController extends Controller
             $prod->ruta_foto = $request->file('ruta_foto')->store('productos','public'); // <---
         }
         $prod->save();
+        $this->saveFichaValuesForProducto($prod->id, $request);
 
         // atributos
         foreach ($atributos as $a) {
@@ -256,6 +267,7 @@ class ProductoController extends Controller
                 'dato'          => $dato,
                 'json'          => $json,
                 'id_user_create'=> $user->id,
+                'isSuper'     => $isSuper,
             ]);
         }
 
@@ -267,11 +279,16 @@ class ProductoController extends Controller
     {
         $user = Auth::user();
         $isSuper = ($user->rol->nombre === 'SUPERADMIN');
-        if (!$isSuper && $producto->id_emp != $user->id_emp) abort(403);
-
         $empresas = $isSuper
             ? Empresa::where('estado',1)->orderBy('nombre')->get(['id','nombre'])
             : Empresa::where('id',$user->id_emp)->get(['id','nombre']);
+
+        $ficha = Ficha::where('id_emp', $user->rol->nombre === 'SUPERADMIN' ? ($empresas->first()->id ?? null) : $user->id_emp)
+            ->where('tipo','Producto')->first();
+        $groupDefs  = $this->loadGroupDefsForProductos($ficha?->id);
+        $relOptions = $this->loadRelationOptions($ficha?->id_emp);
+
+        if (!$isSuper && $producto->id_emp != $user->id_emp) abort(403);
 
         $atributos = collect(); $valores = [];
         if ($producto->id_ficha) {
@@ -286,7 +303,14 @@ class ProductoController extends Controller
             }
         }
 
-        return view('superadmin.productos.edit', compact('producto','empresas','atributos','valores','isSuper'));
+        // Valores actuales (para pre-llenar el form)
+        $listValues = FichaListItem::where('entity_type','producto')
+            ->where('entity_id',$producto->id)->get()->groupBy('group_code');
+
+        $relValues  = FichaRelationLink::where('entity_type','producto')
+            ->where('entity_id',$producto->id)->get()->groupBy('group_code');
+
+        return view('superadmin.productos.edit', compact('producto','groupDefs','relOptions','listValues','relValues','empresas','atributos','valores','isSuper'));
     }
 
     /** Actualizar */
@@ -380,8 +404,33 @@ class ProductoController extends Controller
                 }
             }
         });
+        $this->saveFichaValuesForProducto($producto->id, $request);
 
         return redirect()->route('productos.index')->with('success','Producto actualizado correctamente.');
+    }
+
+     /** (Opcional) eliminar registro */
+    public function destroy(Producto $producto)
+    {
+        $user = Auth::user();
+        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+        if (!$isSuper && $producto->id_emp != $user->id_emp) abort(403);
+
+        // Si quieres borrar también archivos de atributos imagen:
+        // foreach (DatosAtributosFicha::where('id_relacion',$producto->id)->get() as $r) {
+        //     if ($r->dato && \Storage::disk('public')->exists($r->dato)) \Storage::disk('public')->delete($r->dato);
+        //     $r->delete();
+        // }
+
+        if ($producto->ruta_logo) {
+            \Storage::disk('public')->delete($producto->ruta_logo);
+        }
+
+        // borrar valores de atributos asociados
+        DatosAtributosFicha::where('ref_tipo','producto')->where('ref_id',$producto->id)->delete();
+
+        $producto->delete();
+        return back()->with('success','Producto eliminado correctamente.');
     }
 
     /** AJAX: atributos de ficha Producto por empresa */
@@ -410,21 +459,150 @@ class ProductoController extends Controller
         );
     }
 
-    /** (Opcional) eliminar registro */
-    public function destroy(Producto $producto)
+    private function fichaEntity(): string { return 'producto'; }
+
+    private function loadGroupDefsForProductos(?int $idFicha)
     {
-        $user = Auth::user();
-        $isSuper = ($user->rol->nombre === 'SUPERADMIN');
-        if (!$isSuper && $producto->id_emp != $user->id_emp) abort(403);
-
-        // Si quieres borrar también archivos de atributos imagen:
-        // foreach (DatosAtributosFicha::where('id_relacion',$producto->id)->get() as $r) {
-        //     if ($r->dato && \Storage::disk('public')->exists($r->dato)) \Storage::disk('public')->delete($r->dato);
-        //     $r->delete();
-        // }
-
-        $producto->delete();
-        return back()->with('success','Producto eliminado correctamente.');
+        if (!$idFicha) return collect(); // si no hay ficha, no hay defs
+        return \App\Models\FichaGroupDef::where('entity_type','producto')
+            ->where('id_ficha', $idFicha)
+            ->where('is_active', 1)
+            ->orderBy('id')
+            ->get();
     }
+
+    private function loadRelationOptions(?int $idEmp): array
+    {
+        return [
+            'cliente'   => \App\Models\Cliente::orderBy('nombre')->where('id_emp',$idEmp)->where('estado','1')->get(['id','nombre']),
+            'proveedor' => \App\Models\Proveedor::orderBy('nombre')->where('id_emp',$idEmp)->where('estado','1')->get(['id','nombre']),
+            'producto'  => \App\Models\Producto::orderBy('nombre')->where('id_emp',$idEmp)->where('estado','1')->get(['id','nombre']),
+        ];
+    }
+
+    /** Devuelve la ficha de tipo 'Cliente' que aplica al usuario actual (ADMIN) o la que venga por request (SUPERADMIN). */
+    private function resolveProductoFichaId(?int $requestedFichaId = null): ?int
+    {
+        $user = \Auth::user();
+
+        // SUPERADMIN puede elegir explícitamente una ficha (por request o por el <select>)
+        if ($user->rol->nombre === 'SUPERADMIN') {
+            if ($requestedFichaId) {
+                return \App\Models\Ficha::where('id', $requestedFichaId)
+                    ->whereIn('tipo', ['Producto','producto'])
+                    ->value('id');
+            }
+            // Si no manda, no forzamos nada (podrás poner un <select> de fichas en el create de SUPERADMIN)
+            return null;
+        }
+
+        // ADMIN: la ficha debe ser de su empresa y tipo Cliente
+        return \App\Models\Ficha::where('id_emp', $user->id_emp)
+            ->whereIn('tipo', ['Producto','producto'])
+            ->where('estado', 1)
+            ->orderByDesc('id')
+            ->value('id'); // la más reciente
+    }
+
+    /** Carga definiciones de grupos solo de ESA ficha. */
+    private function loadProductoGroupDefsForFicha(?int $idFicha): \Illuminate\Support\Collection
+    {
+        if (!$idFicha) return collect();
+        return \App\Models\FichaGroupDef::where('entity_type','producto')
+            ->where('id_ficha', $idFicha)
+            ->where('is_active', 1)
+            ->orderBy('id')
+            ->get();
+    }
+
+    /** Carga valores existentes (listas y relaciones) del cliente, scoping por id_ficha. */
+    private function loadProductoFichaValues(int $productoId, ?int $idFicha): array
+    {
+        if (!$idFicha) return ['lists'=>collect(), 'rels'=>collect()];
+
+        $lists = \App\Models\FichaListItem::where('entity_type','producto')
+            ->where('entity_id', $productoId)
+            ->where('id_ficha', $idFicha)
+            ->orderBy('sort_order')->get()
+            ->groupBy('group_code');
+
+        $rels  = \App\Models\FichaRelationLink::where('entity_type','producto')
+            ->where('entity_id', $productoId)
+            ->where('id_ficha', $idFicha)
+            ->get()->groupBy('group_code');
+
+        return ['lists'=>$lists, 'rels'=>$rels];
+    }
+
+    /** Guarda valores LIST/REL del cliente, scoping por id_ficha (versión robusta). */
+    private function saveFichaValuesForProducto(int $productoId, \Illuminate\Http\Request $r): void
+    {
+        $entityType = 'producto';
+        $idFicha = \App\Models\Producto::where('id',$productoId)->value('id_ficha');
+
+        // Borrar SOLO dentro de esta ficha
+        \App\Models\FichaListItem::where('entity_type',$entityType)->where('entity_id',$productoId)
+            ->when($idFicha, fn($q)=>$q->where('id_ficha',$idFicha))->delete();
+        \App\Models\FichaRelationLink::where('entity_type',$entityType)->where('entity_id',$productoId)
+            ->when($idFicha, fn($q)=>$q->where('id_ficha',$idFicha))->delete();
+
+        // Defs de esa ficha
+        $defs    = $this->loadProductoGroupDefsForFicha($idFicha);
+        $payload = (array) $r->input('groups', []);
+
+        foreach ($defs as $def) {
+            $code = $def->code;
+
+            if ($def->group_type === 'list') {
+                $rows = array_values((array) data_get($payload, "$code.items", []));
+                $fields = is_array($def->item_fields_json)
+                    ? $def->item_fields_json
+                    : (json_decode($def->item_fields_json, true) ?: []);
+                $sort = 0;
+
+                foreach ($rows as $row) {
+                    if (!is_array($row)) continue;
+                    $has = false;
+                    foreach ($fields as $f) {
+                        $k = $f['code'] ?? null; if(!$k)continue;
+                        if (trim((string)($row[$k] ?? '')) !== '') { $has = true; break; }
+                    }
+                    if (!$has) continue;
+
+                    \App\Models\FichaListItem::create([
+                        'entity_type' => $entityType,
+                        'entity_id'   => $productoId,
+                        'id_ficha'    => $idFicha,
+                        'group_code'  => $code,
+                        'value_json'  => $row,
+                        'sort_order'  => $sort++,
+                    ]);
+                }
+
+            } else { // relation
+                $ids = [];
+                if ((int)$def->allow_multiple === 1) {
+                    $ids = array_values(array_map('intval', (array) data_get($payload, "$code.related_ids", [])));
+                } else {
+                    $rid  = (int) data_get($payload, "$code.related_id", 0);
+                    if ($rid > 0) $ids[] = $rid;
+                }
+                $ids = array_values(array_unique(array_filter($ids, fn($v)=>(int)$v>0)));
+
+                foreach ($ids as $rid) {
+                    \App\Models\FichaRelationLink::create([
+                        'entity_type'         => $entityType,
+                        'entity_id'           => $productoId,
+                        'id_ficha'            => $idFicha,
+                        'group_code'          => $code,
+                        'related_entity_type' => $def->related_entity_type,
+                        'related_entity_id'   => $rid,
+                    ]);
+                }
+            }
+        }
+    }
+
+
    
 }

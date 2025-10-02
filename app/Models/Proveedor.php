@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Traits\HasFichaExtras;
 
 class Proveedor extends Model
 {
     use HasFactory;
+    use HasFichaExtras;
 
     protected $table = 'proveedores';
 
@@ -39,4 +41,8 @@ class Proveedor extends Model
     {
         return $this->belongsTo(Ficha::class, 'id_ficha');
     }
+    
+    public function fichaEntityType(): string { return 'proveedor'; }
+
+
 }

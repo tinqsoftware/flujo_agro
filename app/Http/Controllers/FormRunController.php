@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreFormRunRequest;
 use App\Models\{Form, FormRun, FormField};
 use App\Services\Forms\{DataSourceResolver, FormulaEngine, FormPersistenceService};
+use App\Services\Orders\OrderFromRunService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
@@ -18,8 +19,8 @@ class FormRunController extends Controller
 
     public function create(Request $r) {
         $form = Form::with([
-            'fields.source', 'fields.formula',
-            'groups.fields.source', 'groups.fields.formula',
+            'fields.source', 'fields.formulas',
+            'groups.fields.source', 'groups.fields.formulas',
         ])->findOrFail($r->input('form_id'));
 
         // TODO: autorización por empresa si aplica
@@ -49,18 +50,23 @@ class FormRunController extends Controller
                     $label = $row->label ?? $row->nombre ?? $row->text ?? (string)$value;
                 }
                 if ($value !== null) {
-                    $out[] = ['value' => $value, 'label' => (string)$label];
+                    $meta = is_array($row) ? $row : $row->toArray();
+                    $out[] = [
+                        'value' => $value,
+                        'label' => (string)$label,
+                        'meta'  => $meta, // incluye atributos extra
+                    ];
                 }
             }
             return $out;
         };
 
         foreach ($form->fields as $f) {
-            $options[$f->id] = $f->source ? $normalize($resolver->options($f, $ctx)) : [];
+            $options[$f->id] = $f->source ? $resolver->options($f, $ctx) : [];
         }
         foreach ($form->groups as $g) {
             foreach ($g->fields as $f) {
-                $options[$f->id] = $f->source ? $normalize($resolver->options($f, $ctx)) : [];
+                $options[$f->id] = $f->source ? $resolver->options($f, $ctx) : [];
             }
         }
 
@@ -227,6 +233,41 @@ class FormRunController extends Controller
         return back()->with('ok','Actualizado');
     }
 
+    public function createPurchaseOrder(Request $r, \App\Models\FormRun $run, OrderFromRunService $svc)
+    {
+        // Ajusta el mapeo a tus códigos reales
+        $map = [
+            'supplier_field' => $r->input('supplier_field', 'proveedor_id'),
+            'group_name'     => $r->input('group_name', 'Productos'),
+            'product_field'  => $r->input('product_field', 'producto'),
+            'qty_field'      => $r->input('qty_field', 'cantidad'),
+            'price_field'    => $r->input('price_field', 'unit_price'),
+            'desc_field'     => $r->input('desc_field', 'descripcion'),
+            'currency'       => $r->input('currency', 'PEN'),
+        ];
+
+        $po = $svc->createPOFromRun($run, $map);
+
+        return back()->with('ok', 'OC creada: #'.$po->id);
+    }
+
+    public function createSalesOrder(Request $r, \App\Models\FormRun $run, OrderFromRunService $svc)
+    {
+        $map = [
+            'customer_field' => $r->input('customer_field', 'cliente_id'),
+            'group_name'     => $r->input('group_name', 'Productos'),
+            'product_field'  => $r->input('product_field', 'producto'),
+            'qty_field'      => $r->input('qty_field', 'cantidad'),
+            'price_field'    => $r->input('price_field', 'unit_price'),
+            'desc_field'     => $r->input('desc_field', 'descripcion'),
+            'currency'       => $r->input('currency', 'PEN'),
+        ];
+
+        $so = $svc->createSOFromRun($run, $map);
+
+        return back()->with('ok', 'OV creada: #'.$so->id);
+    }
+
     public function submit(FormRun $run) {
         $run->update(['estado'=>'submitted','updated_by'=>auth()->id()]);
         return back()->with('ok','Enviado');
@@ -266,7 +307,14 @@ class FormRunController extends Controller
                 $value = $row->value ?? $row->id ?? null;
                 $label = $row->label ?? $row->nombre ?? $row->text ?? (string)$value;
             }
-            if ($value !== null) $out[] = ['value'=>$value,'label'=>(string)$label];
+            if ($value !== null) {
+                $meta = is_array($row) ? $row : $row->toArray();
+                $out[] = [
+                    'value' => $value,
+                    'label' => (string)$label,
+                    'meta'  => $meta, // incluye atributos extra
+                ];
+            }
         }
         return $out;
     }

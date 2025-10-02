@@ -15,6 +15,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Cliente;
+use App\Models\FichaListItem;
+use App\Models\FichaRelationLink;
+
 use App\Models\DatosAtributosFicha; // Alias del modelo de datos_atributos_fichas
 
 
@@ -136,6 +139,9 @@ class ClienteController extends Controller
             }
         }
 
+        $groupTitles = \App\Models\FichaGroupDef::where('entity_type','cliente')
+        ->where('is_active',1)->pluck('label','code');
+
         return view('superadmin.clientes.index', [
             'clientes'         => $clientes,
             'atributos'        => $atributos,
@@ -147,8 +153,10 @@ class ClienteController extends Controller
             'sort'             => $sort,
             'dir'              => $dir,
             'valoresByCliente' => $valoresByCliente,
+            'groupTitles'      => $groupTitles,
         ]);
     }
+
 
     /** Helper para detectar json de array simple */
     private function looksLikeJsonArray(?string $s): bool
@@ -173,8 +181,11 @@ class ClienteController extends Controller
         $atributos = $ficha
             ? AtributoFicha::where('id_ficha',$ficha->id)->where('nro','>',0)->orderBy('nro')->get()
             : collect();
+        
+        $groupDefs  = $this->loadGroupDefsForClientes($ficha?->id);
+        $relOptions = $this->loadRelationOptions($ficha?->id_emp);
 
-        return view('superadmin.clientes.create', compact('empresas','atributos','ficha','isSuper'));
+        return view('superadmin.clientes.create', compact('groupDefs','relOptions','empresas','atributos','ficha','isSuper'));
     }
 
     public function store(Request $request)
@@ -264,6 +275,7 @@ class ClienteController extends Controller
         if ($ficha) $cliente->id_ficha = $ficha->id;
 
         $cliente->save();
+        $this->saveFichaValuesForCliente($cliente->id, $request);
 
         // Guardar valores de atributos
         foreach ($atributos as $a) {
@@ -313,15 +325,19 @@ class ClienteController extends Controller
     {
         $user = Auth::user();
         $isSuper = ($user->rol->nombre === 'SUPERADMIN');
+        $empresas = $isSuper
+            ? Empresa::where('estado',1)->orderBy('nombre')->get(['id','nombre'])
+            : Empresa::where('id',$user->id_emp)->get(['id','nombre']);
+
+        $ficha = Ficha::where('id_emp', $user->rol->nombre === 'SUPERADMIN' ? ($empresas->first()->id ?? null) : $user->id_emp)
+            ->where('tipo','Cliente')->first();
+        $groupDefs  = $this->loadGroupDefsForClientes($ficha?->id);
+        $relOptions = $this->loadRelationOptions($ficha?->id_emp);
 
         // Seguridad: si no es superadmin, solo su empresa
         if (!$isSuper && $cliente->id_emp != $user->id_emp) {
             abort(403);
         }
-
-        $empresas = $isSuper
-            ? Empresa::where('estado',1)->orderBy('nombre')->get(['id','nombre'])
-            : Empresa::where('id',$user->id_emp)->get(['id','nombre']);
 
         // Atributos de la ficha del cliente (si tiene)
         $atributos = collect();
@@ -341,7 +357,14 @@ class ClienteController extends Controller
             }
         }
 
-        return view('superadmin.clientes.edit', compact('cliente','empresas','atributos','valores','isSuper'));
+        // Valores actuales (para pre-llenar el form)
+        $listValues = FichaListItem::where('entity_type','cliente')
+            ->where('entity_id',$cliente->id)->get()->groupBy('group_code');
+
+        $relValues  = FichaRelationLink::where('entity_type','cliente')
+            ->where('entity_id',$cliente->id)->get()->groupBy('group_code');
+
+        return view('superadmin.clientes.edit', compact('cliente','groupDefs','relOptions','listValues','relValues','empresas','atributos','valores','isSuper'));
     }
 
     public function update(Request $request, Cliente $cliente)
@@ -454,8 +477,8 @@ class ClienteController extends Controller
                     $dato->save();
                 }
             }
-
         });
+        $this->saveFichaValuesForCliente($cliente->id, $request);
 
         return redirect()->route('clientes.index')->with('success','Cliente actualizado correctamente.');
     }
@@ -515,5 +538,151 @@ class ClienteController extends Controller
 
         return response()->json($out);
     }
+
+    private function fichaEntity(): string { return 'cliente'; }
+
+    private function loadGroupDefsForClientes(?int $idFicha)
+    {
+        if (!$idFicha) return collect(); // si no hay ficha, no hay defs
+        return \App\Models\FichaGroupDef::where('entity_type','cliente')
+            ->where('id_ficha', $idFicha)
+            ->where('is_active', 1)
+            ->orderBy('id')
+            ->get();
+    }
+
+    private function loadRelationOptions(?int $idEmp): array
+    {
+        return [
+            'cliente'   => \App\Models\Cliente::orderBy('nombre')->where('id_emp',$idEmp)->where('estado','1')->get(['id','nombre']),
+            'proveedor' => \App\Models\Proveedor::orderBy('nombre')->where('id_emp',$idEmp)->where('estado','1')->get(['id','nombre']),
+            'producto'  => \App\Models\Producto::orderBy('nombre')->where('id_emp',$idEmp)->where('estado','1')->get(['id','nombre']),
+        ];
+    }
+
+    /** Devuelve la ficha de tipo 'Cliente' que aplica al usuario actual (ADMIN) o la que venga por request (SUPERADMIN). */
+    private function resolveClienteFichaId(?int $requestedFichaId = null): ?int
+    {
+        $user = \Auth::user();
+
+        // SUPERADMIN puede elegir explícitamente una ficha (por request o por el <select>)
+        if ($user->rol->nombre === 'SUPERADMIN') {
+            if ($requestedFichaId) {
+                return \App\Models\Ficha::where('id', $requestedFichaId)
+                    ->whereIn('tipo', ['Cliente','cliente'])
+                    ->value('id');
+            }
+            // Si no manda, no forzamos nada (podrás poner un <select> de fichas en el create de SUPERADMIN)
+            return null;
+        }
+
+        // ADMIN: la ficha debe ser de su empresa y tipo Cliente
+        return \App\Models\Ficha::where('id_emp', $user->id_emp)
+            ->whereIn('tipo', ['Cliente','cliente'])
+            ->where('estado', 1)
+            ->orderByDesc('id')
+            ->value('id'); // la más reciente
+    }
+
+    /** Carga definiciones de grupos solo de ESA ficha. */
+    private function loadClienteGroupDefsForFicha(?int $idFicha): \Illuminate\Support\Collection
+    {
+        if (!$idFicha) return collect();
+        return \App\Models\FichaGroupDef::where('entity_type','cliente')
+            ->where('id_ficha', $idFicha)
+            ->where('is_active', 1)
+            ->orderBy('id')
+            ->get();
+    }
+
+    /** Carga valores existentes (listas y relaciones) del cliente, scoping por id_ficha. */
+    private function loadClienteFichaValues(int $clienteId, ?int $idFicha): array
+    {
+        if (!$idFicha) return ['lists'=>collect(), 'rels'=>collect()];
+
+        $lists = \App\Models\FichaListItem::where('entity_type','cliente')
+            ->where('entity_id', $clienteId)
+            ->where('id_ficha', $idFicha)
+            ->orderBy('sort_order')->get()
+            ->groupBy('group_code');
+
+        $rels  = \App\Models\FichaRelationLink::where('entity_type','cliente')
+            ->where('entity_id', $clienteId)
+            ->where('id_ficha', $idFicha)
+            ->get()->groupBy('group_code');
+
+        return ['lists'=>$lists, 'rels'=>$rels];
+    }
+
+    /** Guarda valores LIST/REL del cliente, scoping por id_ficha (versión robusta). */
+    private function saveFichaValuesForCliente(int $clienteId, \Illuminate\Http\Request $r): void
+    {
+        $entityType = 'cliente';
+        $idFicha = \App\Models\Cliente::where('id',$clienteId)->value('id_ficha');
+
+        // Borrar SOLO dentro de esta ficha
+        \App\Models\FichaListItem::where('entity_type',$entityType)->where('entity_id',$clienteId)
+            ->when($idFicha, fn($q)=>$q->where('id_ficha',$idFicha))->delete();
+        \App\Models\FichaRelationLink::where('entity_type',$entityType)->where('entity_id',$clienteId)
+            ->when($idFicha, fn($q)=>$q->where('id_ficha',$idFicha))->delete();
+
+        // Defs de esa ficha
+        $defs    = $this->loadClienteGroupDefsForFicha($idFicha);
+        $payload = (array) $r->input('groups', []);
+
+        foreach ($defs as $def) {
+            $code = $def->code;
+
+            if ($def->group_type === 'list') {
+                $rows = array_values((array) data_get($payload, "$code.items", []));
+                $fields = is_array($def->item_fields_json)
+                    ? $def->item_fields_json
+                    : (json_decode($def->item_fields_json, true) ?: []);
+                $sort = 0;
+
+                foreach ($rows as $row) {
+                    if (!is_array($row)) continue;
+                    $has = false;
+                    foreach ($fields as $f) {
+                        $k = $f['code'] ?? null; if(!$k)continue;
+                        if (trim((string)($row[$k] ?? '')) !== '') { $has = true; break; }
+                    }
+                    if (!$has) continue;
+
+                    \App\Models\FichaListItem::create([
+                        'entity_type' => $entityType,
+                        'entity_id'   => $clienteId,
+                        'id_ficha'    => $idFicha,
+                        'group_code'  => $code,
+                        'value_json'  => $row,
+                        'sort_order'  => $sort++,
+                    ]);
+                }
+
+            } else { // relation
+                $ids = [];
+                if ((int)$def->allow_multiple === 1) {
+                    $ids = array_values(array_map('intval', (array) data_get($payload, "$code.related_ids", [])));
+                } else {
+                    $rid  = (int) data_get($payload, "$code.related_id", 0);
+                    if ($rid > 0) $ids[] = $rid;
+                }
+                $ids = array_values(array_unique(array_filter($ids, fn($v)=>(int)$v>0)));
+
+                foreach ($ids as $rid) {
+                    \App\Models\FichaRelationLink::create([
+                        'entity_type'         => $entityType,
+                        'entity_id'           => $clienteId,
+                        'id_ficha'            => $idFicha,
+                        'group_code'          => $code,
+                        'related_entity_type' => $def->related_entity_type,
+                        'related_entity_id'   => $rid,
+                    ]);
+                }
+            }
+        }
+    }
+
+
    
 }

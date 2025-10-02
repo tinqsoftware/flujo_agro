@@ -161,6 +161,284 @@
                     </div>
                 </div>
             </div>
+
+            @php
+            use App\Models\FichaGroupDef;
+            $map = ['Producto'=>'producto','Cliente'=>'cliente','Proveedor'=>'proveedor'];
+            $tipoSlug = $map[$ficha->tipo];
+
+            $defs = in_array($tipoSlug, ['cliente','proveedor','producto'])
+                ? FichaGroupDef::where('entity_type',$tipoSlug)->where('id_ficha',$ficha->id)->orderBy('id')->get()
+                : collect();
+            @endphp
+
+            @if(session('ok')) <div class="alert alert-success">{{ session('ok') }}</div> @endif
+            @if($errors->any()) <div class="alert alert-danger">{{ implode(' ', $errors->all()) }}</div> @endif
+
+            <div class="card mt-3">
+            <div class="card-header">Definiciones relaciones e Items</div>
+            <div class="card-body">
+
+                {{-- EXISTENTES como tarjetas editables --}}
+                <div id="existing-groups" class="d-flex flex-column gap-3">
+                @foreach($defs as $g)
+                    <div class="group-card border rounded p-3" data-id="{{ $g->id }}">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                        <label class="form-label">Código</label>
+                        <input class="form-control" name="group_defs[existing][{{ $g->id }}][code]" value="{{ $g->code }}" required>
+                        </div>
+                        <div class="col-md-4">
+                        <label class="form-label">Etiqueta</label>
+                        <input class="form-control" name="group_defs[existing][{{ $g->id }}][label]" value="{{ $g->label }}" required>
+                        </div>
+                        <div class="col-md-3">
+                        <label class="form-label">Tipo</label>
+                        <select class="form-select group-type" name="group_defs[existing][{{ $g->id }}][group_type]">
+                            <option value="list"     @selected($g->group_type==='list')>Lista (ítems)</option>
+                            <option value="relation" @selected($g->group_type==='relation')>Relación</option>
+                        </select>
+                        </div>
+                        <div class="col-md-2 text-end">
+                        <button type="button" class="btn btn-outline-danger" onclick="markGroupForDelete({{ $g->id }}, this)">Eliminar</button>
+                        </div>
+                    </div>
+
+                    {{-- RELACIÓN --}}
+                    <div class="row g-3 mt-2 relation-row" @style(['display:none' => $g->group_type!=='relation'])>
+                        <div class="col-md-4">
+                        <label class="form-label">Relacionado con</label>
+                        <select class="form-select" name="group_defs[existing][{{ $g->id }}][related_entity_type]">
+                            <option value="cliente"  @selected($g->related_entity_type==='cliente')>Cliente</option>
+                            <option value="proveedor"@selected($g->related_entity_type==='proveedor')>Proveedor</option>
+                            <option value="producto" @selected($g->related_entity_type==='producto')>Producto</option>
+                        </select>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-center">
+                        <div class="form-check form-switch mt-4">
+                            {{-- hidden para enviar 0 si se desmarca --}}
+                            <input type="hidden" name="group_defs[existing][{{ $g->id }}][allow_multiple]" value="0">
+                            <input class="form-check-input" type="checkbox"
+                                name="group_defs[existing][{{ $g->id }}][allow_multiple]" value="1"
+                                @checked($g->allow_multiple)>
+                            <label class="form-check-label">Permitir múltiples</label>
+                        </div>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-center">
+                        <div class="form-check form-switch mt-4">
+                            <input type="hidden" name="group_defs[existing][{{ $g->id }}][is_active]" value="0">
+                            <input class="form-check-input" type="checkbox"
+                                name="group_defs[existing][{{ $g->id }}][is_active]" value="1"
+                                @checked($g->is_active)>
+                            <label class="form-check-label">Activo</label>
+                        </div>
+                        </div>
+                    </div>
+
+                    {{-- LISTA --}}
+                    <div class="mt-3 list-row" @style(['display:none' => $g->group_type!=='list'])>
+                        <div class="row g-2">
+                        <div class="col-12">
+                            <div class="small text-muted">Campos del ítem: (el primero debe llamarse nombre) code / label / type</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="vf-rows" data-next-index="{{ count($g->item_fields_json ?? []) }}">
+                            @foreach(($g->item_fields_json ?? []) as $f)
+                                <div class="d-flex gap-2 mb-2 flex-wrap" data-row-index="{{ $loop->index }}">
+                                <input class="form-control" style="max-width:180px" placeholder="code"
+                                        name="group_defs[existing][{{ $g->id }}][item_fields][{{ $loop->index }}][code]"
+                                        value="{{ $f['code'] ?? '' }}">
+                                <input class="form-control" style="max-width:220px" placeholder="label"
+                                        name="group_defs[existing][{{ $g->id }}][item_fields][{{ $loop->index }}][label]"
+                                        value="{{ $f['label'] ?? '' }}">
+                                <select class="form-select" style="max-width:160px"
+                                        name="group_defs[existing][{{ $g->id }}][item_fields][{{ $loop->index }}][type]">
+                                    @php $t = $f['type'] ?? 'text'; @endphp
+                                    <option value="text"    @selected($t==='text')>text</option>
+                                    <option value="decimal" @selected($t==='decimal')>decimal</option>
+                                    <option value="int"     @selected($t==='int')>int</option>
+                                </select>
+                                <button type="button" class="btn btn-outline-danger" onclick="this.parentElement.remove()">x</button>
+                                </div>
+                            @endforeach
+                            </div>
+                            <button type="button" class="btn btn-xs btn-outline-primary mt-2"
+                                    onclick="addItemFieldRowExisting(this, {{ $g->id }})">+ Campo</button>
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+                @endforeach
+                </div>
+
+                {{-- NUEVOS grupos como tarjetas --}}
+                <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+                <h6 class="mb-0">Añadir nuevos grupos</h6>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="addNewGroupCard()">+ Añadir grupo</button>
+                </div>
+                <div id="new-groups" class="d-flex flex-column gap-3"></div>
+
+                <input type="hidden" id="group_defs_delete_holder">
+            </div>
+            </div>
+
+            @push('scripts')
+            <script>
+            (function(){
+            // Marcar para eliminar
+            window.markGroupForDelete = function(id, btn){
+                const card = btn.closest('.group-card');
+                card.style.opacity = .5;
+                card.querySelectorAll('input,select,textarea,button').forEach(el => el.disabled = true);
+                const holder = document.getElementById('group_defs_delete_holder');
+                const h = document.createElement('input');
+                h.type='hidden'; h.name='group_defs_delete[]'; h.value=id;
+                holder.parentNode.insertBefore(h, holder.nextSibling);
+            };
+
+            // Añadir campo de ítem a EXISTENTE (indexado)
+            window.addItemFieldRowExisting = function(btn, groupId){
+                const wrap = btn.closest('.list-row').querySelector('.vf-rows');
+                const next = parseInt(wrap.getAttribute('data-next-index') || '0', 10);
+                const row = document.createElement('div');
+                row.className = 'd-flex gap-2 mb-2 flex-wrap';
+                row.setAttribute('data-row-index', next);
+                row.innerHTML = `
+                <input class="form-control" style="max-width:180px" placeholder="code"
+                        name="group_defs[existing][${groupId}][item_fields][${next}][code]">
+                <input class="form-control" style="max-width:220px" placeholder="label"
+                        name="group_defs[existing][${groupId}][item_fields][${next}][label]">
+                <select class="form-select" style="max-width:160px"
+                        name="group_defs[existing][${groupId}][item_fields][${next}][type]">
+                    <option value="text">text</option>
+                    <option value="decimal">decimal</option>
+                    <option value="int">int</option>
+                </select>
+                <button type="button" class="btn btn-outline-danger" onclick="this.parentElement.remove()">x</button>
+                `;
+                wrap.appendChild(row);
+                wrap.setAttribute('data-next-index', String(next + 1));
+            };
+
+            // Añadir tarjeta NUEVA (para EDITAR)
+            window.addNewGroupCard = function(initial = {}){
+                const box = document.getElementById('new-groups');
+                const idx = box.querySelectorAll('.group-card').length;
+                const card = document.createElement('div');
+                card.className = 'group-card border rounded p-3';
+                const _type    = initial.group_type || 'list';
+                const _related = initial.related_entity_type || 'cliente';
+                const _allow   = (typeof initial.allow_multiple!=='undefined') ? !!initial.allow_multiple : true;
+
+                card.innerHTML = `
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                    <label class="form-label">Código</label>
+                    <input class="form-control" name="group_defs[new][${idx}][code]" placeholder="p.ej. precios" required>
+                    </div>
+                    <div class="col-md-4">
+                    <label class="form-label">Etiqueta</label>
+                    <input class="form-control" name="group_defs[new][${idx}][label]" placeholder="p.ej. Precios" required>
+                    </div>
+                    <div class="col-md-3">
+                    <label class="form-label">Tipo</label>
+                    <select class="form-select group-type" name="group_defs[new][${idx}][group_type]">
+                        <option value="list" ${_type==='list'?'selected':''}>Lista (ítems)</option>
+                        <option value="relation" ${_type==='relation'?'selected':''}>Relación</option>
+                    </select>
+                    </div>
+                    <div class="col-md-2 text-end">
+                    <button type="button" class="btn btn-outline-danger" onclick="this.closest('.group-card').remove()">Quitar</button>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-2 relation-row" style="display:none">
+                    <div class="col-md-4">
+                    <label class="form-label">Relacionado con</label>
+                    <select class="form-select" name="group_defs[new][${idx}][related_entity_type]">
+                        <option value="cliente"  ${_related==='cliente'?'selected':''}>Cliente</option>
+                        <option value="proveedor"${_related==='proveedor'?'selected':''}>Proveedor</option>
+                        <option value="producto" ${_related==='producto'?'selected':''}>Producto</option>
+                    </select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-center">
+                    <div class="form-check form-switch mt-4">
+                        <input type="hidden" name="group_defs[new][${idx}][allow_multiple]" value="0">
+                        <input class="form-check-input" type="checkbox"
+                            name="group_defs[new][${idx}][allow_multiple]" value="1" ${_allow?'checked':''}>
+                        <label class="form-check-label">Permitir múltiples</label>
+                    </div>
+                    </div>
+                </div>
+
+                <div class="mt-3 list-row">
+                    <div class="row g-2">
+                    <div class="col-12">
+                        <div class="small text-muted">Campos del ítem: (el primero debe llamarse nombre) code / label / type</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="vf-rows" data-next-index="0"></div>
+                        <button type="button" class="btn btn-xs btn-outline-primary mt-2"
+                                onclick="addItemFieldRowNew(this, ${idx})">+ Campo</button>
+                    </div>
+                    </div>
+                </div>
+                `;
+                box.appendChild(card);
+
+                // Semillas útiles
+                const rows = card.querySelector('.vf-rows');
+                rows.setAttribute('data-next-index', '0');
+                appendFieldRowNew(rows, idx, 0, 'tipo', 'Tipo', 'text');
+                rows.setAttribute('data-next-index', '1');
+                appendFieldRowNew(rows, idx, 1, 'precio', 'Precio', 'decimal');
+                rows.setAttribute('data-next-index', '2');
+
+                const typeSel = card.querySelector('.group-type');
+                toggleRowsForType(typeSel);
+                typeSel.addEventListener('change', function(){ toggleRowsForType(typeSel); });
+            };
+
+            window.addItemFieldRowNew = function(btn, idx){
+                const wrap = btn.closest('.list-row').querySelector('.vf-rows');
+                const next = parseInt(wrap.getAttribute('data-next-index') || '0', 10);
+                appendFieldRowNew(wrap, idx, next, '', '', 'text');
+                wrap.setAttribute('data-next-index', String(next + 1));
+            };
+
+            function appendFieldRowNew(wrap, groupIdx, rowIndex, code, label, type){
+                const row = document.createElement('div');
+                row.className = 'd-flex gap-2 mb-2 flex-wrap';
+                row.setAttribute('data-row-index', rowIndex);
+                row.innerHTML = `
+                <input class="form-control" style="max-width:180px" placeholder="code"
+                        name="group_defs[new][${groupIdx}][item_fields][${rowIndex}][code]"  value="${code||''}">
+                <input class="form-control" style="max-width:220px" placeholder="label"
+                        name="group_defs[new][${groupIdx}][item_fields][${rowIndex}][label]" value="${label||''}">
+                <select class="form-select" style="max-width:160px"
+                        name="group_defs[new][${groupIdx}][item_fields][${rowIndex}][type]">
+                    <option value="text" ${(!type||type==='text')?'selected':''}>text</option>
+                    <option value="decimal" ${(type==='decimal')?'selected':''}>decimal</option>
+                    <option value="int" ${(type==='int')?'selected':''}>int</option>
+                </select>
+                <button type="button" class="btn btn-outline-danger" onclick="this.parentElement.remove()">x</button>
+                `;
+                wrap.appendChild(row);
+            }
+
+            // Toggle LISTA/RELACIÓN
+            function toggleRowsForType(sel){
+                const card = sel.closest('.group-card');
+                const isRel = sel.value === 'relation';
+                card.querySelector('.relation-row').style.display = isRel ? '' : 'none';
+                card.querySelector('.list-row').style.display     = isRel ? 'none' : '';
+            }
+            document.querySelectorAll('#existing-groups .group-type').forEach(function(sel){
+                sel.addEventListener('change', function(){ toggleRowsForType(sel); });
+            });
+            })();
+            </script>
+            @endpush
             
             <div class="d-flex gap-2 justify-content-end mt-4">
                 <a href="{{ route('fichas.index') }}" class="btn btn-secondary">

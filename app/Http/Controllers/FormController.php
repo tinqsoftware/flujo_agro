@@ -28,10 +28,29 @@ class FormController extends Controller
     }
     
 
-    public function edit(Form $form) {
-        $form->load(['groups.fields.source','fields.formula','fields.source']);
-        return view('admin.forms.builder', compact('form'));
+    public function edit($id)
+    {
+        $user = Auth::user();
+
+        // 1) Traer el form
+        $form = \App\Models\Form::with([
+            'groups.fields.source',
+            'groups.fields.formulas'
+        ])->findOrFail($id);
+
+        // 2) Verificar permisos (solo la empresa dueña o superadmin)
+        if ($user->rol->nombre !== 'SUPERADMIN' && $form->id_emp !== $user->id_emp) {
+            abort(403, 'No tienes permisos para editar este formulario.');
+        }
+
+        // 3) Pasar data al builder
+        return view('admin.forms.builder', [
+            'form'     => $form,
+            'groups'   => $form->groups,
+            'fields'   => $form->groups->flatMap->fields,
+        ]);
     }
+
     public function update(StoreFormRequest $r, Form $form) {
         $form->update(array_merge($r->validated(), ['updated_by'=>Auth::id()]));
         return back()->with('ok','Formulario actualizado');

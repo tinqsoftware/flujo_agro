@@ -15,5 +15,5 @@ class FormField extends Model {
     public function form(){ return $this->belongsTo(Form::class,'id_form'); }
     public function group(){ return $this->belongsTo(FormGroup::class,'id_group'); }
     public function source(){ return $this->hasOne(FormFieldSource::class,'id_field'); }
-    public function formula(){ return $this->hasOne(FormFieldFormula::class,'id_field'); }
+    public function formulas(){ return $this->hasOne(FormFieldFormula::class,'id_field'); }
 }

@@ -13,6 +13,7 @@
 
 <form action="{{ route('clientes.update',$cliente) }}" method="POST" enctype="multipart/form-data">
   @csrf @method('PUT')
+<input type="hidden" name="id_ficha" value="{{ $cliente->id_ficha }}">
 
   <div class="card mb-4">
     <div class="card-header"><strong>Información básica</strong></div>
@@ -56,6 +57,8 @@
         
       </div>
       @include('superadmin.clientes.partials.attrs', ['atributos' => $atributos, 'valores' => $valores])
+      @include('superadmin.clientes.partials.ficha_groups', ['groupDefs'=>$groupDefs, 'relOptions'=>$relOptions, 'listValues'=>$listValues ?? collect(), 'relValues'=>$relValues ?? collect()  ])
+
     </div>
   </div>
 

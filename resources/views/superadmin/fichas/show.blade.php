@@ -286,6 +286,53 @@
                         </a>
                     </div>
                 @endif
+
+                @php
+                $ficha = $ficha ?? null;
+                @endphp
+
+                <div class="card mt-3">
+                <div class="card-header">Definiciones de grupos ({{ strtoupper($ficha->tipo) }})</div>
+                <div class="card-body">
+                    <div class="d-flex flex-column gap-3">
+                    @forelse($groupDefs as $g)
+                        <div class="border rounded p-3">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                            <div class="fw-bold">{{ $g->label }} <span class="text-muted">({{ $g->code }})</span></div>
+                            <div class="small">
+                                Tipo: <span class="badge bg-info text-dark">{{ $g->group_type }}</span>
+                                @if($g->group_type === 'relation')
+                                <span class="ms-2">Relacionado con: <strong>{{ $g->related_entity_type }}</strong></span>
+                                <span class="ms-2">Múltiples: <strong>{{ $g->allow_multiple ? 'Sí' : 'No' }}</strong></span>
+                                @endif
+                                <span class="ms-2">Activo: <strong>{{ $g->is_active ? 'Sí' : 'No' }}</strong></span>
+                            </div>
+                            </div>
+                        </div>
+
+                        @if($g->group_type === 'list')
+                            <div class="mt-2">
+                            <div class="small text-muted mb-1">Campos del ítem:</div>
+                            <ul class="mb-0">
+                                @forelse(($g->item_fields_json ?? []) as $f)
+                                <li><code>{{ $f['code'] ?? '' }}</code> — {{ $f['label'] ?? '' }} ({{ $f['type'] ?? 'text' }})</li>
+                                @empty
+                                <li class="text-muted">—</li>
+                                @endforelse
+                            </ul>
+                            </div>
+                        @endif
+                        </div>
+                    @empty
+                        <div class="text-muted">No hay grupos definidos para este tipo.</div>
+                    @endforelse
+                    </div>
+                </div>
+                </div>
+
+
+
             </div>
         </div>
     </div>

@@ -41,7 +41,20 @@ class FormulaEngine
         //    Acepta letras, números, _, y dot-notation (cliente.ruc)
         $exprPHP = preg_replace_callback('/\{\{\s*([a-zA-Z0-9_\.]+)\s*\}\}/', function($m) use ($context) {
             $key = $m[1];
-            $v = $this->arrGet($context, $key); // soporta dot-notation
+
+            // 👉 Si es un atributo ficha tipo "ficha_123"
+            if (preg_match('/^ficha_(\d+)$/', $key, $mm)) {
+                $idAttr = (int)$mm[1];
+                // entityKey: lo puedes inferir si en $context hay "producto_id", "cliente_id", etc.
+                $entityKey = $context['_entity'] ?? 'producto'; // ajusta según tu lógica
+                $entityId  = $context[$entityKey.'_id'] ?? null;
+
+                $valor = $this->resolver->getFichaAttr($entityKey, $idAttr, $entityId);
+                return $this->toPhpLiteral($valor);
+            }
+
+            // 👉 caso normal
+            $v = $this->arrGet($context, $key); 
             return $this->toPhpLiteral($v);
         }, $expr);
 
@@ -109,7 +122,9 @@ class FormulaEngine
 
         // 4) Expone helpers a la expresión y evalúa
         $col       = $helpers['col'];
-        $fattr     = $helpers['fattr'];
+        $fattr = function(string $entityKey, int $attrId, int|string $idEntity) {
+            return $this->resolver->getFichaAttr($entityKey, $attrId, (int)$idEntity);
+        };
         $empresa   = $helpers['empresa'];
         $sum_rows  = $helpers['sum_rows'];
         $concat    = $helpers['concat'];
