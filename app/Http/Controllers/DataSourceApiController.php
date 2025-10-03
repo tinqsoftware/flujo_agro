@@ -138,20 +138,20 @@ class DataSourceApiController extends Controller
 
         $table=$rootTable;
 
-        if($table=='proveedores'){
+        if($table=='Proveedores'){
             $table='proveedor';
-        }elseif($table=='plientes'){
+        }elseif($table=='Clientes'){
             $table='cliente';
-        }elseif($table=='productos'){
+        }elseif($table=='Productos'){
             $table='producto';
         }
 
          // 1. Detectar la ficha raíz (ej: cliente → ficha.id con tipo = Cliente y empresa = idEmp)
         $rootFicha = \DB::table('ficha')
-            ->where('tipo', ucfirst($table))   // Cliente / Proveedor / Producto
+            ->where('tipo', $table)   // Cliente / Proveedor / Producto
             ->where('id_emp', $idEmp)
             ->first();
-
+        
         if (!$rootFicha) {
             return response()->json([]);
         }

@@ -290,7 +290,7 @@ class FormFieldController extends Controller
                 } catch (\Exception $e) { }
 
                 // atributos de ficha asociados
-                $ficha = \App\Models\Ficha::where('tipo', ucfirst($table_singular))
+                $ficha = \App\Models\Ficha::where('tipo', $table_singular)
                             ->where('id_emp',$form->id_emp)
                             ->first();
                 if ($ficha) {
@@ -339,7 +339,7 @@ class FormFieldController extends Controller
                 }
 
                 // 🔹 Atributos de ficha_group_defs (listas o relaciones)
-                $rootFicha = \App\Models\Ficha::where('tipo', ucfirst($root))
+                $rootFicha = \App\Models\Ficha::where('tipo', $root)
                     ->where('id_emp', $form->id_emp)
                     ->first();
 
