@@ -40,9 +40,9 @@ class FormFieldSourceController extends Controller
     {
         // Catálogo base (puedes ajustar si algún día agregas más)
         $rows = [
-            ['value'=>'cliente',   'label'=>'Clientes'],
-            ['value'=>'proveedor', 'label'=>'Proveedores'],
-            ['value'=>'producto',  'label'=>'Productos'],
+            ['value'=>'cliente',   'label'=>'clientes'],
+            ['value'=>'proveedor', 'label'=>'proveedores'],
+            ['value'=>'producto',  'label'=>'productos'],
         ];
         return response()->json($rows);
     }

@@ -57,11 +57,11 @@ class DataSourceApiController extends Controller
         $schema = \DB::getSchemaBuilder();
 
         if($table=='proveedor'){
-            $table='Proveedores';
+            $table='proveedores';
         }elseif($table=='cliente'){
-            $table='Clientes';
+            $table='clientes';
         }elseif($table=='producto'){
-            $table='Productos';
+            $table='productos';
         }
 
         // Elegir columna label válida
@@ -138,11 +138,11 @@ class DataSourceApiController extends Controller
 
         $table=$rootTable;
 
-        if($table=='Proveedores'){
+        if($table=='proveedores'){
             $table='proveedor';
-        }elseif($table=='Clientes'){
+        }elseif($table=='plientes'){
             $table='cliente';
-        }elseif($table=='Productos'){
+        }elseif($table=='productos'){
             $table='producto';
         }
 
@@ -181,11 +181,11 @@ class DataSourceApiController extends Controller
                 $entityId    = $rel->related_entity_id;   // ej: 7
 
                 if($entityTable=='proveedor'){
-                    $table_relacion='Proveedores';
+                    $table_relacion='proveedores';
                 }elseif($entityTable=='cliente'){
-                    $table_relacion='Clientes';
+                    $table_relacion='clientes';
                 }elseif($entityTable=='producto'){
-                    $table_relacion='Productos';
+                    $table_relacion='productos';
                 }
 
                 // 2. Buscar el registro real en la tabla correspondiente

@@ -127,11 +127,11 @@ class FormFieldController extends Controller
         } elseif ($srcKindUi === 'table_table') {
             $table = $r->input('tt_root_table');
             if($table=='proveedor'){
-                $table='Proveedores';
+                $table='proveedores';
             }elseif($table=='cliente'){
-                $table='Clientes';
+                $table='clientes';
             }elseif($table=='producto'){
-                $table='Productos';
+                $table='productos';
             }
             
             $payload['source_kind'] = 'table_table';
@@ -330,11 +330,11 @@ class FormFieldController extends Controller
                 $attrs = [];
 
                 // normalización de nombres
-                if($root=='Proveedores'){
+                if($root=='proveedores'){
                     $root='proveedor';
-                }elseif($root=='Clientes'){
+                }elseif($root=='clientes'){
                     $table='cliente';
-                }elseif($root=='Productos'){
+                }elseif($root=='productos'){
                     $root='producto';
                 }
 
