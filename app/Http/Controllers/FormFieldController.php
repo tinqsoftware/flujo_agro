@@ -153,6 +153,13 @@ class FormFieldController extends Controller
                 'field_code' => $fieldCode ?: null,
             ]);
             $payload['options_json'] = json_encode($meta, JSON_UNESCAPED_UNICODE);
+        } elseif ($srcKindUi === 'form_actual') {
+            $payload['source_kind'] = 'form_actual';
+            $meta = array_filter([
+                'group_id'   => $r->input('fa_group_id'),
+                'field_code' => $r->input('fa_field_code'),
+            ]);
+            $payload['options_json'] = json_encode($meta, JSON_UNESCAPED_UNICODE);
         } else {
             // sin fuente válida => borrar
             \App\Models\FormFieldSource::where('id_field', $field->id)->delete();

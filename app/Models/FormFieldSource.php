@@ -14,4 +14,9 @@ class FormFieldSource extends Model {
         'query_sql','options_json','multi_select'
     ];
     public function field(){ return $this->belongsTo(FormField::class,'id_field'); }
+    
+    public function getMetaAttribute(): array
+    {
+        return json_decode($this->options_json ?? '[]', true) ?: [];
+    }
 }

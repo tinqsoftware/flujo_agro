@@ -79,11 +79,11 @@ class DataSourceResolver {
                 $labelCol = $src->column_name ?? null;
 
                 if ($table=='proveedor') {
-                    $table='Proveedores';
+                    $table='proveedores';
                 } elseif ($table=='cliente') {
-                    $table='Clientes';
+                    $table='clientes';
                 } elseif ($table=='producto') {
-                    $table='Productos';
+                    $table='productos';
                 }
 
                 // label de respaldo
